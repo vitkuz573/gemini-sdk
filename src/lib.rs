@@ -88,4 +88,7 @@ pub use client::GeminiClient;
 pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};
 // Re-export parsing helpers so consumers can convert streaming responses.
-pub use proto::{extract_text_from_parsed_response, parse_chat_response, parse_response_parts};
+pub use proto::{
+    extract_bard_error_code, extract_text_from_parsed_response, parse_chat_response,
+    parse_response_parts,
+};

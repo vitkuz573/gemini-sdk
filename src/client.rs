@@ -252,10 +252,6 @@ impl GeminiClient {
             session.conversation_state = Some(map_state(state));
         }
 
-        // Expose the parsed finish reason when the response ends with a
-        // finish-metadata line.
-        let mut response = response;
-        response.finish_reason = extract_finish_reason(&body);
         Ok(response)
     }
 
@@ -571,27 +567,6 @@ impl GeminiClient {
 
 fn is_attestation_error(body: &str) -> bool {
     body.contains("1096") || body.contains("BardErrorInfo") || body.contains("rs:108")
-}
-
-fn extract_finish_reason(body: &str) -> Option<String> {
-    for line in body.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        if let Some(start) = line.find("\"finishReason\"") {
-            let after = &line[start..];
-            if let Some(colon) = after.find(':') {
-                let value = &after[colon + 1..].trim();
-                if let Some(quoted) = value.strip_prefix('"') {
-                    if let Some(end) = quoted.find('"') {
-                        return Some(quoted[..end].to_string());
-                    }
-                }
-            }
-        }
-    }
-    None
 }
 
 fn map_state(state: ProtoConversationState) -> crate::session::ConversationState {

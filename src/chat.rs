@@ -143,8 +143,6 @@ impl ThinkingLevel {
 pub struct ChatResponse {
     /// Text content returned by the model.
     pub text: String,
-    /// Finish reason reported by the model, if available.
-    pub finish_reason: Option<String>,
 }
 
 impl ChatResponse {
@@ -152,7 +150,6 @@ impl ChatResponse {
     pub fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
-            finish_reason: Some("STOP".into()),
         }
     }
 

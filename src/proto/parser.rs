@@ -151,24 +151,9 @@ pub fn parse_chat_response(body: &str) -> Result<ChatResponse> {
 
     if text.is_empty() {
         if let Some(code) = extract_bard_error_code(body) {
-            let message = match code {
-                1096 => {
-                    "Gemini rejected the turn attestation (1096). If this is an image request, browser attestation is required but unavailable or failed."
-                }
-                1100 => {
-                    "Gemini rejected the image/file attestation (1100). A real browser must generate valid slot 3/4 tokens for image requests."
-                }
-                1155 => {
-                    "Gemini session/parameter mismatch (1155). Try a fresh conversation or enable browser attestation."
-                }
-                _ => return Err(Error::Api {
-                    status: reqwest::StatusCode::BAD_REQUEST,
-                    message: format!("Gemini returned BardErrorInfo [{code}]"),
-                }),
-            };
             return Err(Error::Api {
                 status: reqwest::StatusCode::BAD_REQUEST,
-                message: message.to_string(),
+                message: format!("Gemini returned BardErrorInfo [{code}]"),
             });
         }
     }
@@ -419,24 +404,9 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
 
     if all_parts.is_empty() {
         if let Some(code) = extract_bard_error_code(body) {
-            let message = match code {
-                1096 => {
-                    "Gemini rejected the turn attestation (1096). If this is an image request, browser attestation is required but unavailable or failed."
-                }
-                1100 => {
-                    "Gemini rejected the image/file attestation (1100). A real browser must generate valid slot 3/4 tokens for image requests."
-                }
-                1155 => {
-                    "Gemini session/parameter mismatch (1155). Try a fresh conversation or enable browser attestation."
-                }
-                _ => return Err(Error::Api {
-                    status: reqwest::StatusCode::BAD_REQUEST,
-                    message: format!("Gemini returned BardErrorInfo [{code}]"),
-                }),
-            };
             return Err(Error::Api {
                 status: reqwest::StatusCode::BAD_REQUEST,
-                message: message.to_string(),
+                message: format!("Gemini returned BardErrorInfo [{code}]"),
             });
         }
         Err(Error::parse("could not parse response from Gemini web frontend"))
