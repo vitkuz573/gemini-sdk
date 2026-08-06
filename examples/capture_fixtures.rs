@@ -3,14 +3,14 @@
 //! Run with:
 //!
 //! ```text
-//! GEMINI_COOKIES="..." cargo run --example capture_fixtures
+//! GEMINI_COOKIES="..." cargo run --example capture_fixtures --features capture-fixtures
 //! ```
 //!
 //! Captured files are written to `tests/fixtures/` and always overwrite prior
 //! versions.  Cookies and secrets are redacted from the saved output.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use gemini_sdk::{ChatMessage, GeminiClient, ImageSource, ModelCategory};
 
@@ -26,6 +26,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fixtures_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures");
     fs::create_dir_all(&fixtures_dir)?;
 
+    // Write synthetic fixtures first (no network required).
+    println!("Writing synthetic fixtures...");
+    write_generated_fixtures(&fixtures_dir)?;
+
+    // Live captures.
     println!("Fetching model list...");
     let models = client.list_models().await?;
     println!("  {} models", models.len());
@@ -58,6 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Fetching /app HTML...");
     let app_html = fetch_app_html(&cookies).await?;
 
+    // Write live-captured fixtures.
     fs::write(
         fixtures_dir.join("model_list_response.txt"),
         redact(&format_model_list(models)),
@@ -74,21 +80,99 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fixtures_dir.join("stream_generate_error_1096.json"),
         redact(&err1096.unwrap_or_else(|e| e.to_string())),
     )?;
+
     let mut app_snippet = extract_wiz_snippet(&app_html).unwrap_or_else(|| {
         r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260804.05_p0","FdrFJe":"4202905934864668489","qKIAYe":"feeds/mcudyrk2a4khkz","KnDnFf":"feeds/other"};"#.to_string()
     });
     app_snippet = redact(&app_snippet);
-    // Redact remaining sensitive WIZ globals that may appear in a live snippet.
-    for key in ["SNlM0e", "at", "FdrFJe", "cfb2h", "qKIAYe", "KnDnFf", "sxsrf", "__CB"] {
-        let pattern = format!(r#""{key}":"[^"]*""#);
-        app_snippet = regex::Regex::new(&pattern)
-            .unwrap()
-            .replace_all(&app_snippet, &format!(r#""{key}":"REDACTED""#))
-            .to_string();
-    }
+    // Redact any remaining feed paths that may have been missed.
+    let feed_re = regex::Regex::new(r#":"(feeds/[^"]*)""#).unwrap();
+    app_snippet = feed_re.replace_all(&app_snippet, r#":"REDACTED""#).to_string();
     fs::write(fixtures_dir.join("app_html_snippet.txt"), app_snippet)?;
 
     println!("Fixtures written to {}", fixtures_dir.display());
+    Ok(())
+}
+
+/// Writes the synthetic/minimal fixtures that are built programmatically.
+///
+/// These fixtures represent edge cases or specific parser inputs that cannot
+/// be reliably obtained from a live capture (e.g. minimal responses, error
+/// wrappers, consent payloads).
+fn write_generated_fixtures(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    fs::write(
+        dir.join("xssi_prefix.txt"),
+        r#"')] } '
+
+[["wrb.fr","x"]]
+58
+"#,
+    )?;
+
+    fs::write(
+        dir.join("chat_response_minimal.json"),
+        r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_123\", [\"Hello, world!\"]]]]]"]]"#,
+    )?;
+
+    fs::write(
+        dir.join("chat_response_concatenated.json"),
+        r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_123\", [\"Hello, \", \"world!\"]]]]]"]]"#,
+    )?;
+
+    fs::write(
+        dir.join("bard_error_1096.json"),
+        r#"[["wrb.fr",null,null,null,null,[13,null,[["type.googleapis.com/assistant.boq.bard.application.BardErrorInfo",[1096]]]]]]"#,
+    )?;
+
+    fs::write(
+        dir.join("bard_error_1100.json"),
+        r#"[["wrb.fr",null,null,null,null,[13,null,[["type.googleapis.com/assistant.boq.bard.application.BardErrorInfo",[1100]]]]]]"#,
+    )?;
+
+    fs::write(
+        dir.join("conversation_state.json"),
+        r#"[["wrb.fr", null, "[null, [\"c_abc\", \"r_def\"], null, null, [[\"rcp_123\", [\"text\"]]]]"]]
+[["wrb.fr", null, "[null,[null,\"r_def\"],{\"26\":\"token_value\"}]"]]
+"#,
+    )?;
+
+    fs::write(
+        dir.join("conversation_state_key_21.json"),
+        r#"[["wrb.fr", null, "[null, [\"c_abc\", \"r_def\"], null, null, [[\"rcp_123\", [\"text\"]]]]"]]
+[["wrb.fr", null, "[null,[null,\"r_def\"],{\"21\":[\"token_value\"],\"44\":true}]"]]
+"#,
+    )?;
+
+    fs::write(
+        dir.join("model_list_minimal.txt"),
+        r#"')] } '
+
+[[["wrb.fr","otAQ7b",null,"[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[[\"fbb127bbb056c959\",\"3.6 Flash\",\"All-around help\",null,null,null,null,null,null,null,null,\"Gemini 3.6 Flash\",null,null,null,null,null,1]]]",null,null,null,"generic"]]]
+58
+[["di",1]]
+"#,
+    )?;
+
+    fs::write(
+        dir.join("app_build_label.txt"),
+        r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260804.05_p0","FdrFJe":"4202905934864668489","qKIAYe":"feeds/mcudyrk2a4khkz","KnDnFf":"feeds/other"};"#,
+    )?;
+
+    fs::write(
+        dir.join("app_session_id.txt"),
+        r#"window.WIZ_global_data = {"FdrFJe":"4202905934864668489"};"#,
+    )?;
+
+    fs::write(
+        dir.join("app_push_id.txt"),
+        r#"window.WIZ_global_data = {"qKIAYe":"feeds/mcudyrk2a4khkz","KnDnFf":"feeds/other"};"#,
+    )?;
+
+    fs::write(
+        dir.join("bard_initial_data_payload.txt"),
+        r#"<script id="bard-initial-data" data-payload="{&quot;ZXlM5e&quot;:true,&quot;qw1mtf&quot;:&quot;https://consent.google.com/save?x=1&quot;}"></script>"#,
+    )?;
+
     Ok(())
 }
 
@@ -114,8 +198,8 @@ fn format_model_list(models: Vec<gemini_sdk::ModelInfo>) -> String {
         modes.join(",")
     );
     format!(
-        ")] }} '\n\n[[[\"wrb.fr\",\"otAQ7b\",null,{},null,null,null,\"generic\"]]]\n58\n[[\"di\",1]]\n",
-        serde_json::to_string(&inner).unwrap()
+        ")]'}}'\n\n[[[\"wrb.fr\",\"otAQ7b\",null,{payload},null,null,null,\"generic\"]]]\n58\n[[\"di\",1]]\n",
+        payload = serde_json::to_string(&inner).unwrap()
     )
 }
 
@@ -237,16 +321,10 @@ fn build_minimal_inner_req_list(prompt: &str) -> Vec<serde_json::Value> {
 
 fn redact(text: &str) -> String {
     let mut out = text.to_string();
-    for (pat, repl) in [
-        (r#""SNlM0e":"[^"]*""#, r#""SNlM0e":"REDACTED""#),
-        (r#""FdrFJe":"[^"]*""#, r#""FdrFJe":"REDACTED""#),
-        (r#""at":"[^"]*""#, r#""at":"REDACTED""#),
-        (r#""cfb2h":"[^"]*""#, r#""cfb2h":"REDACTED""#),
-        (r#""qKIAYe":"feeds/[^"]*""#, r#""qKIAYe":"feeds/REDACTED""#),
-        (r#""KnDnFf":"feeds/[^"]*""#, r#""KnDnFf":"feeds/REDACTED""#),
-    ] {
-        let re = regex::Regex::new(pat).unwrap();
-        out = re.replace_all(&out, repl).to_string();
+    for key in ["SNlM0e", "FdrFJe", "at", "cfb2h", "qKIAYe", "KnDnFf", "sxsrf", "__CB"] {
+        let pattern = format!(r#""{key}":"[^"]*""#);
+        let re = regex::Regex::new(&pattern).unwrap();
+        out = re.replace_all(&out, &format!(r#""{key}":"REDACTED""#)).to_string();
     }
     out
 }
