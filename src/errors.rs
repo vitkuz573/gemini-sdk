@@ -1,0 +1,94 @@
+//! Error types for the Gemini SDK.
+
+use std::fmt;
+
+use reqwest::StatusCode;
+use thiserror::Error;
+
+/// A specialized [`Result`] type for Gemini SDK operations.
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// The set of errors that can occur when using the Gemini SDK.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum Error {
+    /// The provided configuration is invalid or incomplete.
+    #[error("configuration error: {0}")]
+    Config(String),
+
+    /// An HTTP request failed at the transport layer.
+    #[error("request failed: {0}")]
+    Request(#[from] reqwest::Error),
+
+    /// The upstream Gemini web frontend returned an HTTP error status.
+    #[error("Gemini API error (HTTP {status}): {message}")]
+    Api {
+        /// HTTP status code returned by the upstream service.
+        status: StatusCode,
+        /// Human-readable error message.
+        message: String,
+    },
+
+    /// The response body could not be parsed.
+    #[error("parse error: {0}")]
+    Parse(String),
+
+    /// An error occurred while (de)serializing JSON.
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    /// The request payload is malformed.
+    #[error("bad request: {0}")]
+    BadRequest(String),
+
+    /// The request was rate-limited by the upstream service.
+    #[error("rate limited: {0}")]
+    RateLimited(String),
+
+    /// A transient error that should be retried.
+    #[error("transient error: {0}")]
+    Transient(String),
+
+    /// An operation timed out.
+    #[error("timeout: {0}")]
+    Timeout(String),
+
+    /// An attestation-related error (browser attestation feature).
+    #[cfg(feature = "browser-attestation")]
+    #[error("attestation error: {0}")]
+    Attestation(String),
+
+    /// A generic internal error.
+    #[error("internal error: {0}")]
+    Internal(String),
+}
+
+impl Error {
+    /// Returns `true` if the error is considered transient and the request may
+    /// be retried.
+    #[must_use]
+    pub fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::Transient(_) | Self::RateLimited(_) | Self::Timeout(_)
+        ) || matches!(self, Self::Api { status, .. } if status.is_server_error() || status.as_u16() == 429)
+    }
+
+    /// Creates an API error from an HTTP status and a message.
+    pub(crate) fn api(status: StatusCode, message: impl fmt::Display) -> Self {
+        Self::Api {
+            status,
+            message: message.to_string(),
+        }
+    }
+
+    /// Creates a parse error.
+    pub(crate) fn parse(message: impl fmt::Display) -> Self {
+        Self::Parse(message.to_string())
+    }
+
+    /// Creates a bad-request error.
+    pub(crate) fn bad_request(message: impl fmt::Display) -> Self {
+        Self::BadRequest(message.to_string())
+    }
+}

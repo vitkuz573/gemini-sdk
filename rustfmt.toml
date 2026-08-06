@@ -1,0 +1,14 @@
+edition = "2021"
+max_width = 100
+chain_width = 80
+use_small_heuristics = "Default"
+fn_call_width = 80
+struct_lit_width = 30
+struct_variant_width = 35
+array_width = 80
+reorder_imports = true
+reorder_modules = true
+tab_spaces = 4
+use_field_init_shorthand = true
+use_try_shorthand = true
+newline_style = "Unix"

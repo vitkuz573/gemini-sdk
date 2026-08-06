@@ -1,0 +1,66 @@
+[package]
+name = "gemini-sdk"
+version = "0.1.0"
+authors = ["Vitaly Kuzyaev <vitkuz573@gmail.com>"]
+edition = "2021"
+license = "MIT"
+description = "A clean, well-structured, production-ready Rust SDK for interacting with the Google Gemini/Bard web frontend."
+repository = "https://github.com/vitkuz573/gemini-sdk"
+keywords = ["gemini", "bard", "google", "ai", "sdk"]
+categories = ["api-bindings", "network-programming", "asynchronous"]
+rust-version = "1.80"
+
+[workspace]
+members = ["."]
+
+[dependencies]
+tokio = { version = "1.40", features = ["full"] }
+reqwest = { version = "0.12", features = ["cookies", "json", "multipart", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+uuid = { version = "1.11", features = ["v4"] }
+base64 = "0.22"
+urlencoding = "2.1"
+futures = "0.3"
+async-stream = "0.3"
+backoff = { version = "0.4", features = ["tokio"] }
+
+# Optional browser attestation dependencies
+tokio-tungstenite = { version = "0.24", optional = true }
+serde_urlencoded = { version = "0.7", optional = true }
+rand = { version = "0.8", optional = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.6"
+serde_json = "1.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", features = ["cookies", "json"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[features]
+default = []
+browser-attestation = ["dep:tokio-tungstenite", "dep:serde_urlencoded", "dep:tracing-subscriber", "dep:rand"]
+
+[[example]]
+name = "text_chat"
+path = "examples/text_chat.rs"
+
+[[example]]
+name = "image_chat"
+path = "examples/image_chat.rs"
+
+[[example]]
+name = "stream_chat"
+path = "examples/stream_chat.rs"
+
+[[bench]]
+name = "slot_building"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
