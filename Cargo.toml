@@ -27,6 +27,7 @@ urlencoding = "2.1"
 futures = "0.3"
 async-stream = "0.3"
 backoff = { version = "0.4", features = ["tokio"] }
+regex = { version = "1.11", optional = true }
 
 # Optional browser attestation dependencies
 tokio-tungstenite = { version = "0.24", optional = true }
@@ -44,6 +45,7 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 [features]
 default = []
 browser-attestation = ["dep:tokio-tungstenite", "dep:serde_urlencoded", "dep:tracing-subscriber", "dep:rand"]
+capture-fixtures = ["dep:regex"]
 
 [[example]]
 name = "text_chat"
@@ -56,6 +58,11 @@ path = "examples/image_chat.rs"
 [[example]]
 name = "stream_chat"
 path = "examples/stream_chat.rs"
+
+[[example]]
+name = "capture_fixtures"
+path = "examples/capture_fixtures.rs"
+required-features = ["capture-fixtures"]
 
 [[bench]]
 name = "slot_building"

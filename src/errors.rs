@@ -91,4 +91,9 @@ impl Error {
     pub(crate) fn bad_request(message: impl fmt::Display) -> Self {
         Self::BadRequest(message.to_string())
     }
+
+    /// Creates a transient error.
+    pub(crate) fn transient(message: impl fmt::Display) -> Self {
+        Self::Transient(message.to_string())
+    }
 }

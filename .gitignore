@@ -21,3 +21,4 @@ Thumbs.db
 # Coverage
 coverage/
 *.profraw
+__pycache__/
