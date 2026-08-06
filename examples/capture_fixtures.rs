@@ -74,12 +74,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fixtures_dir.join("stream_generate_error_1096.json"),
         redact(&err1096.unwrap_or_else(|e| e.to_string())),
     )?;
-    fs::write(
-        fixtures_dir.join("app_html_snippet.txt"),
-        redact(&extract_wiz_snippet(&app_html).unwrap_or_else(|| {
-            r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260804.05_p0","FdrFJe":"4202905934864668489","qKIAYe":"feeds/mcudyrk2a4khkz","KnDnFf":"feeds/other"};"#.to_string()
-        })),
-    )?;
+    let mut app_snippet = extract_wiz_snippet(&app_html).unwrap_or_else(|| {
+        r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260804.05_p0","FdrFJe":"4202905934864668489","qKIAYe":"feeds/mcudyrk2a4khkz","KnDnFf":"feeds/other"};"#.to_string()
+    });
+    app_snippet = redact(&app_snippet);
+    // Redact remaining sensitive WIZ globals that may appear in a live snippet.
+    for key in ["SNlM0e", "at", "FdrFJe", "cfb2h", "qKIAYe", "KnDnFf", "sxsrf", "__CB"] {
+        let pattern = format!(r#""{key}":"[^"]*""#);
+        app_snippet = regex::Regex::new(&pattern)
+            .unwrap()
+            .replace_all(&app_snippet, &format!(r#""{key}":"REDACTED""#))
+            .to_string();
+    }
+    fs::write(fixtures_dir.join("app_html_snippet.txt"), app_snippet)?;
 
     println!("Fixtures written to {}", fixtures_dir.display());
     Ok(())

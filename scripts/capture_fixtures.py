@@ -506,10 +506,15 @@ def main() -> int:
     print(f"  WIZ snippet length: {len(wiz_snippet)}")
 
     # Save a redacted app snippet.  Keep only the WIZ global assignment line.
-    write_fixture(
-        "app_html_snippet.txt",
-        redact_secrets(wiz_snippet if wiz_snippet else synthesize_app_html_snippet()),
+    app_snippet = wiz_snippet if wiz_snippet else synthesize_app_html_snippet()
+    app_snippet = redact_secrets(app_snippet)
+    # Redact the full WIZ_global_data value in case any sensitive fields remain.
+    app_snippet = re.sub(
+        r'("SNlM0e"|"at"|"FdrFJe"|"cfb2h"|"qKIAYe"|"KnDnFf"|"sxsrf"|"__CB"):\s*"[^"]*"',
+        r'\1: "REDACTED"',
+        app_snippet,
     )
+    write_fixture("app_html_snippet.txt", app_snippet)
 
     print("Fetching model list...")
     try:
