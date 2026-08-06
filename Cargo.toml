@@ -63,6 +63,11 @@ name = "capture_fixtures"
 path = "examples/capture_fixtures.rs"
 required-features = ["capture-fixtures"]
 
+[[example]]
+name = "test_attestation"
+path = "examples/test_attestation.rs"
+required-features = ["browser-attestation"]
+
 [[bench]]
 name = "slot_building"
 harness = false
