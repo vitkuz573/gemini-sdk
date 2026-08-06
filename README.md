@@ -75,6 +75,12 @@ cargo run --example image_chat -- /path/to/image.png "Describe this image."
 cargo run --example stream_chat -- "Tell me a story"
 ```
 
+## Protocol documentation
+
+For a detailed description of the undocumented Gemini web frontend endpoints,
+WIZ slot layout, response frames, and attestation flow, see
+[`docs/protocol.md`](docs/protocol.md).
+
 ## Architecture
 
 - `auth` — Cookie parsing and header formatting.
