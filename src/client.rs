@@ -252,6 +252,10 @@ impl GeminiClient {
             session.conversation_state = Some(map_state(state));
         }
 
+        // Expose the parsed finish reason when the response ends with a
+        // finish-metadata line.
+        let mut response = response;
+        response.finish_reason = extract_finish_reason(&body);
         Ok(response)
     }
 
@@ -569,6 +573,27 @@ fn is_attestation_error(body: &str) -> bool {
     body.contains("1096") || body.contains("BardErrorInfo") || body.contains("rs:108")
 }
 
+fn extract_finish_reason(body: &str) -> Option<String> {
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(start) = line.find("\"finishReason\"") {
+            let after = &line[start..];
+            if let Some(colon) = after.find(':') {
+                let value = &after[colon + 1..].trim();
+                if let Some(quoted) = value.strip_prefix('"') {
+                    if let Some(end) = quoted.find('"') {
+                        return Some(quoted[..end].to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn map_state(state: ProtoConversationState) -> crate::session::ConversationState {
     crate::session::ConversationState {
         conversation_id: state.conversation_id,
@@ -611,17 +636,7 @@ impl<'a> ChatBuilder<'a> {
     /// Sends a text-only message.
     pub async fn send_message(self, text: impl Into<String>) -> Result<ChatResponse> {
         let message = ChatMessage::user(text);
-        let response = self
-            .client
-            .generate(&message, self.category, self.config)
-            .await?;
-
-        if let Some(mut conversation) = self.conversation {
-            conversation.add_message(message);
-            conversation.add_model_text(response.text.clone());
-        }
-
-        Ok(response)
+        self.send_message_with_content(message).await
     }
 
     /// Sends a message that may contain images.
@@ -634,6 +649,14 @@ impl<'a> ChatBuilder<'a> {
         for image in images {
             message.parts.push(ContentPart::Image(image));
         }
+        self.send_message_with_content(message).await
+    }
+
+    /// Sends a fully built [`ChatMessage`].
+    ///
+    /// This is useful for callers that need to control both text and image
+    /// parts (or other future content types) directly.
+    pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
         let response = self
             .client
             .generate(&message, self.category, self.config)

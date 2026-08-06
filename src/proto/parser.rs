@@ -7,6 +7,9 @@ use crate::errors::{Error, Result};
 use crate::models::ModelInfo;
 use crate::proto::slots::ConversationState;
 
+/// Re-export of [`parse_chat_response`] for the crate root.
+pub use parse_chat_response as parse_chat_response_fn;
+
 /// Parses a `GetUserStatus` batchexecute response into a list of model infos.
 pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
     let payload = crate::proto::strip_xssi_prefix(body).ok_or_else(|| {
@@ -415,6 +418,27 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
     }
 
     if all_parts.is_empty() {
+        if let Some(code) = extract_bard_error_code(body) {
+            let message = match code {
+                1096 => {
+                    "Gemini rejected the turn attestation (1096). If this is an image request, browser attestation is required but unavailable or failed."
+                }
+                1100 => {
+                    "Gemini rejected the image/file attestation (1100). A real browser must generate valid slot 3/4 tokens for image requests."
+                }
+                1155 => {
+                    "Gemini session/parameter mismatch (1155). Try a fresh conversation or enable browser attestation."
+                }
+                _ => return Err(Error::Api {
+                    status: reqwest::StatusCode::BAD_REQUEST,
+                    message: format!("Gemini returned BardErrorInfo [{code}]"),
+                }),
+            };
+            return Err(Error::Api {
+                status: reqwest::StatusCode::BAD_REQUEST,
+                message: message.to_string(),
+            });
+        }
         Err(Error::parse("could not parse response from Gemini web frontend"))
     } else {
         Ok(all_parts)
@@ -423,6 +447,49 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
 
 fn is_id_string(s: &str) -> bool {
     (s.starts_with("r_") || s.starts_with("c_")) && s.len() > 2
+}
+
+/// Extract text from a parsed `wrb.fr` JSON response.
+///
+/// This is a helper for callers that receive a pre-parsed outer batchexecute or
+/// StreamGenerate response and only need the plain text answer. It mirrors the
+/// shape processed by [`parse_response_parts`].
+pub fn extract_text_from_parsed_response(parsed: &Value) -> Option<String> {
+    let arr = parsed.as_array()?;
+
+    for item in arr {
+        let entry = item.as_array()?;
+        if entry.len() < 3 {
+            continue;
+        }
+        let rpc_id = entry[0].as_str()?;
+        if rpc_id != "wrb.fr" {
+            continue;
+        }
+        let payload_str = entry[2].as_str()?;
+        let payload: Value = serde_json::from_str(payload_str).ok()?;
+        let payload_arr = payload.as_array()?;
+        let parts = payload_arr.get(4)?.as_array()?;
+
+        let mut combined = String::new();
+        for part in parts {
+            let part_arr = part.as_array()?;
+            let content_list = part_arr.get(1)?.as_array()?;
+            for content in content_list {
+                if let Some(s) = content.as_str() {
+                    if s.is_empty() || is_id_string(s) {
+                        continue;
+                    }
+                    combined.push_str(s);
+                }
+            }
+        }
+        if !combined.is_empty() {
+            return Some(combined);
+        }
+    }
+
+    None
 }
 
 /// Extracts the numeric code from a `BardErrorInfo` wrapper if present.

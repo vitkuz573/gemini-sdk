@@ -79,8 +79,13 @@ mod retry;
 mod session;
 
 pub use auth::{Credentials, Cookies};
-pub use chat::{ChatMessage, ContentPart, Conversation, GenerationConfig, ImageSource};
+pub use chat::{
+    ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig, ImageSource,
+    ThinkingLevel,
+};
 // PreparedRequest is intentionally public for benchmarks and advanced use.
 pub use client::GeminiClient;
 pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};
+// Re-export parsing helpers so consumers can convert streaming responses.
+pub use proto::{extract_text_from_parsed_response, parse_chat_response, parse_response_parts};

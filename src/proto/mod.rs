@@ -13,6 +13,11 @@ pub mod slots;
 pub use parser::*;
 pub use slots::*;
 
+/// Re-export response parsing helpers at the `proto` module level.
+pub use parser::{
+    extract_text_from_parsed_response, parse_chat_response, parse_response_parts,
+};
+
 /// WIZ anti-XSSI prefix used by `batchexecute` and `StreamGenerate` responses.
 pub const ANTI_XSSI_PREFIX: &str = ")] } ' \n\n";
 
