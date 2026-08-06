@@ -1,0 +1,1 @@
+window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260804.05_p0"};

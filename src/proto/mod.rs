@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn strip_xssi_prefix_returns_first_json_line() {
-        let body = ")] } ' \n\n[[\"wrb.fr\",\"x\"]]\n58";
+        let body = include_str!("../../tests/fixtures/xssi_prefix.txt");
         assert_eq!(strip_xssi_prefix(body), Some("[[\"wrb.fr\",\"x\"]]"));
     }
 

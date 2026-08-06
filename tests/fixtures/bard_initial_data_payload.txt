@@ -1,0 +1,1 @@
+<script id="bard-initial-data" data-payload="{&quot;ZXlM5e&quot;:true,&quot;qw1mtf&quot;:&quot;https://consent.google.com/save?x=1&quot;}"></script>

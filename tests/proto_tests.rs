@@ -13,7 +13,7 @@ use gemini_sdk::models::ModelCategory;
 
 #[test]
 fn strip_xssi_prefix_finds_first_json_line() {
-    let body = ")] } ' \n\n[[\"wrb.fr\",\"x\"]]\n58";
+    let body = include_str!("fixtures/xssi_prefix.txt");
     assert_eq!(strip_xssi_prefix(body), Some("[[\"wrb.fr\",\"x\"]]"));
 }
 
@@ -32,12 +32,7 @@ fn build_stream_generate_body_url_encodes() {
 
 #[test]
 fn parse_model_list_extracts_gemini_flash() {
-    let body = r#")] } '
-
-[[["wrb.fr","otAQ7b",null,"[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[[\"fbb127bbb056c959\",\"3.6 Flash\",\"All-around help\",null,null,null,null,null,null,null,null,\"Gemini 3.6 Flash\",null,null,null,null,null,1]]]",null,null,null,"generic"]]]
-58
-[["di",1]]"#;
-
+    let body = include_str!("fixtures/model_list_minimal.txt");
     let models = parse_model_list(body).unwrap();
     assert_eq!(models.len(), 1);
     assert_eq!(models[0].display_name(), "Gemini 3.6 Flash");
@@ -57,28 +52,27 @@ fn parse_model_list_from_real_fixture() {
 
 #[test]
 fn parse_chat_response_extracts_text() {
-    let body = r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_123\", [\"Hello, world!\"]]]]]"]]"#;
+    let body = include_str!("fixtures/chat_response_minimal.json");
     let response = parse_chat_response(body).unwrap();
     assert_eq!(response.text(), "Hello, world!");
 }
 
 #[test]
 fn parse_chat_response_detects_bard_error_1100() {
-    let body = r#"[["wrb.fr",null,null,null,null,[13,null,[["type.googleapis.com/assistant.boq.bard.application.BardErrorInfo",[1100]]]]]]"#;
+    let body = include_str!("fixtures/bard_error_1100.json");
     let result = parse_chat_response(body);
     assert!(result.is_err());
 }
 
 #[test]
 fn extract_bard_error_code_parses_code() {
-    let body = r#"[["wrb.fr",null,null,null,null,[13,null,[["type.googleapis.com/assistant.boq.bard.application.BardErrorInfo",[1096]]]]]]"#;
+    let body = include_str!("fixtures/bard_error_1096.json");
     assert_eq!(extract_bard_error_code(body), Some(1096));
 }
 
 #[test]
 fn extract_conversation_state_reads_ids_and_token() {
-    let body = r#"[["wrb.fr", null, "[null, [\"c_abc\", \"r_def\"], null, null, [[\"rcp_123\", [\"text\"]]]]"]]
-[["wrb.fr", null, "[null,[null,\"r_def\"],{\"26\":\"token_value\"}]"]]"#;
+    let body = include_str!("fixtures/conversation_state.json");
 
     let state = extract_conversation_state(body).unwrap();
     assert_eq!(state.conversation_id, "c_abc");
@@ -88,8 +82,7 @@ fn extract_conversation_state_reads_ids_and_token() {
 
 #[test]
 fn extract_conversation_state_reads_token_from_key_21() {
-    let body = r#"[["wrb.fr", null, "[null, [\"c_abc\", \"r_def\"], null, null, [[\"rcp_123\", [\"text\"]]]]"]]
-[["wrb.fr", null, "[null,[null,\"r_def\"],{\"21\":[\"token_value\"],\"44\":true}]"]]"#;
+    let body = include_str!("fixtures/conversation_state_key_21.json");
 
     let state = extract_conversation_state(body).unwrap();
     assert_eq!(state.conversation_id, "c_abc");

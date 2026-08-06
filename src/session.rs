@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn extract_build_label_finds_label() {
-        let body = r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260804.05_p0"};"#;
+        let body = include_str!("../tests/fixtures/app_build_label.txt");
         assert_eq!(
             extract_build_label(body),
             Some("boq_assistant-bard-web-server_20260804.05_p0".to_string())
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn extract_session_id_finds_fdrfje() {
-        let body = r#"window.WIZ_global_data = {"FdrFJe":"4202905934864668489"};"#;
+        let body = include_str!("../tests/fixtures/app_session_id.txt");
         assert_eq!(
             extract_session_id(body),
             Some("4202905934864668489".to_string())
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn extract_push_id_prefers_qkiaye() {
-        let body = r#"window.WIZ_global_data = {"qKIAYe":"feeds/mcudyrk2a4khkz","KnDnFf":"feeds/other"};"#;
+        let body = include_str!("../tests/fixtures/app_push_id.txt");
         assert_eq!(
             extract_push_id(body),
             Some("feeds/mcudyrk2a4khkz".to_string())
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn extract_consent_url_from_data_payload() {
-        let body = r#"<script id="bard-initial-data" data-payload="{&quot;ZXlM5e&quot;:true,&quot;qw1mtf&quot;:&quot;https://consent.google.com/save?x=1&quot;}"></script>"#;
+        let body = include_str!("../tests/fixtures/bard_initial_data_payload.txt");
         assert_eq!(
             extract_consent_save_url(body),
             Some("https://consent.google.com/save?x=1".to_string())

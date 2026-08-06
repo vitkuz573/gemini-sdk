@@ -441,33 +441,28 @@ mod tests {
 
     #[test]
     fn parse_simple_text_response() {
-        let body = r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_123\", [\"Hello, world!\"]]]]]"]]"#;
+        let body = include_str!("../../tests/fixtures/chat_response_minimal.json");
         let response = parse_chat_response(body).unwrap();
         assert_eq!(response.text(), "Hello, world!");
     }
 
     #[test]
     fn parse_text_response_with_concatenated_strings() {
-        let body = r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_123\", [\"Hello, \", \"world!\"]]]]]"]]"#;
+        let body = include_str!("../../tests/fixtures/chat_response_concatenated.json");
         let response = parse_chat_response(body).unwrap();
         assert_eq!(response.text(), "Hello, world!");
     }
 
-
     #[test]
     fn extract_bard_error_code_1096() {
-        let body = r#"[["wrb.fr",null,null,null,null,[13,null,[["type.googleapis.com/assistant.boq.bard.application.BardErrorInfo",[1096]]]]]]"#;
+        let body = include_str!("../../tests/fixtures/bard_error_1096.json");
         assert_eq!(extract_bard_error_code(body), Some(1096));
     }
 
     #[test]
     fn parse_model_list_example() {
-        let inner = "[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[[\"fbb127bbb056c959\",\"3.6 Flash\",\"All-around help\",null,null,null,null,null,null,null,null,\"Gemini 3.6 Flash\",null,null,null,null,null,1]]]";
-        let body = format!(
-            ")] }} '\n\n[[[\"wrb.fr\",\"otAQ7b\",null,{},null,null,null,\"generic\"]]]\n58",
-            serde_json::to_string(inner).unwrap()
-        );
-        let models = parse_model_list(&body).unwrap();
+        let body = include_str!("../../tests/fixtures/model_list_minimal.txt");
+        let models = parse_model_list(body).unwrap();
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].display_name(), "Gemini 3.6 Flash");
         assert_eq!(models[0].category_enum, 1);
