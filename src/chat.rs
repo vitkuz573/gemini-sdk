@@ -1,7 +1,5 @@
 //! High-level chat types for building requests and reading responses.
 
-use std::fmt;
-
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +9,7 @@ use crate::models::ModelCategory;
 /// A single message in a conversation.
 #[derive(Debug, Clone)]
 pub struct ChatMessage {
-    /// Role of the message author: `user`, `model`, or `system`.
+    /// Role of the message author: `user` or `model`.
     pub role: String,
     /// Content parts that make up this message.
     pub parts: Vec<ContentPart>,
@@ -34,11 +32,6 @@ impl ChatMessage {
     /// Creates a model message with the given text.
     pub fn model(text: impl Into<String>) -> Self {
         Self::text("model", text)
-    }
-
-    /// Creates a system message with the given text.
-    pub fn system(text: impl Into<String>) -> Self {
-        Self::text("system", text)
     }
 
     /// Creates a user message containing an image.
@@ -93,20 +86,6 @@ pub enum ContentPart {
     Text(String),
     /// An image.
     Image(ImageSource),
-    /// A function call produced by the model.
-    FunctionCall {
-        /// Function name.
-        name: String,
-        /// Function arguments as a JSON value.
-        args: serde_json::Value,
-    },
-    /// A function response provided by the caller.
-    FunctionResponse {
-        /// Function name.
-        name: String,
-        /// Response payload as a JSON value.
-        response: serde_json::Value,
-    },
 }
 
 /// Configuration for a generation request.
@@ -160,124 +139,44 @@ impl ThinkingLevel {
 }
 
 /// A structured response from a chat completion.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ChatResponse {
     /// Text content returned by the model.
     pub text: String,
-    /// Function calls emitted by the model.
-    pub function_calls: Vec<FunctionCall>,
-    /// Whether the response includes reasoning / thinking content.
-    pub has_thoughts: bool,
-    /// Reasoning content, if any.
-    pub thoughts: Vec<String>,
 }
 
 impl ChatResponse {
+    /// Creates a response from a single text string.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+        }
+    }
+
     /// Returns a reference to the response text.
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
     }
-
-    /// Returns `true` if the response contains at least one function call.
-    #[must_use]
-    pub fn has_function_calls(&self) -> bool {
-        !self.function_calls.is_empty()
-    }
 }
 
-/// A function call parsed from a model response.
-#[derive(Debug, Clone)]
-pub struct FunctionCall {
-    /// Function name.
-    pub name: String,
-    /// Function arguments.
-    pub args: serde_json::Value,
-}
-
-impl fmt::Display for FunctionCall {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", self.name, self.args)
-    }
-}
-
-/// Internal helper: serialises a list of chat messages into the flattened prompt
-/// string used by the Gemini web frontend.
-pub(crate) fn serialize_messages_to_prompt(
-    messages: &[ChatMessage],
-    system: Option<&ChatMessage>,
-) -> String {
-    let mut sections = Vec::new();
-
-    if let Some(sys) = system {
-        let text = collect_text_parts(sys);
-        if !text.is_empty() {
-            sections.push(format!("<system>\n{}\n</system>", xml_escape(&text)));
+/// Internal helper: extracts the latest user prompt from a message.
+///
+/// The SDK does not flatten multi-turn history; callers that need history in
+/// the prompt should build it themselves or use a higher-level wrapper.
+pub(crate) fn extract_prompt(message: &ChatMessage) -> Result<String> {
+    let mut text_parts = Vec::new();
+    for part in &message.parts {
+        match part {
+            ContentPart::Text(t) => text_parts.push(t.as_str()),
+            ContentPart::Image(_) => {}
         }
     }
-
-    for message in messages {
-        let role = normalize_role(&message.role);
-        let body = message
-            .parts
-            .iter()
-            .map(|part| match part {
-                ContentPart::Text(t) => xml_escape(t),
-                ContentPart::Image(_) => String::new(),
-                ContentPart::FunctionCall { name, args } => {
-                    format!(
-                        "<function_call name=\"{}\">{}</function_call>",
-                        xml_escape(name),
-                        args
-                    )
-                }
-                ContentPart::FunctionResponse { name, response } => {
-                    format!(
-                        "<function_response name=\"{}\">{}</function_response>",
-                        xml_escape(name),
-                        response
-                    )
-                }
-            })
-            .collect::<String>();
-
-        if !body.is_empty() {
-            sections.push(format!("<{role}>\n{body}\n</{role}>"));
-        }
+    let prompt = text_parts.join("\n");
+    if prompt.is_empty() {
+        return Err(Error::bad_request("prompt is empty"));
     }
-
-    if sections.is_empty() {
-        return "Hello".to_string();
-    }
-    sections.join("\n\n")
-}
-
-fn collect_text_parts(message: &ChatMessage) -> String {
-    message
-        .parts
-        .iter()
-        .filter_map(|part| match part {
-            ContentPart::Text(t) => Some(t.as_str()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn normalize_role(role: &str) -> &str {
-    match role {
-        "user" => "user",
-        "model" | "assistant" => "assistant",
-        "system" => "system",
-        other => other,
-    }
-}
-
-fn xml_escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+    Ok(prompt)
 }
 
 /// An in-progress conversation that carries multi-turn state.
@@ -326,7 +225,6 @@ impl Conversation {
 
 /// Internal type used when preparing a generation request.
 #[derive(Debug, Clone)]
-/// Internal type used when preparing a generation request.
 #[doc(hidden)]
 pub struct PreparedRequest {
     /// Flattened prompt text.
@@ -341,55 +239,33 @@ pub struct PreparedRequest {
 
 /// Internal helper that prepares a request from a conversation or a single turn.
 pub(crate) fn prepare_request(
-    conversation: Option<&Conversation>,
+    _conversation: Option<&Conversation>,
     new_message: &ChatMessage,
     config: Option<GenerationConfig>,
     default_category: ModelCategory,
 ) -> Result<PreparedRequest> {
-    let category = conversation
-        .and_then(|c| c.model_category)
-        .unwrap_or(default_category);
-
-    let mut messages: Vec<ChatMessage> = conversation
-        .map(|c| c.messages().to_vec())
-        .unwrap_or_default();
-    messages.push(new_message.clone());
-
-    let system = messages
-        .iter()
-        .position(|m| m.role == "system")
-        .map(|idx| messages.remove(idx));
+    let prompt = extract_prompt(new_message)?;
 
     let mut inline_images = Vec::new();
-    let mut sanitized_messages = Vec::with_capacity(messages.len());
-    for message in messages {
-        let mut parts = Vec::new();
-        for part in message.parts {
-            match part {
-                ContentPart::Image(ImageSource::InlineData { mime_type, data }) => {
-                    inline_images.push((mime_type, data));
-                }
-                ContentPart::Image(ImageSource::Url { url }) => {
-                    return Err(Error::bad_request(format!(
-                        "image URLs are not supported directly by the web frontend: {url}"
-                    )));
-                }
-                other => parts.push(other),
+    for part in &new_message.parts {
+        match part {
+            ContentPart::Image(ImageSource::InlineData { mime_type, data }) => {
+                inline_images.push((mime_type.clone(), data.clone()));
             }
+            ContentPart::Image(ImageSource::Url { url }) => {
+                return Err(Error::bad_request(format!(
+                    "image URLs are not supported directly by the web frontend: {url}"
+                )));
+            }
+            ContentPart::Text(_) => {}
         }
-        sanitized_messages.push(ChatMessage {
-            role: message.role,
-            parts,
-        });
     }
-
-    let prompt = serialize_messages_to_prompt(&sanitized_messages, system.as_ref());
 
     Ok(PreparedRequest {
         prompt,
         inline_images,
         config,
-        category,
+        category: default_category,
     })
 }
 
@@ -398,17 +274,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn serialize_simple_turn() {
-        let messages = vec![ChatMessage::user("Hello")];
-        let prompt = serialize_messages_to_prompt(&messages, None);
-        assert_eq!(prompt, "<user>\nHello\n</user>");
+    fn extract_prompt_from_text_message() {
+        let message = ChatMessage::user("Hello");
+        assert_eq!(extract_prompt(&message).unwrap(), "Hello");
     }
 
     #[test]
-    fn xml_escape_works() {
-        assert_eq!(xml_escape("a & b"), "a &amp; b");
-        assert_eq!(xml_escape("<tag>"), "&lt;tag&gt;");
-        assert_eq!(xml_escape("\"x\""), "&quot;x&quot;");
+    fn extract_prompt_rejects_empty() {
+        let message = ChatMessage::user("");
+        assert!(extract_prompt(&message).is_err());
     }
 
     #[test]
@@ -421,7 +295,7 @@ mod tests {
 
         let prepared = prepare_request(None, &message, None, ModelCategory::Auto).unwrap();
         assert_eq!(prepared.inline_images.len(), 1);
-        assert!(prepared.prompt.contains("Look at this"));
+        assert_eq!(prepared.prompt, "Look at this");
     }
 
     #[test]

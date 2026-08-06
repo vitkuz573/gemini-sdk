@@ -1,8 +1,8 @@
 //! Response parsing for batchexecute and `StreamGenerate` WIZ frames.
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
-use crate::chat::{ChatResponse, ContentPart, FunctionCall};
+use crate::chat::{ChatResponse, ContentPart};
 use crate::errors::{Error, Result};
 use crate::models::ModelInfo;
 use crate::proto::slots::ConversationState;
@@ -17,26 +17,49 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
         Error::parse(format!("failed to parse GetUserStatus JSON: {e}"))
     })?;
 
-    let outer_array = outer.as_array().and_then(|a| a.first()).and_then(|v| v.as_array()).ok_or_else(|| {
-        Error::parse("GetUserStatus response is not a JSON array")
-    })?;
+    // Batchexecute can return the RPC entry either directly as the only
+    // element of the outer array, or nested one level deeper. Accept both
+    // shapes by looking for the first array that contains an `otAQ7b`
+    // marker (the batchexecute response can be wrapped in extra arrays
+    // depending on the request format).
+    fn find_rpc_entry(value: &Value) -> Option<&Value> {
+        if let Some(arr) = value.as_array() {
+            if let Some(entry) = arr.iter().find(|entry| {
+                entry
+                    .get(1)
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == "otAQ7b")
+                    .unwrap_or(false)
+            }) {
+                return Some(entry);
+            }
+            // No direct match: try the first element if it is itself an
+            // array (extra wrapping level).
+            if let Some(first) = arr.first().and_then(|v| v.as_array()) {
+                return first.iter().find(|entry| {
+                    entry
+                        .get(1)
+                        .and_then(|v| v.as_str())
+                        .map(|s| s == "otAQ7b")
+                        .unwrap_or(false)
+                });
+            }
+        }
+        None
+    }
 
-    let rpc_entry = outer_array.iter().find(|entry| {
-        entry
-            .get(1)
-            .and_then(|v| v.as_str())
-            .map(|s| s == "otAQ7b")
-            .unwrap_or(false)
-    });
-
-    let rpc_entry = rpc_entry.ok_or_else(|| {
+    let rpc_entry = find_rpc_entry(&outer).ok_or_else(|| {
         Error::parse("GetUserStatus response does not contain otAQ7b entry")
     })?;
 
+    // The inner payload is a JSON string at index 2 or 3 depending on the
+    // response shape (index 2 is the canonical location for batchexecute
+    // RPC replies; some responses place it at index 3).
     let payload_str = rpc_entry
-        .get(3)
+        .get(2)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
+        .or_else(|| rpc_entry.get(3).and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
         .ok_or_else(|| Error::parse("GetUserStatus response payload missing"))?;
 
     let inner: Value = serde_json::from_str(payload_str).map_err(|e| {
@@ -113,47 +136,41 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
 pub fn parse_chat_response(body: &str) -> Result<ChatResponse> {
     let parts = parse_response_parts(body)?;
     let mut texts = Vec::new();
-    let mut function_calls = Vec::new();
 
     for part in parts {
         match part {
             ContentPart::Text(t) => texts.push(t),
             ContentPart::Image(_) => {}
-            ContentPart::FunctionCall { name, args } => {
-                function_calls.push(FunctionCall { name, args });
-            }
-            ContentPart::FunctionResponse { .. } => {}
         }
     }
 
-    if let Some(code) = extract_bard_error_code(body) {
-        let message = match code {
-            1096 => {
-                "Gemini rejected the turn attestation (1096). If this is an image request, browser attestation is required but unavailable or failed."
-            }
-            1100 => {
-                "Gemini rejected the image/file attestation (1100). A real browser must generate valid slot 3/4 tokens for image requests."
-            }
-            1155 => {
-                "Gemini session/parameter mismatch (1155). Try a fresh conversation or enable browser attestation."
-            }
-            _ => return Err(Error::Api {
+    let text = texts.join("");
+
+    if text.is_empty() {
+        if let Some(code) = extract_bard_error_code(body) {
+            let message = match code {
+                1096 => {
+                    "Gemini rejected the turn attestation (1096). If this is an image request, browser attestation is required but unavailable or failed."
+                }
+                1100 => {
+                    "Gemini rejected the image/file attestation (1100). A real browser must generate valid slot 3/4 tokens for image requests."
+                }
+                1155 => {
+                    "Gemini session/parameter mismatch (1155). Try a fresh conversation or enable browser attestation."
+                }
+                _ => return Err(Error::Api {
+                    status: reqwest::StatusCode::BAD_REQUEST,
+                    message: format!("Gemini returned BardErrorInfo [{code}]"),
+                }),
+            };
+            return Err(Error::Api {
                 status: reqwest::StatusCode::BAD_REQUEST,
-                message: format!("Gemini returned BardErrorInfo [{code}]"),
-            }),
-        };
-        return Err(Error::Api {
-            status: reqwest::StatusCode::BAD_REQUEST,
-            message: message.to_string(),
-        });
+                message: message.to_string(),
+            });
+        }
     }
 
-    Ok(ChatResponse {
-        text: texts.join(""),
-        function_calls,
-        has_thoughts: false,
-        thoughts: Vec::new(),
-    })
+    Ok(ChatResponse::new(text))
 }
 
 /// Extracts multi-turn conversation state from a raw `StreamGenerate` response.
@@ -202,9 +219,38 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         };
 
         if payload_arr.len() == 3 {
-            if let Some(obj) = payload_arr.get(2).and_then(|v| v.as_object()) {
-                if let Some(token) = obj.get("26").and_then(|v| v.as_str()) {
-                    continuation_token = Some(token.to_string());
+            if let Some(second) = payload_arr.get(1).and_then(|v| v.as_array()) {
+                // Meta entry shape: [null, [null, <r_id>], {"<n>": <token>, ...}]
+                // The continuation token may live at key "26" or, in newer
+                // responses, at key "21" as a single-element array.
+                if second.len() == 2 && second.get(1).and_then(|v| v.as_str()).is_some() {
+                    if let Some(obj) = payload_arr.get(2).and_then(|v| v.as_object()) {
+                        if let Some(token) = obj.get("26").and_then(|v| v.as_str()) {
+                            continuation_token = Some(token.to_string());
+                        } else if let Some(token) = obj
+                            .get("21")
+                            .and_then(|v| v.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|v| v.as_str())
+                        {
+                            continuation_token = Some(token.to_string());
+                        }
+                    }
+                }
+                // First-turn meta shape: [<c_id>, <r_id>, {"26": <token>}]
+                if second.len() == 2
+                    && second
+                        .first()
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.starts_with("c_"))
+                        .unwrap_or(false)
+                    && second.get(1).and_then(|v| v.as_str()).is_some()
+                {
+                    if let Some(obj) = payload_arr.get(2).and_then(|v| v.as_object()) {
+                        if let Some(token) = obj.get("26").and_then(|v| v.as_str()) {
+                            continuation_token = Some(token.to_string());
+                        }
+                    }
                 }
             }
             continue;
@@ -360,18 +406,6 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     if let Some(prev) = current_text.take() {
                         all_parts.push(ContentPart::Text(prev));
                     }
-                    if let Some(obj) = content.as_object() {
-                        if let Some(fc) = obj.get("functionCall").and_then(|v| v.as_object()) {
-                            if let Some(name) = fc.get("name").and_then(|v| v.as_str()) {
-                                let args = fc.get("args").cloned().unwrap_or_else(|| json!({}));
-                                all_parts.push(ContentPart::FunctionCall {
-                                    name: name.to_string(),
-                                    args,
-                                });
-                            }
-                            continue;
-                        }
-                    }
                 }
                 if let Some(prev) = current_text.take() {
                     all_parts.push(ContentPart::Text(prev));
@@ -380,66 +414,15 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
         }
     }
 
-    let mut parsed_parts: Vec<ContentPart> = Vec::with_capacity(all_parts.len());
-    for part in all_parts {
-        match part {
-            ContentPart::Text(t) => parsed_parts.extend(split_text_for_function_calls(&t)),
-            other => parsed_parts.push(other),
-        }
-    }
-
-    if parsed_parts.is_empty() {
+    if all_parts.is_empty() {
         Err(Error::parse("could not parse response from Gemini web frontend"))
     } else {
-        Ok(parsed_parts)
+        Ok(all_parts)
     }
 }
 
 fn is_id_string(s: &str) -> bool {
     (s.starts_with("r_") || s.starts_with("c_")) && s.len() > 2
-}
-
-fn split_text_for_function_calls(text: &str) -> Vec<ContentPart> {
-    let mut parts = Vec::new();
-    let mut last_end = 0;
-    let start_tag = "<function_call name=\"";
-    let close_tag = "</function_call>";
-
-    while let Some(tag_start) = text[last_end..].find(start_tag) {
-        let absolute_start = last_end + tag_start;
-        let after_start = absolute_start + start_tag.len();
-        let Some(quote_end) = text[after_start..].find('"') else {
-            break;
-        };
-        let name = text[after_start..after_start + quote_end].to_string();
-        let after_quote = after_start + quote_end + 1;
-        let Some(bracket_start) = text[after_quote..].find('>') else {
-            break;
-        };
-        let content_start = after_quote + bracket_start + 1;
-        let Some(close_start) = text[content_start..].find(close_tag) else {
-            break;
-        };
-        let content_end = content_start + close_start;
-        let args_str = text[content_start..content_end].trim();
-        let args = serde_json::from_str(args_str).unwrap_or_else(|_| json!({}));
-
-        let prefix = &text[last_end..absolute_start];
-        if !prefix.trim().is_empty() {
-            parts.push(ContentPart::Text(prefix.to_string()));
-        }
-        parts.push(ContentPart::FunctionCall {
-            name,
-            args,
-        });
-        last_end = content_end + close_tag.len();
-    }
-
-    let trailing = &text[last_end..];
-    if !trailing.trim().is_empty() {
-        parts.push(ContentPart::Text(trailing.to_string()));
-    }
-    parts
 }
 
 /// Extracts the numeric code from a `BardErrorInfo` wrapper if present.
@@ -464,19 +447,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_call_response() {
-        let body = r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_1\", [{\"functionCall\": {\"name\": \"get_weather\", \"args\": {\"city\": \"Paris\"}}}]]]]]"]]"#;
+    fn parse_text_response_with_concatenated_strings() {
+        let body = r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_123\", [\"Hello, \", \"world!\"]]]]]"]]"#;
         let response = parse_chat_response(body).unwrap();
-        assert!(response.has_function_calls());
-        assert_eq!(response.function_calls[0].name, "get_weather");
+        assert_eq!(response.text(), "Hello, world!");
     }
 
-    #[test]
-    fn parse_xml_function_call() {
-        let body = r#"[["wrb.fr", null, "[[null, null, null, null, [[\"rc_1\", [\"<function_call name=\\\"get_weather\\\">{\\\"city\\\":\\\"Paris\\\"}</function_call>\"]]]]]"]]"#;
-        let response = parse_chat_response(body).unwrap();
-        assert!(response.has_function_calls());
-    }
 
     #[test]
     fn extract_bard_error_code_1096() {
@@ -493,7 +469,7 @@ mod tests {
         );
         let models = parse_model_list(&body).unwrap();
         assert_eq!(models.len(), 1);
-        assert_eq!(models[0].human_id(), "gemini-3.6-flash");
+        assert_eq!(models[0].display_name(), "Gemini 3.6 Flash");
         assert_eq!(models[0].category_enum, 1);
     }
 }

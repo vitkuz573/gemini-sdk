@@ -10,12 +10,13 @@
 use std::process::Stdio;
 use std::time::Duration;
 
+use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::process::{Child, Command};
 use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::{debug, error, warn};
+use tracing::debug;
 
 use crate::auth::Cookies;
 use crate::errors::{Error, Result};
@@ -196,53 +197,84 @@ async fn read_devtools_url(stderr: tokio::process::ChildStderr) -> Result<String
     ))
 }
 
-async fn send_cdp(
-    write: &mut (impl tokio::io::AsyncWrite + Unpin),
+async fn send_cdp<F>(
+    write: &mut F,
     method: &str,
     params: Value,
-) -> Result<()> {
+) -> Result<()>
+where
+    F: futures::Sink<Message> + Unpin,
+    F::Error: std::fmt::Debug,
+{
     let message = json!({
         "id": rand::random::<u64>(),
         "method": method,
         "params": params,
     });
-    let text = message.to_string();
     write
-        .write_all(text.as_bytes())
+        .send(Message::Text(message.to_string()))
         .await
-        .map_err(|e| Error::Attestation(format!("failed to send CDP message: {e}")))?;
+        .map_err(|e| Error::Attestation(format!("failed to send CDP message: {e:?}")))?;
     Ok(())
 }
 
-async fn wait_for_event(
-    read: &mut (impl tokio::io::AsyncRead + Unpin),
+async fn wait_for_event<S>(
+    read: &mut S,
     event_name: &str,
     deadline: Duration,
-) -> Result<Value> {
-    let result = timeout(deadline, async {
+) -> Result<Value>
+where
+    S: futures::Stream<Item = std::result::Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
+    timeout(deadline, async {
         loop {
-            // Simplified: in a real implementation we would frame WebSocket messages.
-            // This version is a compile-compatible placeholder.
-            tokio::task::yield_now().await;
+            match read.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    if let Ok(value) = serde_json::from_str::<Value>(&text) {
+                        if value.get("method").and_then(|m| m.as_str()) == Some(event_name) {
+                            return Ok(value);
+                        }
+                    }
+                }
+                Some(Ok(Message::Close(_))) | None => {
+                    return Err(Error::Attestation("WebSocket closed unexpectedly".to_string()));
+                }
+                _ => {}
+            }
         }
     })
-    .await;
-
-    match result {
-        Ok(_) => unreachable!(),
-        Err(_) => Err(Error::Attestation(format!(
-            "timed out waiting for CDP event {event_name}"
-        ))),
-    }
+    .await
+    .map_err(|_| Error::Attestation(format!("timed out waiting for CDP event {event_name}")))?
 }
 
-async fn wait_for_stream_generate_post_data(
-    _read: &mut (impl tokio::io::AsyncRead + Unpin),
+async fn wait_for_stream_generate_post_data<S>(
+    read: &mut S,
     _deadline: Duration,
-) -> Result<String> {
-    Err(Error::Attestation(
-        "CDP capture not implemented in this build".to_string(),
-    ))
+) -> Result<String>
+where
+    S: futures::Stream<Item = std::result::Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
+    loop {
+        match read.next().await {
+            Some(Ok(Message::Text(text))) => {
+                if let Ok(value) = serde_json::from_str::<Value>(&text) {
+                    if let Some(params) = value.get("params") {
+                        if let Some(request) = params.get("request") {
+                            if request.get("url").and_then(|u| u.as_str()).map(|u| u.contains("StreamGenerate")).unwrap_or(false) {
+                                if let Some(post_data) = request.get("postData").and_then(|p| p.as_str()) {
+                                    return Ok(post_data.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Some(Ok(Message::Close(_))) | None => {
+                return Err(Error::Attestation("WebSocket closed before StreamGenerate request was captured".to_string()));
+            }
+            _ => {}
+        }
+    }
 }
 
 fn extract_f_req(post_data: &str) -> Result<String> {
@@ -281,9 +313,9 @@ struct CdpMessage {
 }
 
 impl Cookies {
-    fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
-        use std::collections::HashMap;
-        let map: HashMap<String, String> = self.clone().into();
-        map.into_iter().map(|(k, v)| (k, v))
+    fn iter(&self) -> impl Iterator<Item = (String, String)> {
+        let map: std::collections::HashMap<String, String> = self.clone().into();
+        map.into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
     }
 }

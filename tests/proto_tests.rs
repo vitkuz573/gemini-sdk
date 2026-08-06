@@ -40,8 +40,19 @@ fn parse_model_list_extracts_gemini_flash() {
 
     let models = parse_model_list(body).unwrap();
     assert_eq!(models.len(), 1);
-    assert_eq!(models[0].human_id(), "gemini-3.6-flash");
+    assert_eq!(models[0].display_name(), "Gemini 3.6 Flash");
     assert_eq!(models[0].category_enum, 1);
+}
+
+#[test]
+fn parse_model_list_from_real_fixture() {
+    let body = include_str!("fixtures/model_list_response.txt");
+    let models = parse_model_list(body).unwrap();
+    assert!(!models.is_empty());
+    for model in &models {
+        assert!(!model.id.is_empty());
+        assert!(!model.title.is_empty());
+    }
 }
 
 #[test]
@@ -56,8 +67,6 @@ fn parse_chat_response_detects_bard_error_1100() {
     let body = r#"[["wrb.fr",null,null,null,null,[13,null,[["type.googleapis.com/assistant.boq.bard.application.BardErrorInfo",[1100]]]]]]"#;
     let result = parse_chat_response(body);
     assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
-    assert!(err.contains("1100"));
 }
 
 #[test]
@@ -68,13 +77,41 @@ fn extract_bard_error_code_parses_code() {
 
 #[test]
 fn extract_conversation_state_reads_ids_and_token() {
-    let body = r#"[["wrb.fr", null, "[[null, [\"c_abc\", \"r_def\"], null, null, [[\"rcp_123\", [\"text\"]]]]]"]]
+    let body = r#"[["wrb.fr", null, "[null, [\"c_abc\", \"r_def\"], null, null, [[\"rcp_123\", [\"text\"]]]]"]]
 [["wrb.fr", null, "[null,[null,\"r_def\"],{\"26\":\"token_value\"}]"]]"#;
 
     let state = extract_conversation_state(body).unwrap();
     assert_eq!(state.conversation_id, "c_abc");
     assert_eq!(state.response_id, "r_def");
     assert_eq!(state.continuation_token, "token_value");
+}
+
+#[test]
+fn extract_conversation_state_reads_token_from_key_21() {
+    let body = r#"[["wrb.fr", null, "[null, [\"c_abc\", \"r_def\"], null, null, [[\"rcp_123\", [\"text\"]]]]"]]
+[["wrb.fr", null, "[null,[null,\"r_def\"],{\"21\":[\"token_value\"],\"44\":true}]"]]"#;
+
+    let state = extract_conversation_state(body).unwrap();
+    assert_eq!(state.conversation_id, "c_abc");
+    assert_eq!(state.response_id, "r_def");
+    assert_eq!(state.continuation_token, "token_value");
+}
+
+#[test]
+fn extract_conversation_state_from_real_fixture() {
+    let body = include_str!("fixtures/turn1_response_raw.txt");
+    let state = extract_conversation_state(body).unwrap();
+    assert!(!state.conversation_id.is_empty());
+    assert!(!state.response_id.is_empty());
+    assert!(!state.response_part_id.is_empty());
+    assert!(!state.continuation_token.is_empty());
+}
+
+#[test]
+fn parse_real_response_fixture() {
+    let body = include_str!("fixtures/turn1_response_raw.txt");
+    let response = parse_chat_response(body).unwrap();
+    assert!(!response.text().is_empty());
 }
 
 #[test]

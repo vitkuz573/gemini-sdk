@@ -19,19 +19,16 @@
 //! ## Quick start
 //!
 //! ```no_run
-//! use gemini_sdk::{GeminiClient, ChatMessage, ContentPart};
+//! use gemini_sdk::GeminiClient;
 //!
-//! # async fn run() -> gemini_sdk::error::Result<()> {
-//! let cookies = std::collections::HashMap::from([
-//!     ("__Secure-1PSID".to_string(), "YOUR_PSID".to_string()),
-//!     ("__Secure-1PSIDCC".to_string(), "YOUR_PSIDCC".to_string()),
-//! ]);
+//! # async fn run() -> gemini_sdk::Result<()> {
+//! let cookies = "__Secure-1PSID=YOUR_PSID; __Secure-1PSIDCC=YOUR_PSIDCC";
 //!
-//! let mut client = GeminiClient::from_cookies(cookies)?;
+//! let client = GeminiClient::from_cookie_header(cookies)?;
 //!
 //! let response = client
 //!     .chat()
-//!     .send_message("What is Rust?", None)
+//!     .send_message("What is Rust?")
 //!     .await?;
 //!
 //! println!("{}", response.text());
@@ -83,6 +80,7 @@ mod session;
 
 pub use auth::Cookies;
 pub use chat::{ChatMessage, ContentPart, Conversation, GenerationConfig, ImageSource};
+// PreparedRequest is intentionally public for benchmarks and advanced use.
 pub use client::GeminiClient;
 pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};

@@ -101,31 +101,16 @@ pub struct ModelInfo {
 }
 
 impl ModelInfo {
-    /// Returns a stable, human-readable OpenAI-style model ID.
+    /// Returns the model's display name.
     ///
-    /// Examples:
-    /// - "3.6 Flash" -> "gemini-3.6-flash"
-    /// - "3.1 Pro" -> "gemini-3.1-pro"
+    /// Prefers the versioned name (e.g. "Gemini 3.6 Flash") when available,
+    /// otherwise falls back to the short title.
     #[must_use]
-    pub fn human_id(&self) -> String {
-        let source = self
-            .versioned_name
+    pub fn display_name(&self) -> String {
+        self.versioned_name
             .as_deref()
             .filter(|s| !s.is_empty())
-            .unwrap_or(&self.title);
-        let lower = source.to_lowercase();
-        let mut parts: Vec<&str> = lower.split_whitespace().collect();
-        parts.retain(|p| *p != "gemini");
-        if parts.is_empty() {
-            return "gemini-unknown".to_string();
-        }
-        format!("gemini-{}", parts.join("-"))
-    }
-
-    /// Returns the `models/<hex>` root identifier used by the proxy.
-    #[must_use]
-    pub fn root_id(&self) -> String {
-        format!("models/{}", self.id)
+            .map_or_else(|| self.title.clone(), |s| s.to_string())
     }
 }
 
@@ -166,16 +151,29 @@ mod tests {
     }
 
     #[test]
-    fn human_id_generation() {
+    fn display_name_prefers_versioned_name() {
         let info = ModelInfo {
             id: "abc".to_string(),
             title: "Flash".to_string(),
             description: String::new(),
-            versioned_name: Some("3.6 Flash".to_string()),
+            versioned_name: Some("Gemini 3.6 Flash".to_string()),
             category: ModelCategory::Fast,
             category_enum: 1,
         };
-        assert_eq!(info.human_id(), "gemini-3.6-flash");
+        assert_eq!(info.display_name(), "Gemini 3.6 Flash");
+    }
+
+    #[test]
+    fn display_name_falls_back_to_title() {
+        let info = ModelInfo {
+            id: "abc".to_string(),
+            title: "Flash".to_string(),
+            description: String::new(),
+            versioned_name: None,
+            category: ModelCategory::Fast,
+            category_enum: 1,
+        };
+        assert_eq!(info.display_name(), "Flash");
     }
 
     #[test]
