@@ -18,7 +18,7 @@ use tokio::time::timeout;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::debug;
 
-use crate::auth::Cookies;
+use crate::auth::{Cookies, Credentials};
 use crate::errors::{Error, Result};
 
 const NAVIGATE_TIMEOUT: Duration = Duration::from_secs(60);
@@ -57,9 +57,10 @@ impl BrowserAttestationClient {
     /// the prompt, category, and request UUID.
     pub async fn capture_payload(
         &mut self,
-        cookies: &Cookies,
+        credentials: &Credentials,
         prompt: &str,
     ) -> Result<Vec<Value>> {
+        let cookies: Cookies = credentials.clone().into();
         self.ensure_browser().await?;
         let ws_url = self.ws_url.as_ref().ok_or_else(|| {
             Error::Attestation("browser WebSocket URL not available".to_string())

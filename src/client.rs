@@ -9,7 +9,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::auth::Cookies;
+use crate::auth::{Cookies, Credentials};
 use crate::chat::{
     prepare_request, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, PreparedRequest,
@@ -63,16 +63,29 @@ impl GeminiClient {
     ///
     /// # Errors
     ///
-    /// Returns an error if the underlying HTTP client cannot be built.
+    /// Returns an error if the cookie header is missing required cookies or if
+    /// the underlying HTTP client cannot be built.
     pub fn from_cookie_header(header: &str) -> Result<Self> {
-        Self::with_config(Cookies::from_header(header), ClientConfig::default())
+        let credentials = Credentials::from_header(header)
+            .map_err(|e| Error::Config(e.to_string()))?;
+        Self::from_credentials(credentials)
+    }
+
+    /// Creates a client from typed [`Credentials`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying HTTP client cannot be built.
+    pub fn from_credentials(credentials: Credentials) -> Result<Self> {
+        Self::with_config(credentials.into(), ClientConfig::default())
     }
 
     /// Creates a client from a map of cookie names to values.
     ///
     /// # Errors
     ///
-    /// Returns an error if the underlying HTTP client cannot be built.
+    /// Returns an error if the map is missing required cookies or if the
+    /// underlying HTTP client cannot be built.
     pub fn from_cookies(cookies: impl Into<Cookies>) -> Result<Self> {
         Self::with_config(cookies.into(), ClientConfig::default())
     }
@@ -81,7 +94,8 @@ impl GeminiClient {
     ///
     /// # Errors
     ///
-    /// Returns an error if the underlying HTTP client cannot be built.
+    /// Returns an error if the map is missing required cookies or if the
+    /// underlying HTTP client cannot be built.
     pub fn from_hashmap(cookies: HashMap<String, String>) -> Result<Self> {
         Self::from_cookies(cookies)
     }

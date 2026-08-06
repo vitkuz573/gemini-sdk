@@ -78,7 +78,7 @@ pub mod attestation;
 mod retry;
 mod session;
 
-pub use auth::Cookies;
+pub use auth::{Credentials, Cookies};
 pub use chat::{ChatMessage, ContentPart, Conversation, GenerationConfig, ImageSource};
 // PreparedRequest is intentionally public for benchmarks and advanced use.
 pub use client::GeminiClient;

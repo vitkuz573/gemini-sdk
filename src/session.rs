@@ -32,10 +32,10 @@ pub(crate) struct ConversationState {
 }
 
 impl SessionState {
-    pub(crate) fn new(cookies: Cookies) -> Self {
+    pub(crate) fn new(cookies: impl Into<Cookies>) -> Self {
         Self {
             language: DEFAULT_LANGUAGE.to_string(),
-            cookies,
+            cookies: cookies.into(),
             ..Default::default()
         }
     }
