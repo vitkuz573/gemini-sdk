@@ -1,6 +1,7 @@
 //! Response parsing for batchexecute and `StreamGenerate` WIZ frames.
 
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::chat::{ChatResponse, ContentPart};
 use crate::errors::{Error, Result};
@@ -9,6 +10,63 @@ use crate::proto::slots::ConversationState;
 
 /// Re-export of [`parse_chat_response`] for the crate root.
 pub use parse_chat_response as parse_chat_response_fn;
+
+/// Index of the accumulated answer-text chunk list within a candidate part.
+///
+/// Each `StreamGenerate` candidate part carries the answer text as an array of
+/// string fragments; concatenating them yields the full reply. This mirrors the
+/// protobuf field layout of the `assistant.lamda.BardFrontendService` request.
+const PART_TEXT_INDEX: usize = 1;
+
+/// Index of the reasoning block within a candidate part.
+///
+/// When the selected model reasons, the part carries the accumulated thinking
+/// text as `[<fragments>, <structured-step-metadata>]`. Only the first element
+/// (the plain-text fragments) is needed for extraction. Parts without reasoning
+/// omit this index entirely.
+const PART_THINKING_INDEX: usize = 37;
+
+/// Text and reasoning content extracted from a single candidate part.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct PartContent {
+    text: String,
+    thinking: String,
+}
+
+/// Extracts answer text and reasoning from one candidate part array.
+fn extract_part_content(part_arr: &[Value]) -> PartContent {
+    let mut content = PartContent::default();
+
+    if let Some(chunks) = part_arr.get(PART_TEXT_INDEX).and_then(|v| v.as_array()) {
+        for c in chunks {
+            if let Some(s) = c.as_str() {
+                if s.is_empty() || is_id_string(s) {
+                    continue;
+                }
+                content.text.push_str(s);
+            }
+        }
+    }
+
+    // Reasoning block shape: [<fragments>, <structured-step-metadata>].
+    if let Some(fragments) = part_arr
+        .get(PART_THINKING_INDEX)
+        .and_then(|v| v.as_array())
+        .and_then(|a| a.first())
+        .and_then(|v| v.as_array())
+    {
+        for c in fragments {
+            if let Some(s) = c.as_str() {
+                if s.is_empty() || is_id_string(s) {
+                    continue;
+                }
+                content.thinking.push_str(s);
+            }
+        }
+    }
+
+    content
+}
 
 /// Parses a `GetUserStatus` batchexecute response into a list of model infos.
 pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
@@ -298,18 +356,14 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
 /// Parses the response parts from a `StreamGenerate` body.
 ///
 /// Each stream chunk carries the *accumulated* answer and thinking text so far,
-/// so later chunks supersede earlier ones. This function tracks parts by their
-/// response-part id and keeps only the most complete state, then emits one
-/// [`ContentPart::Text`] and/or [`ContentPart::Thinking`] per response part.
+/// so later chunks supersede earlier ones: the most complete version per
+/// response-part id wins. Reasoning content, when present, is emitted as a
+/// [`ContentPart::Thinking`] following its [`ContentPart::Text`], ordered by
+/// first appearance in the body.
 pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
-    #[derive(Default)]
-    struct Acc {
-        text: String,
-        thinking: String,
-    }
-
-    let mut accs: Vec<Acc> = Vec::new();
-    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    // Maps a response-part id to the most complete content seen so far.
+    let mut accs: Vec<(String, PartContent)> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
 
     for line in body.lines() {
         let line = line.trim();
@@ -395,38 +449,8 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-
-                let mut text = String::new();
-                if let Some(content_list) = part_arr.get(1).and_then(|v| v.as_array()) {
-                    for content in content_list {
-                        if let Some(s) = content.as_str() {
-                            if s.is_empty() || is_id_string(s) {
-                                continue;
-                            }
-                            text.push_str(s);
-                        }
-                    }
-                }
-
-                let mut thinking = String::new();
-                // Reasoning block lives at part[37] as [accumulated_text, structured_meta].
-                if let Some(thinking_chunks) = part_arr
-                    .get(37)
-                    .and_then(|v| v.as_array())
-                    .and_then(|a| a.first())
-                    .and_then(|v| v.as_array())
-                {
-                    for c in thinking_chunks {
-                        if let Some(s) = c.as_str() {
-                            if s.is_empty() || is_id_string(s) {
-                                continue;
-                            }
-                            thinking.push_str(s);
-                        }
-                    }
-                }
-
-                if text.is_empty() && thinking.is_empty() {
+                let content = extract_part_content(part_arr);
+                if content.text.is_empty() && content.thinking.is_empty() {
                     continue;
                 }
 
@@ -434,23 +458,24 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     Some(&i) => &mut accs[i],
                     None => {
                         let i = accs.len();
-                        accs.push(Acc::default());
+                        accs.push((id.clone(), PartContent::default()));
                         index.insert(id, i);
                         &mut accs[i]
                     }
                 };
-                if !text.is_empty() {
-                    slot.text = text;
+                // Streaming chunks are cumulative; keep the most complete state.
+                if content.text.len() >= slot.1.text.len() && !content.text.is_empty() {
+                    slot.1.text = content.text;
                 }
-                if !thinking.is_empty() {
-                    slot.thinking = thinking;
+                if content.thinking.len() >= slot.1.thinking.len() && !content.thinking.is_empty() {
+                    slot.1.thinking = content.thinking;
                 }
             }
         }
     }
 
     let mut all_parts: Vec<ContentPart> = Vec::new();
-    for acc in accs {
+    for (_, acc) in accs {
         if !acc.text.is_empty() {
             all_parts.push(ContentPart::Text(acc.text));
         }
@@ -482,88 +507,66 @@ fn is_id_string(s: &str) -> bool {
 /// StreamGenerate response and only need the plain text answer. It mirrors the
 /// shape processed by [`parse_response_parts`].
 pub fn extract_text_from_parsed_response(parsed: &Value) -> Option<String> {
-    let arr = parsed.as_array()?;
-
-    for item in arr {
-        let entry = item.as_array()?;
-        if entry.len() < 3 {
-            continue;
-        }
-        let rpc_id = entry[0].as_str()?;
-        if rpc_id != "wrb.fr" {
-            continue;
-        }
-        let payload_str = entry[2].as_str()?;
-        let payload: Value = serde_json::from_str(payload_str).ok()?;
-        let payload_arr = payload.as_array()?;
-        let parts = payload_arr.get(4)?.as_array()?;
-
-        let mut combined = String::new();
-        for part in parts {
-            let part_arr = part.as_array()?;
-            let content_list = part_arr.get(1)?.as_array()?;
-            for content in content_list {
-                if let Some(s) = content.as_str() {
-                    if s.is_empty() || is_id_string(s) {
-                        continue;
-                    }
-                    combined.push_str(s);
-                }
-            }
-        }
-        if !combined.is_empty() {
-            return Some(combined);
-        }
-    }
-
-    None
+    parsed_parts_content(parsed)
+        .into_iter()
+        .find_map(|c| (!c.text.is_empty()).then_some(c.text))
 }
 
 /// Extract reasoning / thinking text from a parsed `wrb.fr` JSON response.
 ///
 /// This is the counterpart of [`extract_text_from_parsed_response`] for the
-/// model's thinking block (part[37]). It returns the accumulated reasoning
-/// markdown, or `None` when the response contains no thinking block.
+/// model's thinking block. It returns the accumulated reasoning markdown, or
+/// `None` when the response contains no thinking block.
 pub fn extract_thinking_from_parsed_response(parsed: &Value) -> Option<String> {
-    let arr = parsed.as_array()?;
+    parsed_parts_content(parsed)
+        .into_iter()
+        .find_map(|c| (!c.thinking.is_empty()).then_some(c.thinking))
+}
+
+/// Iterates the candidate parts of a parsed `wrb.fr` response entry.
+///
+/// Returns `None` when the parsed value is not a batchexecute/StreamGenerate
+/// array containing a `wrb.fr` entry with a parts list.
+fn parsed_parts_content(parsed: &Value) -> Vec<PartContent> {
+    let mut out = Vec::new();
+    let Some(arr) = parsed.as_array() else {
+        return out;
+    };
 
     for item in arr {
-        let entry = item.as_array()?;
+        let Some(entry) = item.as_array() else {
+            continue;
+        };
         if entry.len() < 3 {
             continue;
         }
-        let rpc_id = entry[0].as_str()?;
-        if rpc_id != "wrb.fr" {
+        if entry[0].as_str() != Some("wrb.fr") {
             continue;
         }
-        let payload_str = entry[2].as_str()?;
-        let payload: Value = serde_json::from_str(payload_str).ok()?;
-        let payload_arr = payload.as_array()?;
-        let parts = payload_arr.get(4)?.as_array()?;
+        let Some(payload_str) = entry[2].as_str() else {
+            continue;
+        };
+        let Ok(payload) = serde_json::from_str::<Value>(payload_str) else {
+            continue;
+        };
+        let Some(payload_arr) = payload.as_array() else {
+            continue;
+        };
+        let Some(parts) = payload_arr.get(4).and_then(|v| v.as_array()) else {
+            continue;
+        };
 
-        let mut combined = String::new();
         for part in parts {
-            let part_arr = part.as_array()?;
-            let thinking_chunks = part_arr
-                .get(37)?
-                .as_array()?
-                .first()?
-                .as_array()?;
-            for content in thinking_chunks {
-                if let Some(s) = content.as_str() {
-                    if s.is_empty() || is_id_string(s) {
-                        continue;
-                    }
-                    combined.push_str(s);
+            if let Some(part_arr) = part.as_array() {
+                let content = extract_part_content(part_arr);
+                if !content.text.is_empty() || !content.thinking.is_empty() {
+                    out.push(content);
                 }
             }
         }
-        if !combined.is_empty() {
-            return Some(combined);
-        }
     }
 
-    None
+    out
 }
 
 /// Extracts the numeric code from a `BardErrorInfo` wrapper if present.
@@ -607,5 +610,115 @@ mod tests {
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].display_name(), "Gemini 3.6 Flash");
         assert_eq!(models[0].category_enum, 1);
+    }
+
+    #[test]
+    fn parse_thinking_response_extracts_reasoning() {
+        let body = include_str!("../../tests/fixtures/thinking_response_raw.txt");
+        let response = parse_chat_response(body).unwrap();
+
+        assert!(response.text().contains("идентичный скриншот"));
+        assert!(response.thinking().contains("**Comparing Images**"));
+        assert!(response.thinking().contains("**Confirming Identity**"));
+        assert!(!response.text().contains("Comparing Images"));
+    }
+
+    #[test]
+    fn parse_thinking_stream_deduplicates_chunks() {
+        let body = include_str!("../../tests/fixtures/thinking_response_raw.txt");
+        let parts = parse_response_parts(body).unwrap();
+
+        let text_parts: Vec<_> = parts
+            .iter()
+            .filter_map(|p| match p {
+                ContentPart::Text(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        let thinking_parts: Vec<_> = parts
+            .iter()
+            .filter_map(|p| match p {
+                ContentPart::Thinking(t) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        assert_eq!(text_parts.len(), 1);
+        assert_eq!(thinking_parts.len(), 1);
+        assert!(thinking_parts[0].starts_with("**Comparing Images**"));
+        assert_eq!(text_parts[0], response_text_of(&parts));
+    }
+
+    fn response_text_of(parts: &[ContentPart]) -> &str {
+        match parts.first() {
+            Some(ContentPart::Text(t)) => t,
+            _ => panic!("expected first part to be text"),
+        }
+    }
+
+    #[test]
+    fn extract_part_content_reads_text_and_thinking() {
+        let body = include_str!("../../tests/fixtures/thinking_single_part.json");
+        let parsed: Value = serde_json::from_str(body).unwrap();
+        let entry = parsed.as_array().and_then(|a| a.first()).and_then(|v| v.as_array()).unwrap();
+        let payload: Value = serde_json::from_str(entry[2].as_str().unwrap()).unwrap();
+        let part = payload[4][0].as_array().unwrap();
+        let content = extract_part_content(part);
+        assert_eq!(content.text, "hello ");
+        assert_eq!(content.thinking, "think step 1");
+    }
+
+    #[test]
+    fn extract_part_content_skips_id_strings() {
+        let body = include_str!("../../tests/fixtures/thinking_id_strings.json");
+        let parsed: Value = serde_json::from_str(body).unwrap();
+        let entry = parsed.as_array().unwrap().first().unwrap().as_array().unwrap();
+        let payload: Value = serde_json::from_str(entry[2].as_str().unwrap()).unwrap();
+        let part = payload[4][0].as_array().unwrap();
+        let content = extract_part_content(part);
+        assert_eq!(content.text, "real");
+        assert_eq!(content.thinking, "thought");
+    }
+
+    #[test]
+    fn parsed_helpers_extract_text_and_thinking() {
+        let body = include_str!("../../tests/fixtures/thinking_single_part.json");
+        let parsed: Value = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            extract_text_from_parsed_response(&parsed).as_deref(),
+            Some("hello ")
+        );
+        assert_eq!(
+            extract_thinking_from_parsed_response(&parsed).as_deref(),
+            Some("think step 1")
+        );
+    }
+
+    #[test]
+    fn parse_response_parts_keeps_longest_chunk() {
+        let body = include_str!("../../tests/fixtures/thinking_dedup.txt");
+        let parts = parse_response_parts(body).unwrap();
+        assert_eq!(parts.len(), 2);
+        match (&parts[0], &parts[1]) {
+            (ContentPart::Text(t), ContentPart::Thinking(tk)) => {
+                assert_eq!(t, "much longer answer");
+                assert_eq!(tk, "thinking b\nthinking c");
+            }
+            other => panic!("unexpected parts: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_response_parts_handles_thinking_before_text() {
+        let body = include_str!("../../tests/fixtures/thinking_before_text.txt");
+        let parts = parse_response_parts(body).unwrap();
+        assert_eq!(parts.len(), 2);
+        match (&parts[0], &parts[1]) {
+            (ContentPart::Text(t), ContentPart::Thinking(tk)) => {
+                assert_eq!(t, "answer");
+                assert_eq!(tk, "think first\nthink second");
+            }
+            other => panic!("unexpected parts: {other:?}"),
+        }
     }
 }

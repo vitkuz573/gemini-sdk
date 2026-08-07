@@ -1,0 +1,2 @@
+[["wrb.fr",null,"[null,[\"c_a\",\"r_b\"],null,null,[[\"rc_1\",[],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[[\"think first\"]]]]]"]]
+[["wrb.fr",null,"[null,[\"c_a\",\"r_b\"],null,null,[[\"rc_1\",[\"answer\"],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[[\"think first\\nthink second\"]]]]]"]]

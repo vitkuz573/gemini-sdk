@@ -173,7 +173,52 @@ fn write_generated_fixtures(dir: &Path) -> Result<(), Box<dyn std::error::Error>
         r#"<script id="bard-initial-data" data-payload="{&quot;ZXlM5e&quot;:true,&quot;qw1mtf&quot;:&quot;https://consent.google.com/save?x=1&quot;}"></script>"#,
     )?;
 
+    // Thinking/reasoning fixtures.
+    fs::write(
+        dir.join("thinking_single_part.json"),
+        build_thinking_entry("rc_1", &["hello "], &["think step 1"]),
+    )?;
+
+    fs::write(
+        dir.join("thinking_id_strings.json"),
+        build_thinking_entry("rc_1", &["r_keepme", "real", "c_keepme"], &["r_ignore", "thought"]),
+    )?;
+
+    fs::write(
+        dir.join("thinking_dedup.txt"),
+        [
+            build_thinking_entry("rc_1", &["short"], &["thinking a"]),
+            build_thinking_entry("rc_1", &["much longer answer"], &["thinking b\nthinking c"]),
+        ]
+        .join("\n"),
+    )?;
+
+    fs::write(
+        dir.join("thinking_before_text.txt"),
+        [
+            build_thinking_entry("rc_1", &[], &["think first"]),
+            build_thinking_entry("rc_1", &["answer"], &["think first\nthink second"]),
+        ]
+        .join("\n"),
+    )?;
+
     Ok(())
+}
+
+/// Builds a synthetic `wrb.fr` response line carrying one candidate part.
+///
+/// The part carries answer text at index 1 and an optional thinking block at
+/// index 37 (shape `[<fragments>, <structured-step-metadata>]`). Each element
+/// of `thinking` is a single fragment string.
+fn build_thinking_entry(id: &str, text: &[&str], thinking: &[&str]) -> String {
+    let mut part: Vec<serde_json::Value> = vec![serde_json::Value::Null; 38];
+    part[0] = serde_json::json!(id);
+    part[1] = serde_json::json!(text);
+    if !thinking.is_empty() {
+        part[37] = serde_json::json!([thinking]);
+    }
+    let payload = serde_json::json!([null, ["c_a", "r_b"], null, null, [part]]);
+    serde_json::json!([["wrb.fr", null, payload.to_string()]]).to_string()
 }
 
 fn format_model_list(models: Vec<gemini_sdk::ModelInfo>) -> String {
