@@ -70,13 +70,11 @@ fn extract_part_content(part_arr: &[Value]) -> PartContent {
 
 /// Parses a `GetUserStatus` batchexecute response into a list of model infos.
 pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
-    let payload = crate::proto::strip_xssi_prefix(body).ok_or_else(|| {
-        Error::parse("GetUserStatus response does not contain a JSON array")
-    })?;
+    let payload = crate::proto::strip_xssi_prefix(body)
+        .ok_or_else(|| Error::parse("GetUserStatus response does not contain a JSON array"))?;
 
-    let outer: Value = serde_json::from_str(payload).map_err(|e| {
-        Error::parse(format!("failed to parse GetUserStatus JSON: {e}"))
-    })?;
+    let outer: Value = serde_json::from_str(payload)
+        .map_err(|e| Error::parse(format!("failed to parse GetUserStatus JSON: {e}")))?;
 
     // Batchexecute can return the RPC entry either directly as the only
     // element of the outer array, or nested one level deeper. Accept both
@@ -86,11 +84,7 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
     fn find_rpc_entry(value: &Value) -> Option<&Value> {
         if let Some(arr) = value.as_array() {
             if let Some(entry) = arr.iter().find(|entry| {
-                entry
-                    .get(1)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s == "otAQ7b")
-                    .unwrap_or(false)
+                entry.get(1).and_then(|v| v.as_str()).map(|s| s == "otAQ7b").unwrap_or(false)
             }) {
                 return Some(entry);
             }
@@ -98,20 +92,15 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
             // array (extra wrapping level).
             if let Some(first) = arr.first().and_then(|v| v.as_array()) {
                 return first.iter().find(|entry| {
-                    entry
-                        .get(1)
-                        .and_then(|v| v.as_str())
-                        .map(|s| s == "otAQ7b")
-                        .unwrap_or(false)
+                    entry.get(1).and_then(|v| v.as_str()).map(|s| s == "otAQ7b").unwrap_or(false)
                 });
             }
         }
         None
     }
 
-    let rpc_entry = find_rpc_entry(&outer).ok_or_else(|| {
-        Error::parse("GetUserStatus response does not contain otAQ7b entry")
-    })?;
+    let rpc_entry = find_rpc_entry(&outer)
+        .ok_or_else(|| Error::parse("GetUserStatus response does not contain otAQ7b entry"))?;
 
     // The inner payload is a JSON string at index 2 or 3 depending on the
     // response shape (index 2 is the canonical location for batchexecute
@@ -123,9 +112,8 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
         .or_else(|| rpc_entry.get(3).and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
         .ok_or_else(|| Error::parse("GetUserStatus response payload missing"))?;
 
-    let inner: Value = serde_json::from_str(payload_str).map_err(|e| {
-        Error::parse(format!("failed to parse GetUserStatus inner payload: {e}"))
-    })?;
+    let inner: Value = serde_json::from_str(payload_str)
+        .map_err(|e| Error::parse(format!("failed to parse GetUserStatus inner payload: {e}")))?;
 
     let modes = inner
         .get(15)
@@ -141,25 +129,13 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
             continue;
         }
 
-        let id = mode_arr
-            .first()
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let id = mode_arr.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
         if id.is_empty() {
             continue;
         }
 
-        let title = mode_arr
-            .get(1)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let description = mode_arr
-            .get(2)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let title = mode_arr.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let description = mode_arr.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
 
         let versioned_name = mode_arr
             .get(11)
@@ -310,16 +286,16 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         }
     }
 
-    let main = main_entry.ok_or_else(|| {
-        Error::parse("StreamGenerate response missing main entry")
-    })?;
-    let main_arr = main.as_array().ok_or_else(|| {
-        Error::parse("StreamGenerate main entry is not an array")
-    })?;
+    let main =
+        main_entry.ok_or_else(|| Error::parse("StreamGenerate response missing main entry"))?;
+    let main_arr = main
+        .as_array()
+        .ok_or_else(|| Error::parse("StreamGenerate main entry is not an array"))?;
 
-    let ids = main_arr.get(1).and_then(|v| v.as_array()).ok_or_else(|| {
-        Error::parse("StreamGenerate response missing conversation ids")
-    })?;
+    let ids = main_arr
+        .get(1)
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| Error::parse("StreamGenerate response missing conversation ids"))?;
     let conversation_id = ids
         .first()
         .and_then(|v| v.as_str())
@@ -329,9 +305,10 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| Error::parse("StreamGenerate response missing response_id"))?;
 
-    let parts = main_arr.get(4).and_then(|v| v.as_array()).ok_or_else(|| {
-        Error::parse("StreamGenerate response missing parts array")
-    })?;
+    let parts = main_arr
+        .get(4)
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| Error::parse("StreamGenerate response missing parts array"))?;
     let first_part = parts
         .first()
         .and_then(|v| v.as_array())
@@ -342,7 +319,9 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         .ok_or_else(|| Error::parse("StreamGenerate response missing response_part_id"))?;
 
     let continuation_token = continuation_token.ok_or_else(|| {
-        Error::parse("StreamGenerate response missing continuation token; cannot continue conversation")
+        Error::parse(
+            "StreamGenerate response missing continuation token; cannot continue conversation",
+        )
     })?;
 
     Ok(ConversationState {
@@ -444,11 +423,7 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     Some(a) => a,
                     None => continue,
                 };
-                let id = part_arr
-                    .first()
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
+                let id = part_arr.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let content = extract_part_content(part_arr);
                 if content.text.is_empty() && content.thinking.is_empty() {
                     continue;
@@ -684,14 +659,8 @@ mod tests {
     fn parsed_helpers_extract_text_and_thinking() {
         let body = include_str!("../../tests/fixtures/thinking_single_part.json");
         let parsed: Value = serde_json::from_str(body).unwrap();
-        assert_eq!(
-            extract_text_from_parsed_response(&parsed).as_deref(),
-            Some("hello ")
-        );
-        assert_eq!(
-            extract_thinking_from_parsed_response(&parsed).as_deref(),
-            Some("think step 1")
-        );
+        assert_eq!(extract_text_from_parsed_response(&parsed).as_deref(), Some("hello "));
+        assert_eq!(extract_thinking_from_parsed_response(&parsed).as_deref(), Some("think step 1"));
     }
 
     #[test]

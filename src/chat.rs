@@ -306,10 +306,9 @@ mod tests {
     #[test]
     fn prepare_request_extracts_inline_images() {
         let mut message = ChatMessage::user("Look at this");
-        message.parts.push(ContentPart::Image(ImageSource::from_bytes(
-            "image/png",
-            b"fake",
-        )));
+        message
+            .parts
+            .push(ContentPart::Image(ImageSource::from_bytes("image/png", b"fake")));
 
         let prepared = prepare_request(None, &message, None, ModelCategory::Auto).unwrap();
         assert_eq!(prepared.inline_images.len(), 1);

@@ -4,7 +4,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 
-use crate::auth::Cookies;
 use crate::proto::slots::ConversationState as ProtoConversationState;
 
 const DEFAULT_PUSH_ID: &str = "feeds/mcudyrk2a4khkz";
@@ -18,8 +17,13 @@ pub(crate) struct SessionState {
     pub(crate) session_id: Option<String>,
     pub(crate) language: String,
     pub(crate) push_id: Option<String>,
-    pub(crate) cookies: Cookies,
     pub(crate) conversation_state: Option<ConversationState>,
+    /// WAA token for slot 3 (may be absent if WAA acquisition fails).
+    pub(crate) waa_token: Option<String>,
+    /// Serialized value for the `x-goog-ext-525001261-jspb` header.
+    pub(crate) waa_context: Option<String>,
+    /// Per-session nonce used for slot 4.
+    pub(crate) nonce: Option<String>,
 }
 
 /// Multi-turn conversation state stored in the SDK session.
@@ -32,10 +36,9 @@ pub(crate) struct ConversationState {
 }
 
 impl SessionState {
-    pub(crate) fn new(cookies: impl Into<Cookies>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             language: DEFAULT_LANGUAGE.to_string(),
-            cookies: cookies.into(),
             ..Default::default()
         }
     }
@@ -48,15 +51,16 @@ impl SessionState {
             .unwrap_or_else(|| DEFAULT_PUSH_ID.to_string())
     }
 
+    pub(crate) fn take_nonce(&mut self) -> String {
+        self.nonce.take().unwrap_or_else(crate::proto::fresh_request_nonce)
+    }
+
     pub(crate) fn needs_init(&self) -> bool {
         self.build_label.is_none() && self.session_id.is_none()
     }
 
     pub(crate) fn generate_reqid() -> String {
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
+        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
         ((ts % 900_000) + 100_000).to_string()
     }
 }
@@ -72,10 +76,7 @@ pub(crate) struct BardInitialData {
 
 /// Extract session parameters from the `/app` HTML body.
 pub(crate) fn extract_from_app_html(body: &str) -> SessionState {
-    let mut state = SessionState {
-        language: DEFAULT_LANGUAGE.to_string(),
-        ..SessionState::default()
-    };
+    let mut state = SessionState::new();
 
     if let Some(token) = extract_snlim0e(body) {
         state.access_token = Some(token);
@@ -168,9 +169,7 @@ fn extract_push_id(body: &str) -> Option<String> {
 /// Extracts the consent save URL from `/app` HTML when a consent banner is required.
 pub(crate) fn extract_consent_save_url(body: &str) -> Option<String> {
     let payload_start = body.find("id=\"bard-initial-data\"")?;
-    let data_start = body[payload_start..]
-        .find("data-payload=\"")
-        .map(|i| i + payload_start)?;
+    let data_start = body[payload_start..].find("data-payload=\"").map(|i| i + payload_start)?;
     let value_start = data_start + "data-payload=\"".len();
     let value_end = body[value_start..].find('"').map(|i| i + value_start)?;
     let encoded = &body[value_start..value_end];
@@ -216,19 +215,13 @@ mod tests {
     #[test]
     fn extract_session_id_finds_fdrfje() {
         let body = include_str!("../tests/fixtures/app_session_id.txt");
-        assert_eq!(
-            extract_session_id(body),
-            Some("4202905934864668489".to_string())
-        );
+        assert_eq!(extract_session_id(body), Some("4202905934864668489".to_string()));
     }
 
     #[test]
     fn extract_push_id_prefers_qkiaye() {
         let body = include_str!("../tests/fixtures/app_push_id.txt");
-        assert_eq!(
-            extract_push_id(body),
-            Some("feeds/mcudyrk2a4khkz".to_string())
-        );
+        assert_eq!(extract_push_id(body), Some("feeds/mcudyrk2a4khkz".to_string()));
     }
 
     #[test]

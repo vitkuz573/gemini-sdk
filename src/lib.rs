@@ -79,7 +79,7 @@ pub mod attestation;
 mod retry;
 mod session;
 
-pub use auth::{Credentials, Cookies};
+pub use auth::{Cookies, Credentials};
 pub use chat::{
     ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig, ImageSource,
     ThinkingLevel,
@@ -90,6 +90,6 @@ pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};
 // Re-export parsing helpers so consumers can convert streaming responses.
 pub use proto::{
-    extract_bard_error_code, extract_thinking_from_parsed_response,
-    extract_text_from_parsed_response, parse_chat_response, parse_response_parts,
+    extract_bard_error_code, extract_text_from_parsed_response,
+    extract_thinking_from_parsed_response, parse_chat_response, parse_response_parts,
 };

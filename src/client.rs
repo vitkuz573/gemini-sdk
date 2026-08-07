@@ -18,11 +18,16 @@ use crate::errors::{Error, Result};
 use crate::models::{ModelCategory, ModelInfo};
 use crate::proto::parser::{extract_conversation_state, parse_chat_response, parse_model_list};
 use crate::proto::slots::{build_inner_req_list, ConversationState as ProtoConversationState};
-use crate::proto::{build_batchexecute_body, build_stream_generate_body, fresh_request_uuid};
+use crate::proto::{
+    build_batchexecute_body, build_esy5d_body, build_sjbwce_body, build_stream_generate_body,
+    build_waa_create_body, fresh_request_uuid,
+};
 use crate::session::{extract_consent_save_url, extract_from_app_html, SessionState};
 use crate::upload;
 
 const WEB_BASE_URL: &str = "https://gemini.google.com";
+const WAA_BASE_URL: &str = "https://waa-pa.clients6.google.com";
+const OGADS_BASE_URL: &str = "https://ogads-pa.clients6.google.com";
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 
@@ -37,6 +42,7 @@ pub struct GeminiClient {
 
 struct Inner {
     http: Client,
+    cookies: Cookies,
     session: Mutex<SessionState>,
     config: ClientConfig,
 }
@@ -66,8 +72,8 @@ impl GeminiClient {
     /// Returns an error if the cookie header is missing required cookies or if
     /// the underlying HTTP client cannot be built.
     pub fn from_cookie_header(header: &str) -> Result<Self> {
-        let credentials = Credentials::from_header(header)
-            .map_err(|e| Error::Config(e.to_string()))?;
+        let credentials =
+            Credentials::from_header(header).map_err(|e| Error::Config(e.to_string()))?;
         Self::from_credentials(credentials)
     }
 
@@ -139,6 +145,11 @@ impl GeminiClient {
         self
     }
 
+    /// Returns a clone of the cookies used by this client.
+    pub(crate) fn cookies(&self) -> Cookies {
+        self.inner.cookies.clone()
+    }
+
     fn with_config(cookies: Cookies, config: ClientConfig) -> Result<Self> {
         let http = Client::builder()
             .pool_max_idle_per_host(20)
@@ -147,12 +158,13 @@ impl GeminiClient {
             .build()
             .map_err(|e| Error::Config(format!("failed to build HTTP client: {e}")))?;
 
-        let mut session = SessionState::new(cookies.clone());
+        let mut session = SessionState::new();
         session.language.clone_from(&config.language);
 
         Ok(Self {
             inner: Arc::new(Inner {
                 http,
+                cookies,
                 session: Mutex::new(session),
                 config,
             }),
@@ -183,22 +195,21 @@ impl GeminiClient {
     /// Lists the models available to the signed-in account.
     ///
     /// Internally calls `BardFrontendService.GetUserStatus` through the
-    /// batchexecute transport.
+    /// batchexecute transport using the `otAQ7b` RPC id.
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>> {
         self.ensure_session().await?;
 
         let url = format!("{WEB_BASE_URL}/_/BardChatUi/data/batchexecute");
+        let cookies = self.inner.cookies.clone();
         let (params, body, headers, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid();
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", "Fd0Qje".to_string()),
+                ("rpcids", "otAQ7b".to_string()),
                 ("source-path", "/app".to_string()),
                 ("hl", session.language.clone()),
                 ("_reqid", reqid),
                 ("rt", "c".to_string()),
-                ("pageId", "none".to_string()),
-                ("authuser", "0".to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
                 params.push(("bl", bl.to_string()));
@@ -207,8 +218,8 @@ impl GeminiClient {
                 params.push(("f.sid", sid.to_string()));
             }
             let body = build_batchexecute_body(session.access_token.as_deref());
-            let headers = Self::build_headers(None);
-            let cookie_header = session.cookies.to_header_value();
+            let headers = Self::build_headers(None, session.waa_context.as_deref());
+            let cookie_header = cookies.to_header_value();
             (params, body, headers, cookie_header)
         };
 
@@ -243,7 +254,12 @@ impl GeminiClient {
     /// Sends a generation request and returns the parsed response.
     ///
     /// Prefer using [`GeminiClient::chat`] for an ergonomic API.
-    pub async fn generate(&self, message: &ChatMessage, category: ModelCategory, config: Option<GenerationConfig>) -> Result<ChatResponse> {
+    pub async fn generate(
+        &self,
+        message: &ChatMessage,
+        category: ModelCategory,
+        config: Option<GenerationConfig>,
+    ) -> Result<ChatResponse> {
         let body = self.generate_raw(message, None, category, config).await?;
         let response = parse_chat_response(&body)?;
 
@@ -265,69 +281,24 @@ impl GeminiClient {
         category: ModelCategory,
         config: Option<GenerationConfig>,
     ) -> Result<String> {
-        self.ensure_session().await?;
+        let mut response =
+            self.stream_generate_raw(message, conversation, category, config).await?;
 
-        let prepared = prepare_request(conversation, message, config, category)?;
-        let (inner_req_list, request_uuid, headers, cookie_header) = self
-            .build_stream_generate_request(&prepared)
-            .await?;
+        let mut body_bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(Error::Request)? {
+            body_bytes.extend_from_slice(&chunk);
+        }
+        let body = String::from_utf8_lossy(&body_bytes).to_string();
 
-        let url = format!(
-            "{WEB_BASE_URL}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate"
-        );
-
-        let body = {
-            let session = self.inner.session.lock().await;
-            let mut params: Vec<(&str, String)> = vec![
-                ("hl", session.language.clone()),
-                ("_reqid", request_uuid.clone()),
-                ("rt", "c".to_string()),
-                ("pageId", "none".to_string()),
-            ];
-            if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
-            }
-            if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
-            }
-
-            let at = session.access_token.clone();
-            let form_body = build_stream_generate_body(&inner_req_list, at.as_deref());
-
-            let response = self
-                .send_with_retry(|| {
-                    let client = self.inner.http.clone();
-                    let url = url.clone();
-                    let params = params.clone();
-                    let form_body = form_body.clone();
-                    let headers = headers.clone();
-                    let cookie_header = cookie_header.clone();
-                    async move {
-                        let mut req = client.post(&url).query(&params).body(form_body);
-                        for (key, value) in &headers {
-                            req = req.header(key, value);
-                        }
-                        req = req.header("Cookie", cookie_header);
-                        req.send().await
-                    }
-                })
-                .await?;
-
-            let status = response.status();
-            let text = response.text().await.map_err(Error::Request)?;
-            if !status.is_success() {
-                if is_attestation_error(&text) {
-                    self.clear_conversation_state().await;
-                }
-                return Err(Error::api(status, text));
-            }
-            text
-        };
+        if let Ok(state) = extract_conversation_state(&body) {
+            let mut session = self.inner.session.lock().await;
+            session.conversation_state = Some(map_state(state));
+        }
 
         Ok(body)
     }
 
-    /// Starts a streaming generation request.
+    /// Starts a streaming generation request and returns the upstream response.
     ///
     /// The returned [`reqwest::Response`] can be consumed as a stream of bytes;
     /// callers are responsible for parsing the WIZ frames.
@@ -337,34 +308,49 @@ impl GeminiClient {
         category: ModelCategory,
         config: Option<GenerationConfig>,
     ) -> Result<reqwest::Response> {
+        self.stream_generate_raw(message, None, category, config).await
+    }
+
+    /// Starts a streaming generation request and returns raw bytes.
+    ///
+    /// This lower-level method gives callers direct access to the upstream WIZ
+    /// byte stream. Conversation state is extracted from the consumed body by
+    /// the caller or by [`GeminiClient::generate_raw`].
+    pub async fn stream_generate_raw(
+        &self,
+        message: &ChatMessage,
+        conversation: Option<&Conversation>,
+        category: ModelCategory,
+        config: Option<GenerationConfig>,
+    ) -> Result<reqwest::Response> {
         self.ensure_session().await?;
 
-        let prepared = prepare_request(None, message, config, category)?;
-        let (inner_req_list, request_uuid, headers, cookie_header) = self
-            .build_stream_generate_request(&prepared)
-            .await?;
+        let prepared = prepare_request(conversation, message, config, category)?;
+        let (inner_req_list, request_uuid, _headers, cookie_header) =
+            self.build_stream_generate_request(&prepared).await?;
 
         let url = format!(
             "{WEB_BASE_URL}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate"
         );
 
-        let session = self.inner.session.lock().await;
-        let mut params: Vec<(&str, String)> = vec![
-            ("hl", session.language.clone()),
-            ("_reqid", request_uuid),
-            ("rt", "c".to_string()),
-            ("pageId", "none".to_string()),
-        ];
-        if let Some(bl) = session.build_label.as_deref() {
-            params.push(("bl", bl.to_string()));
-        }
-        if let Some(sid) = session.session_id.as_deref() {
-            params.push(("f.sid", sid.to_string()));
-        }
-        let at = session.access_token.clone();
-        drop(session);
+        let (params, at, waa_context) = {
+            let session = self.inner.session.lock().await;
+            let mut params: Vec<(&str, String)> = vec![
+                ("hl", session.language.clone()),
+                ("_reqid", request_uuid.clone()),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            (params, session.access_token.clone(), session.waa_context.clone())
+        };
 
         let form_body = build_stream_generate_body(&inner_req_list, at.as_deref());
+        let headers = Self::build_headers(Some(&request_uuid), waa_context.as_deref());
 
         let response = self
             .send_with_retry(|| {
@@ -399,22 +385,22 @@ impl GeminiClient {
         prepared: &PreparedRequest,
     ) -> Result<(Vec<Value>, String, Vec<(String, String)>, String)> {
         let request_uuid = fresh_request_uuid();
-        let (conversation_state, cookies, session_for_upload) = {
-            let session = self.inner.session.lock().await;
+        let cookies = self.inner.cookies.clone();
+        let (conversation_state, session_for_upload, language, waa_token, nonce) = {
+            let mut session = self.inner.session.lock().await;
+            session.nonce = Some(crate::proto::fresh_request_nonce());
             (
                 session.conversation_state.clone(),
-                session.cookies.clone(),
                 session.clone(),
+                session.language.clone(),
+                session.waa_token.clone(),
+                session.take_nonce(),
             )
         };
 
-        let attachments = upload::upload_attachments(
-            &self.inner.http,
-            &cookies,
-            &session_for_upload,
-            prepared,
-        )
-        .await?;
+        let attachments =
+            upload::upload_attachments(&self.inner.http, &cookies, &session_for_upload, prepared)
+                .await?;
 
         let proto_state = conversation_state.as_ref().map(map_proto_state);
         let inner_req_list = build_inner_req_list(
@@ -423,9 +409,13 @@ impl GeminiClient {
             None,
             &attachments,
             &request_uuid,
+            &language,
+            waa_token.as_deref(),
+            &nonce,
         );
 
-        let headers = Self::build_headers(Some(&request_uuid));
+        let headers =
+            Self::build_headers(Some(&request_uuid), session_for_upload.waa_context.as_deref());
         let cookie_header = cookies.to_header_value();
 
         Ok((inner_req_list, request_uuid, headers, cookie_header))
@@ -451,18 +441,214 @@ impl GeminiClient {
         };
 
         let extracted = extract_from_app_html(&final_body);
-        let mut session = self.inner.session.lock().await;
-        session.access_token = extracted.access_token.or_else(|| session.access_token.clone());
-        session.build_label = extracted.build_label.or_else(|| session.build_label.clone());
-        session.session_id = extracted.session_id.or_else(|| session.session_id.clone());
-        session.push_id = extracted.push_id.or_else(|| session.push_id.clone());
+        {
+            let mut session = self.inner.session.lock().await;
+            session.access_token = extracted.access_token.or_else(|| session.access_token.clone());
+            session.build_label = extracted.build_label.or_else(|| session.build_label.clone());
+            session.session_id = extracted.session_id.or_else(|| session.session_id.clone());
+            session.push_id = extracted.push_id.or_else(|| session.push_id.clone());
+        }
+
+        // Run the WAA / warm-up chain. Individual failures are logged but do not
+        // block the session: the server may still accept the request.
+        if let Err(e) = self.run_waa_init_chain().await {
+            debug!(error = %e, "WAA init chain failed; continuing without WAA token");
+        }
+
         Ok(())
+    }
+
+    /// Performs the warm-up/WAA RPC chain captured from the Gemini frontend.
+    ///
+    /// Stores the resulting WAA token and `x-goog-ext-525001261-jspb` context in
+    /// the session state.
+    async fn run_waa_init_chain(&self) -> Result<()> {
+        let (at, language, build_label, session_id, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            (
+                session.access_token.clone(),
+                session.language.clone(),
+                session.build_label.clone(),
+                session.session_id.clone(),
+                self.inner.cookies.to_header_value(),
+            )
+        };
+
+        // 1. otAQ7b warm-up / model list.
+        let _ = self
+            .batchexecute_rpc(
+                "otAQ7b",
+                build_batchexecute_body(at.as_deref()),
+                &language,
+                build_label.as_deref(),
+                session_id.as_deref(),
+                &cookie_header,
+            )
+            .await?;
+
+        // 2. sJBwce [[1,2]] prerequisite.
+        let _ = self
+            .batchexecute_rpc(
+                "sJBwce",
+                build_sjbwce_body(at.as_deref()),
+                &language,
+                build_label.as_deref(),
+                session_id.as_deref(),
+                &cookie_header,
+            )
+            .await?;
+
+        // 3. WAA Create.
+        let waa_token = self
+            .waa_create(&cookie_header)
+            .await
+            .map_err(|e| Error::Transient(format!("WAA Create failed: {e}")))?;
+
+        // 4. ogads GetAsyncData.
+        let waa_context = self
+            .ogads_get_async_data(&cookie_header, &waa_token)
+            .await
+            .unwrap_or_else(|_| build_default_waa_context());
+
+        // 5. ESY5D feature flags.
+        let _ = self
+            .batchexecute_rpc(
+                "ESY5D",
+                build_esy5d_body(at.as_deref()),
+                &language,
+                build_label.as_deref(),
+                session_id.as_deref(),
+                &cookie_header,
+            )
+            .await?;
+
+        {
+            let mut session = self.inner.session.lock().await;
+            session.waa_token = Some(waa_token);
+            session.waa_context = Some(waa_context);
+        }
+
+        Ok(())
+    }
+
+    async fn batchexecute_rpc(
+        &self,
+        rpcids: &str,
+        body: String,
+        language: &str,
+        build_label: Option<&str>,
+        session_id: Option<&str>,
+        cookie_header: &str,
+    ) -> Result<String> {
+        let url = format!("{WEB_BASE_URL}/_/BardChatUi/data/batchexecute");
+        let reqid = SessionState::generate_reqid();
+        let mut params: Vec<(&str, String)> = vec![
+            ("rpcids", rpcids.to_string()),
+            ("source-path", "/app".to_string()),
+            ("hl", language.to_string()),
+            ("_reqid", reqid),
+            ("rt", "c".to_string()),
+        ];
+        if let Some(bl) = build_label {
+            params.push(("bl", bl.to_string()));
+        }
+        if let Some(sid) = session_id {
+            params.push(("f.sid", sid.to_string()));
+        }
+
+        let headers = Self::build_headers(None, None);
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.to_string();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+        Ok(text)
+    }
+
+    async fn waa_create(&self, cookie_header: &str) -> Result<String> {
+        let url = format!("{WAA_BASE_URL}/$rpc/google.internal.waa.v1.Waa/Create");
+        let body = build_waa_create_body();
+        let response = self
+            .inner
+            .http
+            .post(&url)
+            .header("Content-Type", "application/json+protobuf")
+            .header("Cookie", cookie_header)
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", format!("{WEB_BASE_URL}/app"))
+            .header("Origin", "https://www.google.com")
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| Error::Transient(format!("WAA Create request failed: {e}")))?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        // Response is a JSON array; the token is typically the first/only string.
+        let parsed: Value = serde_json::from_str(&text).map_err(Error::Json)?;
+        let token = parsed
+            .get(0)
+            .and_then(|v| v.as_str())
+            .map(std::string::ToString::to_string)
+            .ok_or_else(|| Error::parse("WAA Create response missing token"))?;
+        Ok(token)
+    }
+
+    async fn ogads_get_async_data(&self, cookie_header: &str, waa_token: &str) -> Result<String> {
+        let url = format!("{OGADS_BASE_URL}/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData");
+        let body = serde_json::json!([[waa_token]]).to_string();
+        let response = self
+            .inner
+            .http
+            .post(&url)
+            .header("Content-Type", "application/json+protobuf")
+            .header("Cookie", cookie_header)
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", format!("{WEB_BASE_URL}/app"))
+            .header("Origin", "https://www.google.com")
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| Error::Transient(format!("ogads GetAsyncData request failed: {e}")))?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        // Return the full response JSON as the header context; callers can
+        // refine once the exact shape is known.
+        Ok(text)
     }
 
     async fn fetch_app_page(&self) -> Result<String> {
         let (language, cookie_header) = {
             let session = self.inner.session.lock().await;
-            (session.language.clone(), session.cookies.to_header_value())
+            (session.language.clone(), self.inner.cookies.to_header_value())
         };
 
         let url = format!("{WEB_BASE_URL}/app?hl={language}");
@@ -486,10 +672,7 @@ impl GeminiClient {
     }
 
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
-        let cookie_header = {
-            let session = self.inner.session.lock().await;
-            session.cookies.to_header_value()
-        };
+        let cookie_header = self.inner.cookies.to_header_value();
 
         let language = self.inner.config.language.clone();
         let response = self
@@ -513,16 +696,14 @@ impl GeminiClient {
         }
 
         {
-            let mut session = self.inner.session.lock().await;
-            session
-                .cookies
-                .merge_response_cookies(response.cookies());
+            let mut cookies = self.inner.cookies.clone();
+            cookies.merge_response_cookies(response.cookies());
         }
 
         self.fetch_app_page().await
     }
 
-    fn build_headers(reqid: Option<&str>) -> Vec<(String, String)> {
+    fn build_headers(reqid: Option<&str>, waa_context: Option<&str>) -> Vec<(String, String)> {
         let mut headers = vec![
             (
                 "Content-Type".to_string(),
@@ -534,9 +715,11 @@ impl GeminiClient {
             ("X-Same-Domain".to_string(), "1".to_string()),
             ("Cache-Control".to_string(), "no-cache".to_string()),
             ("Pragma".to_string(), "no-cache".to_string()),
+            ("x-client-data".to_string(), "CNeSywE=".to_string()),
             (
                 "sec-ch-ua".to_string(),
-                "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"".to_string(),
+                "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\""
+                    .to_string(),
             ),
             ("sec-ch-ua-mobile".to_string(), "?0".to_string()),
             ("sec-ch-ua-platform".to_string(), "\"Windows\"".to_string()),
@@ -548,6 +731,11 @@ impl GeminiClient {
             let ext = serde_json::json!([id, 1]).to_string();
             headers.push(("x-goog-ext-525005358-jspb".to_string(), ext));
         }
+        if let Some(ctx) = waa_context {
+            headers.push(("x-goog-ext-525001261-jspb".to_string(), ctx.to_string()));
+        }
+        headers.push(("x-goog-ext-73010989-jspb".to_string(), "[0]".to_string()));
+        headers.push(("x-goog-ext-73010990-jspb".to_string(), "[0,0,0]".to_string()));
         headers
     }
 
@@ -565,8 +753,11 @@ impl GeminiClient {
     }
 }
 
-fn is_attestation_error(body: &str) -> bool {
-    body.contains("1096") || body.contains("BardErrorInfo") || body.contains("rs:108")
+fn build_default_waa_context() -> String {
+    serde_json::json!([
+        1, null, null, null, null, null, null, 0, null, null, 2, null, null, 3, 1, null
+    ])
+    .to_string()
 }
 
 fn map_state(state: ProtoConversationState) -> crate::session::ConversationState {
@@ -632,10 +823,7 @@ impl<'a> ChatBuilder<'a> {
     /// This is useful for callers that need to control both text and image
     /// parts (or other future content types) directly.
     pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
-        let response = self
-            .client
-            .generate(&message, self.category, self.config)
-            .await?;
+        let response = self.client.generate(&message, self.category, self.config).await?;
 
         if let Some(mut conversation) = self.conversation {
             conversation.add_message(message);

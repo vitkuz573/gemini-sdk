@@ -236,9 +236,7 @@ pub struct Cookies {
 impl Cookies {
     /// Creates an empty cookie jar.
     pub fn new() -> Self {
-        Self {
-            inner: HashMap::new(),
-        }
+        Self { inner: HashMap::new() }
     }
 
     /// Parses a raw `Cookie` header value such as the one copied from a browser.
@@ -303,8 +301,7 @@ impl Cookies {
         cookies: impl Iterator<Item = reqwest::cookie::Cookie<'a>>,
     ) {
         for cookie in cookies {
-            self.inner
-                .insert(cookie.name().to_string(), cookie.value().to_string());
+            self.inner.insert(cookie.name().to_string(), cookie.value().to_string());
         }
     }
 }
@@ -390,7 +387,9 @@ mod tests {
 
     #[test]
     fn credentials_parse_known_fields() {
-        let header = format!("{PSID}=psid-value; {PSIDCC}=psidcc-value; {PSIDTS}=ts; {PAPISID}=papi; {SOCS}=consent");
+        let header = format!(
+            "{PSID}=psid-value; {PSIDCC}=psidcc-value; {PSIDTS}=ts; {PAPISID}=papi; {SOCS}=consent"
+        );
         let creds = Credentials::from_header(&header).unwrap();
         assert_eq!(creds.psid, "psid-value");
         assert_eq!(creds.psidcc, "psidcc-value");

@@ -17,7 +17,7 @@ fn bench_build_inner_req_list(c: &mut Criterion) {
 
     c.bench_function("build_inner_req_list", |b| {
         b.iter(|| {
-            build_inner_req_list(&prepared, None, None, &[], "REQUEST-UUID");
+            build_inner_req_list(&prepared, None, None, &[], "REQUEST-UUID", "en", None, "nonce");
         });
     });
 }

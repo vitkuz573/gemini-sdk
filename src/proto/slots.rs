@@ -1,12 +1,9 @@
 //! Construction of the 97-slot `inner_req_list` used by `StreamGenerate`.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use base64::Engine;
 use serde_json::{json, Value};
 
 use crate::chat::{PreparedRequest, ThinkingLevel};
-
 
 /// Number of slots in the `StreamGenerate` inner request list.
 pub const SLOT_COUNT: usize = 97;
@@ -56,12 +53,16 @@ impl ConversationState {
 ///
 /// When `browser_payload` is provided it is used as the base and only prompt,
 /// category, and UUID slots are overridden.
+#[allow(clippy::too_many_arguments)]
 pub fn build_inner_req_list(
     request: &PreparedRequest,
     conversation_state: Option<&ConversationState>,
     browser_payload: Option<&[Value]>,
     attachments: &[WebAttachment],
     request_uuid: &str,
+    language: &str,
+    waa_token: Option<&str>,
+    nonce: &str,
 ) -> Vec<Value> {
     let mut inner = match browser_payload {
         Some(payload) => normalize_payload(payload),
@@ -69,29 +70,28 @@ pub fn build_inner_req_list(
     };
 
     inner[0] = build_slot0(&request.prompt, attachments);
-    inner[1] = json!(["en"]);
+    inner[1] = json!([language]);
+    inner[3] = waa_token.map_or_else(|| Value::Null, |t| json!(t));
+    inner[4] = json!(nonce);
     inner[7] = json!(1);
     inner[10] = json!(1);
     inner[11] = json!(0);
     inner[18] = json!(0);
     inner[27] = json!(1);
     inner[30] = json!([request.category.as_enum_value()]);
-    inner[41] = json!([2]);
+    inner[41] = json!([1]);
     inner[53] = json!(0);
     inner[59] = json!(request_uuid);
     inner[61] = json!([]);
-    inner[68] = json!(1);
-    inner[79] = json!(6);
+    inner[66] = Value::Null;
+    inner[68] = json!(2);
+    inner[79] = json!(3);
+    inner[80] = json!(ThinkingLevel::Standard.as_enum_value().unwrap_or(1));
     inner[91] = json!(0);
     inner[96] = json!(0);
 
     if browser_payload.is_none() {
         inner[6] = json!([1]);
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        inner[66] = json!([ts, 0]);
     }
 
     if let Some(level) = request
@@ -120,9 +120,20 @@ fn build_fallback_base(conversation_state: Option<&ConversationState>) -> Vec<Va
     let mut slots = vec![Value::Null; SLOT_COUNT];
     slots[2] = match conversation_state {
         Some(state) => state.to_slot2(),
-        None => json![["", "", "", null, null, null, null, null, null, ""]],
+        None => Value::Array(vec![
+            json!(""),
+            json!(""),
+            json!(""),
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            json!(""),
+        ]),
     };
-    slots[3] = json!("");
+    slots[3] = Value::Null;
     slots[4] = json!("");
     slots[17] = if conversation_state.is_some() {
         json!([[1]])
@@ -201,15 +212,51 @@ mod tests {
     #[test]
     fn slot_count_is_97() {
         let req = minimal_prepared();
-        let inner = build_inner_req_list(&req, None, None, &[], "UUID");
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
         assert_eq!(inner.len(), SLOT_COUNT);
+    }
+
+    #[test]
+    fn slot_1_uses_language() {
+        let req = minimal_prepared();
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "ru", None, "nonce");
+        assert_eq!(inner[1], json!(["ru"]));
+    }
+
+    #[test]
+    fn slot_2_empty_conversation_is_single_array() {
+        let req = minimal_prepared();
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
+        assert!(inner[2].is_array());
+        assert!(!inner[2].as_array().unwrap()[0].is_array());
+    }
+
+    #[test]
+    fn slot_3_waa_token_or_null() {
+        let req = minimal_prepared();
+        let inner_no_waa = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
+        assert_eq!(inner_no_waa[3], Value::Null);
+        let inner_waa =
+            build_inner_req_list(&req, None, None, &[], "UUID", "en", Some("tok"), "nonce");
+        assert_eq!(inner_waa[3], json!("tok"));
+    }
+
+    #[test]
+    fn slot_41_68_79_defaults() {
+        let req = minimal_prepared();
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
+        assert_eq!(inner[41], json!([1]));
+        assert_eq!(inner[68], json!(2));
+        assert_eq!(inner[79], json!(3));
+        assert_eq!(inner[80], json!(1));
+        assert_eq!(inner[66], Value::Null);
     }
 
     #[test]
     fn slot_30_reflects_category() {
         let mut req = minimal_prepared();
         req.category = ModelCategory::Pro;
-        let inner = build_inner_req_list(&req, None, None, &[], "UUID");
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
         assert_eq!(inner[30], json!([3]));
     }
 
@@ -221,7 +268,8 @@ mod tests {
             mime_type: "image/png".to_string(),
             filename: "test.png".to_string(),
         }];
-        let inner = build_inner_req_list(&req, None, None, &attachments, "UUID");
+        let inner =
+            build_inner_req_list(&req, None, None, &attachments, "UUID", "en", None, "nonce");
         let slot0 = &inner[0];
         assert!(slot0[3].is_array());
     }

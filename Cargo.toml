@@ -32,18 +32,21 @@ regex = { version = "1.11", optional = true }
 # Optional browser attestation dependencies
 tokio-tungstenite = { version = "0.24", optional = true }
 serde_urlencoded = { version = "0.7", optional = true }
-rand = { version = "0.8", optional = true }
+rand = "0.8"
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.6"
 serde_json = "1.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-reqwest = { version = "0.12", features = ["cookies", "json"] }
+reqwest = { version = "0.12", features = ["cookies", "json", "stream"] }
 criterion = { version = "0.5", features = ["async_tokio"] }
+dotenvy = "0.15"
+base64 = "0.22"
+futures = "0.3"
 
 [features]
 default = []
-browser-attestation = ["dep:tokio-tungstenite", "dep:serde_urlencoded", "dep:tracing-subscriber", "dep:rand"]
+browser-attestation = ["dep:tokio-tungstenite", "dep:serde_urlencoded", "dep:tracing-subscriber"]
 capture-fixtures = ["dep:regex"]
 
 [[example]]

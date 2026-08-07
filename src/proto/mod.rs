@@ -4,6 +4,9 @@
 //! 97-slot JSON array that mirrors the protobuf layout of
 //! `assistant.lamda.BardFrontendService/StreamGenerate`.
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use rand::Rng;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -15,7 +18,7 @@ pub use slots::*;
 
 /// Re-export response parsing helpers at the `proto` module level.
 pub use parser::{
-    extract_thinking_from_parsed_response, extract_text_from_parsed_response, parse_chat_response,
+    extract_text_from_parsed_response, extract_thinking_from_parsed_response, parse_chat_response,
     parse_response_parts,
 };
 
@@ -46,7 +49,12 @@ pub fn build_stream_generate_body(inner_req_list: &[Value], at: Option<&str>) ->
 
 /// Builds the URL-encoded `f.req` form body for batchexecute `GetUserStatus`.
 pub fn build_batchexecute_body(at: Option<&str>) -> String {
-    let payload = json!([[["otAQ7b", "[]", null, "generic"]]]);
+    build_batchexecute_body_for_rpc("otAQ7b", "[]", at)
+}
+
+/// Builds a batchexecute body for an arbitrary RPC id and inner payload.
+pub fn build_batchexecute_body_for_rpc(rpcid: &str, inner: &str, at: Option<&str>) -> String {
+    let payload = json!([[rpcid, inner, null, "generic"]]);
     let payload_str = serde_json::to_string(&payload).unwrap_or_default();
     let mut form = vec![format!("f.req={}", urlencoding::encode(&payload_str))];
     if let Some(token) = at {
@@ -60,6 +68,48 @@ pub fn build_batchexecute_body(at: Option<&str>) -> String {
 /// Generates a fresh uppercase request UUID.
 pub fn fresh_request_uuid() -> String {
     Uuid::new_v4().to_string().to_uppercase()
+}
+
+/// Generates a fresh 32-character lowercase hex nonce for slot 4.
+pub fn fresh_request_nonce() -> String {
+    let mut rng = rand::thread_rng();
+    (0..32).map(|_| format!("{:x}", rng.gen_range(0..16))).collect()
+}
+
+/// Builds the URL-encoded `f.req` form body for the `sJBwce` WAA prerequisite.
+pub fn build_sjbwce_body(at: Option<&str>) -> String {
+    let payload = json!([[[1, 2]]]);
+    let payload_str = serde_json::to_string(&payload).unwrap_or_default();
+    let mut form = vec![format!("f.req={}", urlencoding::encode(&payload_str))];
+    if let Some(token) = at {
+        if !token.is_empty() {
+            form.push(format!("at={}", urlencoding::encode(token)));
+        }
+    }
+    form.join("&")
+}
+
+/// Builds the JSON body for the WAA `Create` RPC.
+pub fn build_waa_create_body() -> String {
+    serde_json::to_string(&json!(["br1aemAN9owlYRs9NnsA"])).unwrap_or_default()
+}
+
+/// Builds the JSON body for the `ESY5D` batchexecute RPC.
+pub fn build_esy5d_body(at: Option<&str>) -> String {
+    let payload = json!([[["ESY5D", "[null,[5]]", null, "generic"]]]);
+    let payload_str = serde_json::to_string(&payload).unwrap_or_default();
+    let mut form = vec![format!("f.req={}", urlencoding::encode(&payload_str))];
+    if let Some(token) = at {
+        if !token.is_empty() {
+            form.push(format!("at={}", urlencoding::encode(token)));
+        }
+    }
+    form.join("&")
+}
+
+/// Generates the current UTC timestamp used in legacy slot 66.
+pub fn current_timestamp_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
 #[cfg(test)]
@@ -84,5 +134,20 @@ mod tests {
         let body = build_stream_generate_body(&[], Some(""));
         assert!(body.contains("f.req="));
         assert!(!body.contains("&at="));
+    }
+
+    #[test]
+    fn build_batchexecute_body_uses_otaq7b() {
+        let body = build_batchexecute_body(Some("at"));
+        assert!(body.contains("f.req="));
+        assert!(body.contains("otAQ7b"));
+        assert!(body.contains("at="));
+    }
+
+    #[test]
+    fn fresh_request_nonce_is_32_hex_chars() {
+        let nonce = fresh_request_nonce();
+        assert_eq!(nonce.len(), 32);
+        assert!(nonce.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }

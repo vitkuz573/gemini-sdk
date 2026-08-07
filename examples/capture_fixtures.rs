@@ -49,13 +49,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut image_msg = ChatMessage::user("Describe this image.");
     image_msg
         .parts
-        .push(gemini_sdk::ContentPart::Image(ImageSource::from_bytes(
-            "image/png",
-            b"fake",
-        )));
-    let err1100 = client
-        .generate_raw(&image_msg, None, ModelCategory::Auto, None)
-        .await;
+        .push(gemini_sdk::ContentPart::Image(ImageSource::from_bytes("image/png", b"fake")));
+    let err1100 = client.generate_raw(&image_msg, None, ModelCategory::Auto, None).await;
 
     println!("Fetching 1096 session error...");
     let err1096 = trigger_1096(&cookies).await;
@@ -64,14 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_html = fetch_app_html(&cookies).await?;
 
     // Write live-captured fixtures.
-    fs::write(
-        fixtures_dir.join("model_list_response.txt"),
-        redact(&format_model_list(models)),
-    )?;
-    fs::write(
-        fixtures_dir.join("turn1_response_raw.txt"),
-        redact(&turn1),
-    )?;
+    fs::write(fixtures_dir.join("model_list_response.txt"), redact(&format_model_list(models)))?;
+    fs::write(fixtures_dir.join("turn1_response_raw.txt"), redact(&turn1))?;
     fs::write(
         fixtures_dir.join("stream_generate_error_1100.json"),
         redact(&err1100.unwrap_or_else(|e| e.to_string())),
@@ -238,10 +227,7 @@ fn format_model_list(models: Vec<gemini_sdk::ModelInfo>) -> String {
             )
         })
         .collect();
-    let inner = format!(
-        "[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[{}]]",
-        modes.join(",")
-    );
+    let inner = format!("[[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[{}]]", modes.join(","));
     format!(
         ")]'}}'\n\n[[[\"wrb.fr\",\"otAQ7b\",null,{payload},null,null,null,\"generic\"]]]\n58\n[[\"di\",1]]\n",
         payload = serde_json::to_string(&inner).unwrap()
@@ -251,9 +237,7 @@ fn format_model_list(models: Vec<gemini_sdk::ModelInfo>) -> String {
 async fn trigger_1096(cookies: &str) -> Result<String, Box<dyn std::error::Error>> {
     // Send a StreamGenerate request with an invalid f.sid to naturally produce
     // a BardErrorInfo 1096 / session error.
-    let http = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .build()?;
+    let http = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
 
     let reqid = ((std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -264,7 +248,8 @@ async fn trigger_1096(cookies: &str) -> Result<String, Box<dyn std::error::Error
         .to_string();
 
     let inner = build_minimal_inner_req_list("Hello");
-    let f_req = serde_json::to_string(&[serde_json::Value::Null, serde_json::Value::Array(inner)]).unwrap();
+    let f_req =
+        serde_json::to_string(&[serde_json::Value::Null, serde_json::Value::Array(inner)]).unwrap();
     let body = format!("f.req={}", urlencoding::encode(&f_req));
 
     let url = "https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate";
@@ -295,9 +280,7 @@ async fn trigger_1096(cookies: &str) -> Result<String, Box<dyn std::error::Error
 }
 
 async fn fetch_app_html(cookies: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let http = reqwest::Client::builder()
-        .user_agent(USER_AGENT)
-        .build()?;
+    let http = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
     let resp = http
         .get("https://gemini.google.com/app?hl=en")
         .header("Cookie", cookies)

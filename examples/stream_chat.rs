@@ -15,16 +15,12 @@ async fn main() -> gemini_sdk::Result<()> {
     tracing_subscriber::fmt::init();
 
     let cookies = std::env::var("GEMINI_COOKIES").expect("GEMINI_COOKIES env var required");
-    let prompt = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "Tell me a short story.".to_string());
+    let prompt = std::env::args().nth(1).unwrap_or_else(|| "Tell me a short story.".to_string());
 
     let client = GeminiClient::from_cookie_header(&cookies)?;
     let message = ChatMessage::user(prompt);
 
-    let response = client
-        .stream_generate(&message, ModelCategory::Auto, None)
-        .await?;
+    let response = client.stream_generate(&message, ModelCategory::Auto, None).await?;
 
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {

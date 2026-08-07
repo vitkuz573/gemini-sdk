@@ -1,5 +1,7 @@
 //! Protocol-level unit/integration tests.
 
+use gemini_sdk::chat::{ContentPart, PreparedRequest};
+use gemini_sdk::models::ModelCategory;
 use gemini_sdk::proto::parser::{
     extract_bard_error_code, extract_conversation_state, parse_chat_response, parse_model_list,
     parse_response_parts,
@@ -9,8 +11,6 @@ use gemini_sdk::proto::slots::{
     WebAttachment,
 };
 use gemini_sdk::proto::{build_batchexecute_body, build_stream_generate_body, strip_xssi_prefix};
-use gemini_sdk::chat::{PreparedRequest, ContentPart};
-use gemini_sdk::models::ModelCategory;
 
 #[test]
 fn strip_xssi_prefix_finds_first_json_line() {
@@ -145,7 +145,6 @@ fn parse_response_parts_deduplicates_stream_chunks() {
     assert!(thinking_parts[0].starts_with("**Comparing Images**"));
 }
 
-
 #[test]
 fn build_inner_req_list_has_97_slots() {
     let prepared = PreparedRequest {
@@ -154,7 +153,7 @@ fn build_inner_req_list_has_97_slots() {
         config: None,
         category: ModelCategory::Auto,
     };
-    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID");
+    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
     assert_eq!(inner.len(), 97);
 }
 
@@ -171,7 +170,8 @@ fn build_inner_req_list_with_attachments() {
         mime_type: "image/png".to_string(),
         filename: "test.png".to_string(),
     }];
-    let inner = build_inner_req_list(&prepared, None, None, &attachments, "UUID");
+    let inner =
+        build_inner_req_list(&prepared, None, None, &attachments, "UUID", "en", None, "nonce");
     assert!(inner[0][3].is_array());
 }
 
@@ -189,7 +189,8 @@ fn build_inner_req_list_with_conversation_state() {
         response_part_id: "rcp_123".to_string(),
         continuation_token: "tok".to_string(),
     };
-    let inner = build_inner_req_list(&prepared, Some(&state), None, &[], "UUID");
+    let inner =
+        build_inner_req_list(&prepared, Some(&state), None, &[], "UUID", "en", None, "nonce");
     assert_eq!(inner[17], serde_json::json!([[1]]));
     assert_eq!(inner[30], serde_json::json!([3]));
 }

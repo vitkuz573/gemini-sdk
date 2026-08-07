@@ -76,9 +76,7 @@ impl FromStr for ModelCategory {
             "AUTO" => Ok(Self::Auto),
             "FAST_DYNAMIC_THINKING" => Ok(Self::FastDynamicThinking),
             "FLASH_LITE" | "FLASHLITE" => Ok(Self::FlashLite),
-            _ => Err(crate::errors::Error::bad_request(format!(
-                "unknown model category: {s}"
-            ))),
+            _ => Err(crate::errors::Error::bad_request(format!("unknown model category: {s}"))),
         }
     }
 }

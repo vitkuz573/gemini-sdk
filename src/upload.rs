@@ -38,7 +38,10 @@ pub(crate) async fn upload_file(
         .header("Origin", WEB_BASE_URL)
         .header("Referer", format!("{WEB_BASE_URL}/"))
         .header("User-Agent", USER_AGENT)
-        .header("sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"")
+        .header(
+            "sec-ch-ua",
+            "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"",
+        )
         .header("sec-ch-ua-mobile", "?0")
         .header("sec-ch-ua-platform", "\"Windows\"")
         .header("sec-fetch-dest", "empty")
@@ -72,7 +75,10 @@ pub(crate) async fn upload_file(
         .header("Origin", WEB_BASE_URL)
         .header("Referer", format!("{WEB_BASE_URL}/"))
         .header("User-Agent", USER_AGENT)
-        .header("sec-ch-ua", "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"")
+        .header(
+            "sec-ch-ua",
+            "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"",
+        )
         .header("sec-ch-ua-mobile", "?0")
         .header("sec-ch-ua-platform", "\"Windows\"")
         .header("sec-fetch-dest", "empty")
