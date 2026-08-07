@@ -2,13 +2,14 @@
 
 use gemini_sdk::proto::parser::{
     extract_bard_error_code, extract_conversation_state, parse_chat_response, parse_model_list,
+    parse_response_parts,
 };
 use gemini_sdk::proto::slots::{
     base64_decode, build_inner_req_list, derive_attachment_filename, ConversationState,
     WebAttachment,
 };
 use gemini_sdk::proto::{build_batchexecute_body, build_stream_generate_body, strip_xssi_prefix};
-use gemini_sdk::chat::PreparedRequest;
+use gemini_sdk::chat::{PreparedRequest, ContentPart};
 use gemini_sdk::models::ModelCategory;
 
 #[test]
@@ -106,6 +107,44 @@ fn parse_real_response_fixture() {
     let response = parse_chat_response(body).unwrap();
     assert!(!response.text().is_empty());
 }
+
+#[test]
+fn parse_thinking_response_extracts_reasoning() {
+    let body = include_str!("fixtures/thinking_response_raw.txt");
+    let response = parse_chat_response(body).unwrap();
+
+    assert!(response.text().contains("идентичный скриншот"));
+    assert!(response.thinking().contains("**Comparing Images**"));
+    assert!(response.thinking().contains("**Confirming Identity**"));
+    assert!(response.thinking().contains("exact duplicate"));
+    assert!(!response.text().contains("Comparing Images"));
+}
+
+#[test]
+fn parse_response_parts_deduplicates_stream_chunks() {
+    let body = include_str!("fixtures/thinking_response_raw.txt");
+    let parts = parse_response_parts(body).unwrap();
+
+    let text_parts: Vec<_> = parts
+        .iter()
+        .filter_map(|p| match p {
+            ContentPart::Text(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    let thinking_parts: Vec<_> = parts
+        .iter()
+        .filter_map(|p| match p {
+            ContentPart::Thinking(t) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(text_parts.len(), 1);
+    assert_eq!(thinking_parts.len(), 1);
+    assert!(thinking_parts[0].starts_with("**Comparing Images**"));
+}
+
 
 #[test]
 fn build_inner_req_list_has_97_slots() {

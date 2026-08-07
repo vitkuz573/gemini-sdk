@@ -84,6 +84,8 @@ impl ImageSource {
 pub enum ContentPart {
     /// Plain text.
     Text(String),
+    /// Model reasoning / thinking text (only present in responses).
+    Thinking(String),
     /// An image.
     Image(ImageSource),
 }
@@ -143,6 +145,9 @@ impl ThinkingLevel {
 pub struct ChatResponse {
     /// Text content returned by the model.
     pub text: String,
+    /// Model reasoning / thinking content (empty when the model does not
+    /// expose its reasoning, e.g. for models without thinking enabled).
+    pub thinking: String,
 }
 
 impl ChatResponse {
@@ -150,6 +155,7 @@ impl ChatResponse {
     pub fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
+            ..Self::default()
         }
     }
 
@@ -157,6 +163,18 @@ impl ChatResponse {
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    /// Returns a reference to the model's reasoning / thinking content.
+    #[must_use]
+    pub fn thinking(&self) -> &str {
+        &self.thinking
+    }
+
+    /// Sets the model's reasoning / thinking content.
+    pub fn with_thinking(mut self, thinking: impl Into<String>) -> Self {
+        self.thinking = thinking.into();
+        self
     }
 }
 
@@ -169,7 +187,7 @@ pub(crate) fn extract_prompt(message: &ChatMessage) -> Result<String> {
     for part in &message.parts {
         match part {
             ContentPart::Text(t) => text_parts.push(t.as_str()),
-            ContentPart::Image(_) => {}
+            ContentPart::Thinking(_) | ContentPart::Image(_) => {}
         }
     }
     let prompt = text_parts.join("\n");
@@ -257,7 +275,7 @@ pub(crate) fn prepare_request(
                     "image URLs are not supported directly by the web frontend: {url}"
                 )));
             }
-            ContentPart::Text(_) => {}
+            ContentPart::Text(_) | ContentPart::Thinking(_) => {}
         }
     }
 

@@ -139,17 +139,20 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
 pub fn parse_chat_response(body: &str) -> Result<ChatResponse> {
     let parts = parse_response_parts(body)?;
     let mut texts = Vec::new();
+    let mut thinkings = Vec::new();
 
     for part in parts {
         match part {
             ContentPart::Text(t) => texts.push(t),
+            ContentPart::Thinking(t) => thinkings.push(t),
             ContentPart::Image(_) => {}
         }
     }
 
     let text = texts.join("");
+    let thinking = thinkings.join("");
 
-    if text.is_empty() {
+    if text.is_empty() && thinking.is_empty() {
         if let Some(code) = extract_bard_error_code(body) {
             return Err(Error::Api {
                 status: reqwest::StatusCode::BAD_REQUEST,
@@ -158,7 +161,7 @@ pub fn parse_chat_response(body: &str) -> Result<ChatResponse> {
         }
     }
 
-    Ok(ChatResponse::new(text))
+    Ok(ChatResponse::new(text).with_thinking(thinking))
 }
 
 /// Extracts multi-turn conversation state from a raw `StreamGenerate` response.
@@ -293,8 +296,20 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
 }
 
 /// Parses the response parts from a `StreamGenerate` body.
+///
+/// Each stream chunk carries the *accumulated* answer and thinking text so far,
+/// so later chunks supersede earlier ones. This function tracks parts by their
+/// response-part id and keeps only the most complete state, then emits one
+/// [`ContentPart::Text`] and/or [`ContentPart::Thinking`] per response part.
 pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
-    let mut all_parts: Vec<ContentPart> = Vec::new();
+    #[derive(Default)]
+    struct Acc {
+        text: String,
+        thinking: String,
+    }
+
+    let mut accs: Vec<Acc> = Vec::new();
+    let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
 
     for line in body.lines() {
         let line = line.trim();
@@ -375,30 +390,72 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     Some(a) => a,
                     None => continue,
                 };
-                let content_list = match part_arr.get(1).and_then(|v| v.as_array()) {
-                    Some(a) => a,
-                    None => continue,
-                };
-                let mut current_text: Option<String> = None;
-                for content in content_list {
-                    if let Some(s) = content.as_str() {
-                        if s.is_empty() || is_id_string(s) {
-                            continue;
+                let id = part_arr
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                let mut text = String::new();
+                if let Some(content_list) = part_arr.get(1).and_then(|v| v.as_array()) {
+                    for content in content_list {
+                        if let Some(s) = content.as_str() {
+                            if s.is_empty() || is_id_string(s) {
+                                continue;
+                            }
+                            text.push_str(s);
                         }
-                        current_text = Some(match current_text {
-                            Some(prev) => format!("{prev}{s}"),
-                            None => s.to_string(),
-                        });
-                        continue;
-                    }
-                    if let Some(prev) = current_text.take() {
-                        all_parts.push(ContentPart::Text(prev));
                     }
                 }
-                if let Some(prev) = current_text.take() {
-                    all_parts.push(ContentPart::Text(prev));
+
+                let mut thinking = String::new();
+                // Reasoning block lives at part[37] as [accumulated_text, structured_meta].
+                if let Some(thinking_chunks) = part_arr
+                    .get(37)
+                    .and_then(|v| v.as_array())
+                    .and_then(|a| a.first())
+                    .and_then(|v| v.as_array())
+                {
+                    for c in thinking_chunks {
+                        if let Some(s) = c.as_str() {
+                            if s.is_empty() || is_id_string(s) {
+                                continue;
+                            }
+                            thinking.push_str(s);
+                        }
+                    }
+                }
+
+                if text.is_empty() && thinking.is_empty() {
+                    continue;
+                }
+
+                let slot = match index.get(&id) {
+                    Some(&i) => &mut accs[i],
+                    None => {
+                        let i = accs.len();
+                        accs.push(Acc::default());
+                        index.insert(id, i);
+                        &mut accs[i]
+                    }
+                };
+                if !text.is_empty() {
+                    slot.text = text;
+                }
+                if !thinking.is_empty() {
+                    slot.thinking = thinking;
                 }
             }
+        }
+    }
+
+    let mut all_parts: Vec<ContentPart> = Vec::new();
+    for acc in accs {
+        if !acc.text.is_empty() {
+            all_parts.push(ContentPart::Text(acc.text));
+        }
+        if !acc.thinking.is_empty() {
+            all_parts.push(ContentPart::Thinking(acc.thinking));
         }
     }
 
@@ -446,6 +503,53 @@ pub fn extract_text_from_parsed_response(parsed: &Value) -> Option<String> {
             let part_arr = part.as_array()?;
             let content_list = part_arr.get(1)?.as_array()?;
             for content in content_list {
+                if let Some(s) = content.as_str() {
+                    if s.is_empty() || is_id_string(s) {
+                        continue;
+                    }
+                    combined.push_str(s);
+                }
+            }
+        }
+        if !combined.is_empty() {
+            return Some(combined);
+        }
+    }
+
+    None
+}
+
+/// Extract reasoning / thinking text from a parsed `wrb.fr` JSON response.
+///
+/// This is the counterpart of [`extract_text_from_parsed_response`] for the
+/// model's thinking block (part[37]). It returns the accumulated reasoning
+/// markdown, or `None` when the response contains no thinking block.
+pub fn extract_thinking_from_parsed_response(parsed: &Value) -> Option<String> {
+    let arr = parsed.as_array()?;
+
+    for item in arr {
+        let entry = item.as_array()?;
+        if entry.len() < 3 {
+            continue;
+        }
+        let rpc_id = entry[0].as_str()?;
+        if rpc_id != "wrb.fr" {
+            continue;
+        }
+        let payload_str = entry[2].as_str()?;
+        let payload: Value = serde_json::from_str(payload_str).ok()?;
+        let payload_arr = payload.as_array()?;
+        let parts = payload_arr.get(4)?.as_array()?;
+
+        let mut combined = String::new();
+        for part in parts {
+            let part_arr = part.as_array()?;
+            let thinking_chunks = part_arr
+                .get(37)?
+                .as_array()?
+                .first()?
+                .as_array()?;
+            for content in thinking_chunks {
                 if let Some(s) = content.as_str() {
                     if s.is_empty() || is_id_string(s) {
                         continue;

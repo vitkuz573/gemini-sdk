@@ -15,7 +15,8 @@ pub use slots::*;
 
 /// Re-export response parsing helpers at the `proto` module level.
 pub use parser::{
-    extract_text_from_parsed_response, parse_chat_response, parse_response_parts,
+    extract_thinking_from_parsed_response, extract_text_from_parsed_response, parse_chat_response,
+    parse_response_parts,
 };
 
 /// WIZ anti-XSSI prefix used by `batchexecute` and `StreamGenerate` responses.

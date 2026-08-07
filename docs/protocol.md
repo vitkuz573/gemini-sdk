@@ -648,6 +648,37 @@ account capabilities.
 | `5`  | Fast-Dynamic-Thinking |
 | `6`  | Flash-Lite |
 
+### Reasoning block in responses
+
+When the selected model reasons, each `wrb.fr` candidate part carries the
+accumulated reasoning text in a separate field at **part index 37**. The field
+is a two-element array:
+
+```text
+part[37] = [
+  ["<accumulated thinking markdown>"],
+  [ <structured step metadata> ]
+]
+```
+
+The first element is an array of string chunks holding the full reasoning text
+so far (headers are in markdown, e.g. `**Comparing Images**`). The second
+element contains structured per-step metadata (step titles and highlighted
+spans); it is not needed for plain-text reasoning extraction.
+
+As with the answer text, streaming chunks supersede each other: each `wrb.fr`
+frame carries the *accumulated* thinking, so later frames are authoritative.
+Parts without thinking simply omit index 37.
+
+The SDK surfaces this content as:
+
+- `ChatResponse::thinking()` — the accumulated reasoning markdown for a parsed
+  response.
+- [`ContentPart::Thinking`](crate::chat::ContentPart) — one part per response
+  when using `parse_response_parts` (streaming).
+- `extract_thinking_from_parsed_response` — reasoning from a pre-parsed JSON
+  value.
+
 ## Implementation pointers
 
 - `src/client.rs` — `GeminiClient::list_models`, `GeminiClient::generate`,

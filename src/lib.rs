@@ -8,6 +8,7 @@
 //! - Cookie-based authentication.
 //! - Text-only and image (inline data / URL) chat completions.
 //! - Streaming and non-streaming response handling.
+//! - Model reasoning / thinking content extraction.
 //! - Multi-turn conversation state.
 //! - Model listing via `batchexecute` (`GetUserStatus` / `Fd0Qje`).
 //! - File upload to `push.clients6.google.com`.
@@ -89,6 +90,6 @@ pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};
 // Re-export parsing helpers so consumers can convert streaming responses.
 pub use proto::{
-    extract_bard_error_code, extract_text_from_parsed_response, parse_chat_response,
-    parse_response_parts,
+    extract_bard_error_code, extract_thinking_from_parsed_response,
+    extract_text_from_parsed_response, parse_chat_response, parse_response_parts,
 };

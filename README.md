@@ -12,6 +12,7 @@ Google Gemini / Bard web frontend (`gemini.google.com`).
 - Cookie-based authentication using browser cookies.
 - Text-only and image (inline data) chat completions.
 - Streaming and non-streaming response handling.
+- Model reasoning / thinking content extraction (`ChatResponse::thinking()`).
 - Multi-turn conversation state.
 - Model listing via `batchexecute` (`GetUserStatus` / `Fd0Qje`).
 - File upload to `push.clients6.google.com`.
