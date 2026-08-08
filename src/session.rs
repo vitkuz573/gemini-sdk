@@ -170,13 +170,15 @@ fn extract_build_label(body: &str) -> Option<String> {
     }
 
     // Fallback: bare substring search for older or stripped responses.
+    // Require the same prefix as the primary path so we never pick up a JS
+    // bundle name such as `boq-bard-web...`.
     for pattern in ["boq_assistant-bard-web-server_", "boq_assistant-bard-web-frontend_"] {
         if let Some(idx) = body.find(pattern) {
             let area = &body[idx..];
             for end_char in ['"', '\\', '\'', '`'] {
                 if let Some(end) = area.find(end_char) {
                     let label = &area[..end];
-                    if label.len() > 10 {
+                    if label.starts_with("boq_assistant-bard-web-") && label.len() > 10 {
                         return Some(label.to_string());
                     }
                 }
