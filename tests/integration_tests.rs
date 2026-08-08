@@ -45,3 +45,5 @@ async fn live_text_chat() {
     let response = client.chat().send_message("Hi").await.unwrap();
     assert!(!response.text().is_empty());
 }
+
+

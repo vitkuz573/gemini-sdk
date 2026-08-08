@@ -224,7 +224,7 @@ fn extract_push_id(body: &str) -> Option<String> {
 /// Returns the contents of the `window.WIZ_global_data = { ... };` block,
 /// including the opening `window.WIZ_global_data = ` prefix so callers can
 /// still anchor searches if needed.
-fn extract_wiz_global_data_block(body: &str) -> Option<&str> {
+pub(crate) fn extract_wiz_global_data_block(body: &str) -> Option<&str> {
     let start_marker = "window.WIZ_global_data";
     let idx = body.find(start_marker)?;
     let after_marker = &body[idx + start_marker.len()..];
@@ -268,7 +268,7 @@ fn take_balanced_braces(s: &str) -> &str {
 
 /// Extracts the double-quoted value for a JSON-like key inside a text block.
 /// Handles `"key":"value"` and `"key" : "value"` but does not unescape.
-fn extract_quoted_value(block: &str, key: &str) -> Option<String> {
+pub(crate) fn extract_quoted_value(block: &str, key: &str) -> Option<String> {
     let pattern = format!("\"{key}\":\"");
     if let Some(idx) = block.find(&pattern) {
         let start = idx + pattern.len();

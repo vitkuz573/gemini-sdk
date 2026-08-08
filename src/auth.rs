@@ -113,10 +113,39 @@ impl Credentials {
         Ok(creds)
     }
 
-    /// Returns true if the two required signed-in cookies are present.
+    /// Returns true if the credential set looks like it belongs to a signed-in
+    /// session. This is a fast local check: it requires the primary session
+    /// cookies, a SAPISID source, and the legacy `SID`, `HSID`, `SSID` auth
+    /// cookies.
+    ///
+    /// For a server-authoritative check, use [`GeminiClient::verify_signed_in`].
     #[must_use]
     pub fn is_signed_in(&self) -> bool {
+        self.has_cookie_credentials()
+            && self.sapisid_value().is_some()
+            && self.has_legacy_auth_cookies()
+    }
+
+    /// Returns true if the minimum signed-in cookies are present.
+    ///
+    /// This is the backward-compatible semantics of the old `is_signed_in`:
+    /// only `__Secure-1PSID` and `__Secure-1PSIDCC` are required.
+    #[must_use]
+    pub fn has_cookie_credentials(&self) -> bool {
         !self.psid.is_empty() && !self.psidcc.is_empty()
+    }
+
+    /// Returns true if the legacy `SID`, `HSID`, and `SSID` cookies are present.
+    #[must_use]
+    pub fn has_legacy_auth_cookies(&self) -> bool {
+        ["SID", "HSID", "SSID"].iter().all(|name| self.extra.contains_key(*name))
+    }
+
+    /// Returns true if the credentials include the timestamp cookie that some
+    /// endpoints (e.g. `StreamGenerate`) require.
+    #[must_use]
+    pub fn has_streaming_credentials(&self) -> bool {
+        self.is_signed_in() && self.psidts.is_some()
     }
 
     /// Validates that the credential set is usable for signed-in requests.
@@ -445,6 +474,46 @@ mod tests {
         assert_eq!(creds.validate().unwrap_err(), CredentialsError::MissingPsidcc);
         creds.psidcc = "y".to_string();
         assert!(creds.validate().is_ok());
+    }
+
+    #[test]
+    fn credentials_is_signed_in_requires_sapisid_and_legacy_auth() {
+        let mut creds = Credentials::new();
+        assert!(!creds.is_signed_in());
+        creds.psid = "psid".to_string();
+        assert!(!creds.is_signed_in());
+        creds.psidcc = "psidcc".to_string();
+        // has_cookie_credentials is true, but SAPISID and legacy auth are missing.
+        assert!(creds.has_cookie_credentials());
+        assert!(!creds.is_signed_in());
+
+        creds.papisid = Some("papisid".to_string());
+        assert!(!creds.is_signed_in());
+
+        creds.extra.insert("SID".to_string(), "sid".to_string());
+        creds.extra.insert("HSID".to_string(), "hsid".to_string());
+        creds.extra.insert("SSID".to_string(), "ssid".to_string());
+        assert!(creds.is_signed_in());
+
+        // SAPISID via legacy fallback also works.
+        creds.papisid = None;
+        creds.sapisid = Some("sapisid".to_string());
+        assert!(creds.is_signed_in());
+        creds.sapisid = None;
+        creds.apisid = Some("apisid".to_string());
+        assert!(creds.is_signed_in());
+    }
+
+    #[test]
+    fn credentials_has_streaming_credentials_requires_psidts() {
+        let header =
+            format!("{PSID}=a; {PSIDCC}=b; {PAPISID}=c; {PSIDTS}=d; SID=s; HSID=h; SSID=s");
+        let creds = Credentials::from_header(&header).unwrap();
+        assert!(creds.has_streaming_credentials());
+
+        let header_no_ts = format!("{PSID}=a; {PSIDCC}=b; {PAPISID}=c; SID=s; HSID=h; SSID=s");
+        let creds_no_ts = Credentials::from_header(&header_no_ts).unwrap();
+        assert!(!creds_no_ts.has_streaming_credentials());
     }
 
     #[test]

@@ -22,7 +22,9 @@ use crate::proto::{
     build_batchexecute_body, build_esy5d_body, build_ogads_body, build_sjbwce_body,
     build_stream_generate_body, build_waa_create_body, fresh_request_uuid,
 };
-use crate::session::{extract_consent_save_url, extract_from_app_html, SessionState};
+use crate::session::{
+    extract_consent_save_url, extract_from_app_html, extract_quoted_value, SessionState,
+};
 use crate::upload;
 
 const WEB_BASE_URL: &str = "https://gemini.google.com";
@@ -439,7 +441,61 @@ impl GeminiClient {
         Ok(())
     }
 
+    /// Verifies that the stored cookies are accepted by Gemini as a signed-in
+    /// session.
+    ///
+    /// Performs a `GET /app?hl={language}` with cookies, follows redirects, and
+    /// inspects the returned HTML. Returns `true` only if the page is not a
+    /// sign-in redirect and contains `window.WIZ_global_data` with a non-empty
+    /// numeric `S06Grb` Gaia id and a present `oPEP7c` email address.
+    pub async fn verify_signed_in(&self) -> Result<bool> {
+        let (language, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            (session.language.clone(), self.inner.cookies.to_header_value())
+        };
+
+        let url = format!("{WEB_BASE_URL}/app?hl={language}");
+        let response = self
+            .inner
+            .http
+            .get(&url)
+            .header("Cookie", &cookie_header)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "text/html")
+            .send()
+            .await
+            .map_err(|e| Error::Transient(format!("failed to fetch Gemini /app: {e}")))?;
+
+        // Detect redirect to accounts.google.com or other sign-in host.
+        if response.url().host_str().is_some_and(|host| {
+            host == "accounts.google.com"
+                || host.ends_with(".google.com") && host.starts_with("accounts")
+        }) {
+            return Ok(false);
+        }
+
+        let status = response.status();
+        if !status.is_success() {
+            return Ok(false);
+        }
+
+        let body = response.text().await.map_err(Error::Request)?;
+
+        // Detect explicit sign-in page markers.
+        if body.contains("ServiceLogin") || body.contains("accounts.google.com/signin") {
+            return Ok(false);
+        }
+
+        Ok(extract_signed_in_state(&body).is_some())
+    }
+
     async fn init_session(&self) -> Result<()> {
+        if !self.verify_signed_in().await? {
+            return Err(Error::NotSignedIn(
+                "cookies are not valid for a signed-in Gemini session; try refreshing your browser cookies".to_string(),
+            ));
+        }
+
         let body = self.fetch_app_page().await?;
 
         let final_body = if let Some(save_url) = extract_consent_save_url(&body) {
@@ -889,6 +945,40 @@ fn map_state(state: ProtoConversationState) -> crate::session::ConversationState
         response_part_id: state.response_part_id,
         continuation_token: state.continuation_token,
     }
+}
+
+/// Parses the `/app` HTML and returns the signed-in account identifiers when
+/// the page represents an authenticated Gemini session.
+///
+/// Specifically, `S06Grb` must be a non-empty numeric string and `oPEP7c` must
+/// be present and look like an email address.
+pub(crate) fn extract_signed_in_state(body: &str) -> Option<(String, String)> {
+    let block = crate::session::extract_wiz_global_data_block(body)?;
+
+    let s06grb = extract_quoted_value(block, "S06Grb").unwrap_or_default();
+    if s06grb.is_empty() || !s06grb.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    let opep7c = extract_quoted_value(block, "oPEP7c")?;
+    if !looks_like_email(&opep7c) {
+        return None;
+    }
+
+    Some((s06grb, opep7c))
+}
+
+fn looks_like_email(value: &str) -> bool {
+    // Minimal email-shaped check: non-empty local and domain parts separated by
+    // a single '@', with at least one '.' in the domain.
+    let mut parts = value.splitn(2, '@');
+    let local = parts.next().unwrap_or("");
+    let domain = parts.next().unwrap_or("");
+    !local.is_empty()
+        && !domain.is_empty()
+        && domain.contains('.')
+        && !local.starts_with('\'')
+        && !domain.starts_with('\'')
 }
 
 fn map_proto_state(state: &crate::session::ConversationState) -> ProtoConversationState {

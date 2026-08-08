@@ -1,0 +1,7 @@
+<!doctype html>
+<html>
+<head><title>Gemini</title></head>
+<body>
+<script nonce="dummy">window.WIZ_global_data = {"S06Grb":"111628289675248526498","FdrFJe":"-1594710263937718439","SNlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132","oPEP7c":"vitkuz573@gmail.com","W3Yyqf":"111628289675248526498","WZsZ1e":"kNbcET7BNuwSZz18/A3K8K4P2NBAONhTNU","qDCSke":"111628289675248526498","cfb2h":"boq_assistant-bard-web-server_20260806.17_p0"};</script>
+</body>
+</html>

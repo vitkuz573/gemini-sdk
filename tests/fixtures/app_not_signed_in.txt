@@ -1,0 +1,7 @@
+<!doctype html>
+<html>
+<head><title>Gemini</title></head>
+<body>
+<script nonce="dummy">window.WIZ_global_data = {"S06Grb":"","FdrFJe":"5075253380415205645","SNlM0e":null,"oPEP7c":null,"cfb2h":"boq_assistant-bard-web-server_20260806.17_p0"};</script>
+</body>
+</html>

@@ -53,6 +53,10 @@ pub enum Error {
     #[error("timeout: {0}")]
     Timeout(String),
 
+    /// The session is not signed in or the cookies have expired.
+    #[error("not signed in: {0}")]
+    NotSignedIn(String),
+
     /// An attestation-related error (browser attestation feature).
     #[cfg(feature = "browser-attestation")]
     #[error("attestation error: {0}")]
