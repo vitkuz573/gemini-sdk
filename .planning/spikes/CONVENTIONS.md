@@ -28,3 +28,4 @@ Patterns and stack choices established across spike sessions. New spikes follow 
 - `python3 json.load(...)` for HAR ingestion.
 - `cargo check` to verify the Rust project still compiles after source inspection.
 - Git commits use `docs(spike-NNN): [VERDICT] — summary` format.
+- Wrap-up sessions package findings into `./.opencode/skills/spike-findings-[project]/` with `SKILL.md`, `references/`, and `sources/`.
