@@ -16,3 +16,5 @@ Reverse-engineer the current Gemini web frontend protocol from a real 40 MB HAR 
 | # | Name | Type | Validates | Verdict | Tags |
 |---|------|------|-----------|---------|------|
 | 001 | gemini-protocol | standard | Given a 40 MB HAR capture, compare request/response shapes with the SDK and identify concrete mismatches | ✓ VALIDATED | gemini, protocol, har, reverse-engineering, stream-generate |
+| 002 | gemini-protocol | standard | Compare new `/full1.har` capture with spike 001 and SDK to confirm protocol changes | ✓ VALIDATED | gemini, protocol, har, reverse-engineering, stream-generate, waa |
+| 003 | gemini-protocol | standard | Given a fresh 119 MB HAR with full response bodies, extract exact shapes and make the SDK work end-to-end without browser automation | ✓ VALIDATED | gemini, protocol, har, reverse-engineering, stream-generate, waa, ogads, upload |

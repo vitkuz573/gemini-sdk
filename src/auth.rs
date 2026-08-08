@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Name of the primary session cookie.
 pub const PSID: &str = "__Secure-1PSID";
@@ -127,6 +128,37 @@ impl Credentials {
             return Err(CredentialsError::MissingPsidcc);
         }
         Ok(())
+    }
+
+    /// Returns the SAPISID value used for `Authorization: SAPISIDHASH`.
+    ///
+    /// Prefers the signed-in `__Secure-1PAPISID` cookie, then falls back to
+    /// `SAPISID` / `APISID`.
+    #[must_use]
+    pub fn sapisid_value(&self) -> Option<&str> {
+        self.papisid
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| self.sapisid.as_deref().filter(|s| !s.is_empty()))
+            .or_else(|| self.apisid.as_deref().filter(|s| !s.is_empty()))
+    }
+
+    /// Computes an `Authorization: SAPISIDHASH <ts>_<sha1>` header value.
+    ///
+    /// The hash is `SHA1(<timestamp> <sapisid> <origin>)` as used by Google
+    /// grpc-web endpoints (ogads, waa). The trailing slash on the origin must
+    /// be omitted to match the browser's computation.
+    #[must_use]
+    pub fn sapisid_hash(&self, origin: &str) -> Option<String> {
+        use sha1::{Digest, Sha1};
+
+        let sapisid = self.sapisid_value()?;
+        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+        let origin = origin.strip_suffix('/').unwrap_or(origin);
+        let input = format!("{ts} {sapisid} {origin}");
+        let digest = Sha1::digest(input.as_bytes());
+        let hex = format!("{digest:x}");
+        Some(format!("SAPISIDHASH {ts}_{hex}"))
     }
 
     /// Serialises the credentials into a `Cookie` header value.
@@ -327,6 +359,13 @@ impl Extend<(String, String)> for Cookies {
 impl fmt::Display for Cookies {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_header_value())
+    }
+}
+
+impl Cookies {
+    /// Builds `Credentials` from the cookies in the jar.
+    pub fn to_credentials(&self) -> Result<Credentials, CredentialsError> {
+        Credentials::from_header(&self.to_header_value())
     }
 }
 

@@ -22,6 +22,8 @@ pub(crate) struct SessionState {
     pub(crate) waa_token: Option<String>,
     /// Serialized value for the `x-goog-ext-525001261-jspb` header.
     pub(crate) waa_context: Option<String>,
+    /// Model/mode fingerprint used inside the WAA context header.
+    pub(crate) waa_fingerprint: Option<String>,
     /// Per-session nonce used for slot 4.
     pub(crate) nonce: Option<String>,
 }
@@ -90,8 +92,33 @@ pub(crate) fn extract_from_app_html(body: &str) -> SessionState {
     if let Some(push_id) = extract_push_id(body) {
         state.push_id = Some(push_id);
     }
+    if let Some(fp) = extract_waa_fingerprint(body) {
+        state.waa_fingerprint = Some(fp);
+    }
 
     state
+}
+
+fn extract_waa_fingerprint(body: &str) -> Option<String> {
+    // The WAA context header contains a stable model/mode fingerprint. In the
+    // captured traffic it is the Pro model id "e6fa609c3fa255c0" which appears
+    // in the model list (otAQ7b) and in ESY5D feature flags. We scan the area
+    // around the "Pro" model block for a 16-character hex string that appears
+    // more than once in the page.
+    let pro_idx = body.find("\"Pro\"")?;
+    let area = &body[pro_idx..(pro_idx + 600).min(body.len())];
+    for (start, _) in area.match_indices('"') {
+        let inner = &area[start + 1..];
+        let end = inner.find('"').unwrap_or(inner.len());
+        let token = &inner[..end];
+        if token.len() == 16
+            && token.chars().all(|c| c.is_ascii_hexdigit())
+            && body.matches(token).count() > 1
+        {
+            return Some(token.to_string());
+        }
+    }
+    None
 }
 
 fn extract_snlim0e(body: &str) -> Option<String> {

@@ -33,6 +33,7 @@ regex = { version = "1.11", optional = true }
 tokio-tungstenite = { version = "0.24", optional = true }
 serde_urlencoded = { version = "0.7", optional = true }
 rand = "0.8"
+sha1 = "0.10"
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.6"
@@ -42,6 +43,7 @@ reqwest = { version = "0.12", features = ["cookies", "json", "stream"] }
 criterion = { version = "0.5", features = ["async_tokio"] }
 dotenvy = "0.15"
 base64 = "0.22"
+sha1 = "0.10"
 futures = "0.3"
 
 [features]

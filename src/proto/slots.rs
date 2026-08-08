@@ -88,7 +88,8 @@ pub fn build_inner_req_list(
     inner[79] = json!(3);
     inner[80] = json!(ThinkingLevel::Standard.as_enum_value().unwrap_or(1));
     inner[91] = json!(0);
-    inner[96] = json!(0);
+    // Slot 96 is 1 for a fresh conversation and 0 when continuing an existing one.
+    inner[96] = json!(if conversation_state.is_some() { 0 } else { 1 });
 
     if browser_payload.is_none() {
         inner[6] = json!([1]);
@@ -250,6 +251,27 @@ mod tests {
         assert_eq!(inner[79], json!(3));
         assert_eq!(inner[80], json!(1));
         assert_eq!(inner[66], Value::Null);
+    }
+
+    #[test]
+    fn slot_96_is_fresh_for_new_conversation() {
+        let req = minimal_prepared();
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
+        assert_eq!(inner[96], json!(1));
+    }
+
+    #[test]
+    fn slot_96_is_zero_for_continuation() {
+        let req = minimal_prepared();
+        let state = ConversationState {
+            conversation_id: "c_abc".to_string(),
+            response_id: "r_def".to_string(),
+            response_part_id: "rcp_123".to_string(),
+            continuation_token: "tok".to_string(),
+        };
+        let inner =
+            build_inner_req_list(&req, Some(&state), None, &[], "UUID", "en", None, "nonce");
+        assert_eq!(inner[96], json!(0));
     }
 
     #[test]

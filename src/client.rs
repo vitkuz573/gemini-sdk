@@ -19,8 +19,8 @@ use crate::models::{ModelCategory, ModelInfo};
 use crate::proto::parser::{extract_conversation_state, parse_chat_response, parse_model_list};
 use crate::proto::slots::{build_inner_req_list, ConversationState as ProtoConversationState};
 use crate::proto::{
-    build_batchexecute_body, build_esy5d_body, build_sjbwce_body, build_stream_generate_body,
-    build_waa_create_body, fresh_request_uuid,
+    build_batchexecute_body, build_esy5d_body, build_ogads_body, build_sjbwce_body,
+    build_stream_generate_body, build_waa_create_body, fresh_request_uuid,
 };
 use crate::session::{extract_consent_save_url, extract_from_app_html, SessionState};
 use crate::upload;
@@ -29,7 +29,11 @@ const WEB_BASE_URL: &str = "https://gemini.google.com";
 const WAA_BASE_URL: &str = "https://waa-pa.clients6.google.com";
 const OGADS_BASE_URL: &str = "https://ogads-pa.clients6.google.com";
 const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
+const X_CLIENT_DATA: &str = "CI7yygE=";
+const WAA_FINGERPRINT_DEFAULT: &str = "e6fa609c3fa255c0";
+const WAA_API_KEY: &str = "AIzaSyBGb5fGAyC-pRcRU6MUHb__b_vKha71HRE";
+const OGADS_API_KEY: &str = "AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E";
 
 /// The main entry point for interacting with the Gemini web frontend.
 ///
@@ -44,7 +48,7 @@ struct Inner {
     http: Client,
     cookies: Cookies,
     session: Mutex<SessionState>,
-    config: ClientConfig,
+    config: Mutex<ClientConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -107,42 +111,32 @@ impl GeminiClient {
     }
 
     /// Sets the language code sent to the Gemini frontend.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the client has been cloned and is no longer uniquely owned.
-    pub fn with_language(mut self, language: impl Into<String>) -> Self {
-        let mut config = self.inner.config.clone();
-        config.language = language.into();
-        let inner = Arc::get_mut(&mut self.inner).expect("client is uniquely owned");
-        inner.config = config;
+    pub fn with_language(self, language: impl Into<String>) -> Self {
+        let language = language.into();
+        self.update_config_blocking(|config| {
+            config.language.clone_from(&language);
+        });
         self
     }
 
     /// Sets the maximum number of retries for transient failures.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the client has been cloned and is no longer uniquely owned.
-    pub fn with_max_retries(mut self, max_retries: usize) -> Self {
-        let mut config = self.inner.config.clone();
-        config.max_retries = max_retries;
-        let inner = Arc::get_mut(&mut self.inner).expect("client is uniquely owned");
-        inner.config = config;
+    pub fn with_max_retries(self, max_retries: usize) -> Self {
+        self.update_config_blocking(|config| config.max_retries = max_retries);
         self
     }
 
     /// Sets the request timeout.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the client has been cloned and is no longer uniquely owned.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        let mut config = self.inner.config.clone();
-        config.timeout = timeout;
-        let inner = Arc::get_mut(&mut self.inner).expect("client is uniquely owned");
-        inner.config = config;
+    pub fn with_timeout(self, timeout: Duration) -> Self {
+        self.update_config_blocking(|config| config.timeout = timeout);
         self
+    }
+
+    fn update_config_blocking<F>(&self, f: F)
+    where
+        F: FnOnce(&mut ClientConfig),
+    {
+        let mut config = self.inner.config.blocking_lock();
+        f(&mut config);
     }
 
     /// Returns a clone of the cookies used by this client.
@@ -160,13 +154,14 @@ impl GeminiClient {
 
         let mut session = SessionState::new();
         session.language.clone_from(&config.language);
+        session.waa_fingerprint = Some(WAA_FINGERPRINT_DEFAULT.to_string());
 
         Ok(Self {
             inner: Arc::new(Inner {
                 http,
                 cookies,
                 session: Mutex::new(session),
-                config,
+                config: Mutex::new(config),
             }),
         })
     }
@@ -206,7 +201,7 @@ impl GeminiClient {
             let reqid = SessionState::generate_reqid();
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", "otAQ7b".to_string()),
-                ("source-path", "/app".to_string()),
+                ("source-path", "/".to_string()),
                 ("hl", session.language.clone()),
                 ("_reqid", reqid),
                 ("rt", "c".to_string()),
@@ -217,8 +212,8 @@ impl GeminiClient {
             if let Some(sid) = session.session_id.as_deref() {
                 params.push(("f.sid", sid.to_string()));
             }
-            let body = build_batchexecute_body(session.access_token.as_deref());
-            let headers = Self::build_headers(None, session.waa_context.as_deref());
+            let body = build_batchexecute_body(None);
+            let headers = Self::build_headers(None, None, None);
             let cookie_header = cookies.to_header_value();
             (params, body, headers, cookie_header)
         };
@@ -333,7 +328,7 @@ impl GeminiClient {
             "{WEB_BASE_URL}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate"
         );
 
-        let (params, at, waa_context) = {
+        let (params, at, waa_context, waa_fingerprint) = {
             let session = self.inner.session.lock().await;
             let mut params: Vec<(&str, String)> = vec![
                 ("hl", session.language.clone()),
@@ -346,11 +341,21 @@ impl GeminiClient {
             if let Some(sid) = session.session_id.as_deref() {
                 params.push(("f.sid", sid.to_string()));
             }
-            (params, session.access_token.clone(), session.waa_context.clone())
+            (
+                params,
+                session.access_token.clone(),
+                session.waa_context.clone(),
+                session.waa_fingerprint.clone(),
+            )
         };
 
         let form_body = build_stream_generate_body(&inner_req_list, at.as_deref());
-        let headers = Self::build_headers(Some(&request_uuid), waa_context.as_deref());
+        let waa_header = build_waa_context_header(
+            waa_fingerprint.as_deref(),
+            waa_context.as_deref(),
+            &request_uuid,
+        );
+        let headers = Self::build_headers(Some(&request_uuid), Some(&waa_header), None);
 
         let response = self
             .send_with_retry(|| {
@@ -414,8 +419,12 @@ impl GeminiClient {
             &nonce,
         );
 
-        let headers =
-            Self::build_headers(Some(&request_uuid), session_for_upload.waa_context.as_deref());
+        let waa_header = build_waa_context_header(
+            session_for_upload.waa_fingerprint.as_deref(),
+            session_for_upload.waa_context.as_deref(),
+            &request_uuid,
+        );
+        let headers = Self::build_headers(Some(&request_uuid), Some(&waa_header), None);
         let cookie_header = cookies.to_header_value();
 
         Ok((inner_req_list, request_uuid, headers, cookie_header))
@@ -463,7 +472,7 @@ impl GeminiClient {
     /// Stores the resulting WAA token and `x-goog-ext-525001261-jspb` context in
     /// the session state.
     async fn run_waa_init_chain(&self) -> Result<()> {
-        let (at, language, build_label, session_id, cookie_header) = {
+        let (at, language, build_label, session_id, cookie_header, credentials) = {
             let session = self.inner.session.lock().await;
             (
                 session.access_token.clone(),
@@ -471,11 +480,12 @@ impl GeminiClient {
                 session.build_label.clone(),
                 session.session_id.clone(),
                 self.inner.cookies.to_header_value(),
+                self.inner.cookies.clone(),
             )
         };
 
         // 1. otAQ7b warm-up / model list.
-        let _ = self
+        let models_response = self
             .batchexecute_rpc(
                 "otAQ7b",
                 build_batchexecute_body(at.as_deref()),
@@ -483,8 +493,11 @@ impl GeminiClient {
                 build_label.as_deref(),
                 session_id.as_deref(),
                 &cookie_header,
+                Some("/"),
             )
             .await?;
+        let fingerprint = extract_waa_fingerprint_from_model_list(&models_response);
+        let default_fingerprint = self.inner.session.lock().await.waa_fingerprint.clone();
 
         // 2. sJBwce [[1,2]] prerequisite.
         let _ = self
@@ -495,6 +508,7 @@ impl GeminiClient {
                 build_label.as_deref(),
                 session_id.as_deref(),
                 &cookie_header,
+                Some("/"),
             )
             .await?;
 
@@ -506,7 +520,7 @@ impl GeminiClient {
 
         // 4. ogads GetAsyncData.
         let waa_context = self
-            .ogads_get_async_data(&cookie_header, &waa_token)
+            .ogads_get_async_data(&cookie_header, &credentials, &waa_token)
             .await
             .unwrap_or_else(|_| build_default_waa_context());
 
@@ -519,6 +533,7 @@ impl GeminiClient {
                 build_label.as_deref(),
                 session_id.as_deref(),
                 &cookie_header,
+                None,
             )
             .await?;
 
@@ -526,11 +541,13 @@ impl GeminiClient {
             let mut session = self.inner.session.lock().await;
             session.waa_token = Some(waa_token);
             session.waa_context = Some(waa_context);
+            session.waa_fingerprint = fingerprint.or(default_fingerprint);
         }
 
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn batchexecute_rpc(
         &self,
         rpcids: &str,
@@ -539,12 +556,13 @@ impl GeminiClient {
         build_label: Option<&str>,
         session_id: Option<&str>,
         cookie_header: &str,
+        source_path_override: Option<&str>,
     ) -> Result<String> {
         let url = format!("{WEB_BASE_URL}/_/BardChatUi/data/batchexecute");
         let reqid = SessionState::generate_reqid();
         let mut params: Vec<(&str, String)> = vec![
             ("rpcids", rpcids.to_string()),
-            ("source-path", "/app".to_string()),
+            ("source-path", source_path_override.unwrap_or("/app").to_string()),
             ("hl", language.to_string()),
             ("_reqid", reqid),
             ("rt", "c".to_string()),
@@ -556,7 +574,7 @@ impl GeminiClient {
             params.push(("f.sid", sid.to_string()));
         }
 
-        let headers = Self::build_headers(None, None);
+        let headers = Self::build_headers(None, None, None);
         let response = self
             .send_with_retry(|| {
                 let client = self.inner.http.clone();
@@ -592,10 +610,13 @@ impl GeminiClient {
             .http
             .post(&url)
             .header("Content-Type", "application/json+protobuf")
+            .header("x-goog-api-key", WAA_API_KEY)
+            .header("x-user-agent", "grpc-web-javascript/0.1")
             .header("Cookie", cookie_header)
             .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{WEB_BASE_URL}/app"))
-            .header("Origin", "https://www.google.com")
+            .header("Referer", format!("{WEB_BASE_URL}/"))
+            .header("Origin", WEB_BASE_URL)
+            .header("x-client-data", X_CLIENT_DATA)
             .body(body)
             .send()
             .await
@@ -611,24 +632,41 @@ impl GeminiClient {
         let parsed: Value = serde_json::from_str(&text).map_err(Error::Json)?;
         let token = parsed
             .get(0)
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.get(4))
             .and_then(|v| v.as_str())
             .map(std::string::ToString::to_string)
+            .or_else(|| {
+                parsed.get(0).and_then(|v| v.as_str()).map(std::string::ToString::to_string)
+            })
             .ok_or_else(|| Error::parse("WAA Create response missing token"))?;
         Ok(token)
     }
 
-    async fn ogads_get_async_data(&self, cookie_header: &str, waa_token: &str) -> Result<String> {
+    async fn ogads_get_async_data(
+        &self,
+        cookie_header: &str,
+        credentials: &Cookies,
+        waa_token: &str,
+    ) -> Result<String> {
         let url = format!("{OGADS_BASE_URL}/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData");
-        let body = serde_json::json!([[waa_token]]).to_string();
-        let response = self
+        let body = build_ogads_body(waa_token, self.inner.session.lock().await.language.as_str());
+        let auth = credentials_to_sapisid_hash(credentials, WEB_BASE_URL);
+        let mut req = self
             .inner
             .http
             .post(&url)
             .header("Content-Type", "application/json+protobuf")
+            .header("x-goog-api-key", OGADS_API_KEY)
             .header("Cookie", cookie_header)
             .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{WEB_BASE_URL}/app"))
-            .header("Origin", "https://www.google.com")
+            .header("Referer", format!("{WEB_BASE_URL}/"))
+            .header("Origin", WEB_BASE_URL)
+            .header("x-client-data", X_CLIENT_DATA);
+        if let Some(auth) = auth {
+            req = req.header("Authorization", auth);
+        }
+        let response = req
             .body(body)
             .send()
             .await
@@ -640,8 +678,6 @@ impl GeminiClient {
             return Err(Error::api(status, text));
         }
 
-        // Return the full response JSON as the header context; callers can
-        // refine once the exact shape is known.
         Ok(text)
     }
 
@@ -674,7 +710,7 @@ impl GeminiClient {
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
         let cookie_header = self.inner.cookies.to_header_value();
 
-        let language = self.inner.config.language.clone();
+        let language = self.inner.config.lock().await.language.clone();
         let response = self
             .inner
             .http
@@ -703,7 +739,11 @@ impl GeminiClient {
         self.fetch_app_page().await
     }
 
-    fn build_headers(reqid: Option<&str>, waa_context: Option<&str>) -> Vec<(String, String)> {
+    fn build_headers(
+        reqid: Option<&str>,
+        waa_context: Option<&str>,
+        authorization: Option<&str>,
+    ) -> Vec<(String, String)> {
         let mut headers = vec![
             (
                 "Content-Type".to_string(),
@@ -711,14 +751,14 @@ impl GeminiClient {
             ),
             ("User-Agent".to_string(), USER_AGENT.to_string()),
             ("Origin".to_string(), WEB_BASE_URL.to_string()),
-            ("Referer".to_string(), format!("{WEB_BASE_URL}/app")),
+            ("Referer".to_string(), format!("{WEB_BASE_URL}/")),
             ("X-Same-Domain".to_string(), "1".to_string()),
             ("Cache-Control".to_string(), "no-cache".to_string()),
             ("Pragma".to_string(), "no-cache".to_string()),
-            ("x-client-data".to_string(), "CNeSywE=".to_string()),
+            ("x-client-data".to_string(), X_CLIENT_DATA.to_string()),
             (
                 "sec-ch-ua".to_string(),
-                "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\""
+                "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"146\", \"Chromium\";v=\"146\""
                     .to_string(),
             ),
             ("sec-ch-ua-mobile".to_string(), "?0".to_string()),
@@ -736,6 +776,9 @@ impl GeminiClient {
         }
         headers.push(("x-goog-ext-73010989-jspb".to_string(), "[0]".to_string()));
         headers.push(("x-goog-ext-73010990-jspb".to_string(), "[0,0,0]".to_string()));
+        if let Some(auth) = authorization {
+            headers.push(("Authorization".to_string(), auth.to_string()));
+        }
         headers
     }
 
@@ -755,9 +798,88 @@ impl GeminiClient {
 
 fn build_default_waa_context() -> String {
     serde_json::json!([
-        1, null, null, null, null, null, null, 0, null, null, 2, null, null, 3, 1, null
+        1,
+        null,
+        null,
+        null,
+        WAA_FINGERPRINT_DEFAULT,
+        null,
+        null,
+        0,
+        [4, 5, 6, 8],
+        null,
+        null,
+        2,
+        null,
+        null,
+        3,
+        1,
+        null
     ])
     .to_string()
+}
+
+fn build_waa_context_header(
+    fingerprint: Option<&str>,
+    context: Option<&str>,
+    uuid: &str,
+) -> String {
+    // Prefer a context returned by ogads if it is a valid JSON array.
+    if let Some(ctx) = context {
+        if ctx.starts_with('[') {
+            if let Ok(Value::Array(mut arr)) = serde_json::from_str::<Value>(ctx) {
+                if arr.len() >= 16 {
+                    arr[15] = serde_json::json!(uuid);
+                    if arr.get(4).map_or(true, |v| v.is_null()) {
+                        arr[4] = serde_json::json!(fingerprint.unwrap_or(WAA_FINGERPRINT_DEFAULT));
+                    }
+                    return serde_json::to_string(&arr).unwrap_or_default();
+                }
+            }
+        }
+    }
+    serde_json::json!([
+        1,
+        null,
+        null,
+        null,
+        fingerprint.unwrap_or(WAA_FINGERPRINT_DEFAULT),
+        null,
+        null,
+        0,
+        [4, 5, 6, 8],
+        null,
+        null,
+        2,
+        null,
+        null,
+        3,
+        1,
+        uuid
+    ])
+    .to_string()
+}
+
+fn extract_waa_fingerprint_from_model_list(body: &str) -> Option<String> {
+    // The Pro model block contains a 16-char hex id that is reused as the WAA
+    // fingerprint. Scan the otAQ7b response for the first 16-char hex token
+    // that appears more than once.
+    for (start, _) in body.match_indices('"') {
+        let inner = &body[start + 1..];
+        let end = inner.find('"').unwrap_or(inner.len());
+        let token = &inner[..end];
+        if token.len() == 16
+            && token.chars().all(|c| c.is_ascii_hexdigit())
+            && body.matches(token).count() > 1
+        {
+            return Some(token.to_string());
+        }
+    }
+    None
+}
+
+fn credentials_to_sapisid_hash(cookies: &Cookies, origin: &str) -> Option<String> {
+    cookies.to_credentials().ok()?.sapisid_hash(origin)
 }
 
 fn map_state(state: ProtoConversationState) -> crate::session::ConversationState {

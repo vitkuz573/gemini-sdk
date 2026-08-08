@@ -78,18 +78,7 @@ impl BrowserAttestationClient {
         send_cdp(&mut write, "Network.enable", json!({})).await?;
         send_cdp(&mut write, "Page.enable", json!({})).await?;
 
-        // Navigate to Gemini /app.
-        send_cdp(
-            &mut write,
-            "Page.navigate",
-            json!({ "url": "https://gemini.google.com/app?hl=en" }),
-        )
-        .await?;
-
-        // Wait for navigation to complete.
-        wait_for_event(&mut read, "Page.loadEventFired", NAVIGATE_TIMEOUT).await?;
-
-        // Inject cookies.
+        // Inject cookies before navigation so the page loads as an authenticated session.
         for (name, value) in cookies.iter() {
             send_cdp(
                 &mut write,
@@ -104,6 +93,17 @@ impl BrowserAttestationClient {
             )
             .await?;
         }
+
+        // Navigate to Gemini /app.
+        send_cdp(
+            &mut write,
+            "Page.navigate",
+            json!({ "url": "https://gemini.google.com/app?hl=en" }),
+        )
+        .await?;
+
+        // Wait for navigation to complete.
+        wait_for_event(&mut read, "Page.loadEventFired", NAVIGATE_TIMEOUT).await?;
 
         // Inject the prompt and submit via JS.
         let escaped = prompt.replace('\\', "\\\\").replace('"', "\\\"");
