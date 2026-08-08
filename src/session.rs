@@ -398,4 +398,25 @@ mod tests {
             Some("https://consent.google.com/save?x=1".to_string())
         );
     }
+
+    #[test]
+    fn extract_signed_in_state_ignores_servicelogin_menu_link() {
+        // Regression: a signed-in /app page may contain a sign-in link in the
+        // OneGoogle account menu. `verify_signed_in` used to reject the session
+        // because it matched the "ServiceLogin" substring anywhere in the body.
+        let signed_in_with_login_link = include_str!("../tests/fixtures/app_signed_in.txt")
+            .to_string()
+            + r#"<a href="https://accounts.google.com/ServiceLogin?passive=1209600">Sign in</a>"#;
+        let state = crate::client::extract_signed_in_state(&signed_in_with_login_link);
+        assert_eq!(
+            state,
+            Some(("111628289675248526498".to_string(), "vitkuz573@gmail.com".to_string()))
+        );
+    }
+
+    #[test]
+    fn extract_signed_in_state_rejects_empty_gaia() {
+        let body = include_str!("../tests/fixtures/app_not_signed_in.txt");
+        assert!(crate::client::extract_signed_in_state(body).is_none());
+    }
 }
