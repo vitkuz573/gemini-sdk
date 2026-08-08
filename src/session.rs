@@ -121,32 +121,55 @@ fn extract_waa_fingerprint(body: &str) -> Option<String> {
     None
 }
 
+/// Validates the observed `SNlM0e` shape: base64-url-ish prefix, colon,
+/// 13-digit Unix timestamp in milliseconds.
+fn is_valid_snlim0e(token: &str) -> bool {
+    let bytes = token.as_bytes();
+    let Some(colon) = bytes.iter().position(|&b| b == b':') else {
+        return false;
+    };
+    if colon == 0 || colon + 1 >= bytes.len() {
+        return false;
+    }
+    let prefix = &bytes[..colon];
+    let suffix = &bytes[colon + 1..];
+    prefix.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        && suffix.len() == 13
+        && suffix.iter().all(|&b| b.is_ascii_digit())
+}
+
 fn extract_snlim0e(body: &str) -> Option<String> {
-    if let Some(idx) = body.find("\"SNlM0e\":\"") {
-        let start = idx + "\"SNlM0e\":\"".len();
-        if let Some(end) = body[start..].find('"') {
-            let token = &body[start..start + end];
-            if token.len() > 10 {
-                return Some(token.to_string());
+    // Primary: anchor to the window.WIZ_global_data block.
+    if let Some(block) = extract_wiz_global_data_block(body) {
+        if let Some(token) = extract_quoted_value(block, "SNlM0e") {
+            if is_valid_snlim0e(&token) {
+                return Some(token);
             }
         }
     }
-    if let Some(idx) = body.find("SNlM0e") {
-        let search = &body[idx..];
-        if let Some(eq) = search.find("=\"") {
-            let start = eq + 2;
-            if let Some(end) = search[start..].find('"') {
-                let token = &search[start..start + end];
-                if token.len() > 10 {
-                    return Some(token.to_string());
-                }
-            }
+
+    // Fallback: non-anchored search for the quoted key anywhere in the body.
+    if let Some(token) = extract_quoted_value(body, "SNlM0e") {
+        if is_valid_snlim0e(&token) {
+            return Some(token);
         }
     }
+
     None
 }
 
 fn extract_build_label(body: &str) -> Option<String> {
+    // Primary: Google stores the build label under the key `cfb2h` inside
+    // window.WIZ_global_data in the current HTML shape.
+    if let Some(block) = extract_wiz_global_data_block(body) {
+        if let Some(label) = extract_quoted_value(block, "cfb2h") {
+            if label.starts_with("boq_assistant-bard-web-") && label.len() > 10 {
+                return Some(label);
+            }
+        }
+    }
+
+    // Fallback: bare substring search for older or stripped responses.
     for pattern in ["boq_assistant-bard-web-server_", "boq_assistant-bard-web-frontend_"] {
         if let Some(idx) = body.find(pattern) {
             let area = &body[idx..];
@@ -164,30 +187,93 @@ fn extract_build_label(body: &str) -> Option<String> {
 }
 
 fn extract_session_id(body: &str) -> Option<String> {
-    for pattern in ["\"FdrFJe\":\"", "session_id\":\""] {
-        if let Some(idx) = body.find(pattern) {
-            let start = idx + pattern.len();
-            if let Some(end) = body[start..].find('"') {
-                let sid = &body[start..start + end];
-                if !sid.is_empty() {
-                    return Some(sid.to_string());
-                }
+    // FdrFJe is the canonical frontend session id (sent as `f.sid`).
+    let search_in = extract_wiz_global_data_block(body).unwrap_or(body);
+    if let Some(sid) = extract_quoted_value(search_in, "FdrFJe") {
+        if looks_like_session_id(&sid) {
+            return Some(sid);
+        }
+    }
+
+    // Fallback for older/consent pages that may use an explicit session_id key.
+    if let Some(sid) = extract_quoted_value(body, "session_id") {
+        if looks_like_session_id(&sid) {
+            return Some(sid);
+        }
+    }
+
+    None
+}
+
+fn looks_like_session_id(sid: &str) -> bool {
+    !sid.is_empty() && sid.chars().all(|c| c.is_ascii_digit() || c == '-') && sid.len() >= 3
+}
+
+fn extract_push_id(body: &str) -> Option<String> {
+    let search_in = extract_wiz_global_data_block(body).unwrap_or(body);
+    for key in ["qKIAYe", "KnDnFf"] {
+        if let Some(feed) = extract_quoted_value(search_in, key) {
+            if feed.starts_with("feeds/") {
+                return Some(feed);
             }
         }
     }
     None
 }
 
-fn extract_push_id(body: &str) -> Option<String> {
-    for key in ["\"qKIAYe\":\"", "\"KnDnFf\":\""] {
-        if let Some(idx) = body.find(key) {
-            let start = idx + key.len();
-            if let Some(end) = body[start..].find('"') {
-                let feed = &body[start..start + end];
-                if feed.starts_with("feeds/") {
-                    return Some(feed.to_string());
-                }
+/// Returns the contents of the `window.WIZ_global_data = { ... };` block,
+/// including the opening `window.WIZ_global_data = ` prefix so callers can
+/// still anchor searches if needed.
+fn extract_wiz_global_data_block(body: &str) -> Option<&str> {
+    let start_marker = "window.WIZ_global_data";
+    let idx = body.find(start_marker)?;
+    let after_marker = &body[idx + start_marker.len()..];
+    let eq_idx = after_marker.find('=')?;
+    let block_start_in_after = eq_idx + 1;
+    let rest = &after_marker[block_start_in_after..];
+    let brace_idx = rest.find('{')?;
+    let inner = &rest[brace_idx..];
+    Some(take_balanced_braces(inner))
+}
+
+/// Returns the substring that starts at the first `{` and ends at the matching
+/// `}`, respecting string literals and backslash escapes.
+fn take_balanced_braces(s: &str) -> &str {
+    let bytes = s.as_bytes();
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'"' {
+                in_string = false;
             }
+        } else if b == b'"' {
+            in_string = true;
+        } else if b == b'{' {
+            depth += 1;
+        } else if b == b'}' {
+            if depth == 1 {
+                return &s[..=i];
+            }
+            depth = depth.saturating_sub(1);
+        }
+    }
+    s
+}
+
+/// Extracts the double-quoted value for a JSON-like key inside a text block.
+/// Handles `"key":"value"` and `"key" : "value"` but does not unescape.
+fn extract_quoted_value(block: &str, key: &str) -> Option<String> {
+    let pattern = format!("\"{key}\":\"");
+    if let Some(idx) = block.find(&pattern) {
+        let start = idx + pattern.len();
+        if let Some(end) = block[start..].find('"') {
+            return Some(block[start..start + end].to_string());
         }
     }
     None
@@ -240,6 +326,15 @@ mod tests {
     }
 
     #[test]
+    fn extract_build_label_finds_cfb2h() {
+        let body = include_str!("../tests/fixtures/wiz_global_data.txt");
+        assert_eq!(
+            extract_build_label(body),
+            Some("boq_assistant-bard-web-server_20260806.17_p0".to_string())
+        );
+    }
+
+    #[test]
     fn extract_session_id_finds_fdrfje() {
         let body = include_str!("../tests/fixtures/app_session_id.txt");
         assert_eq!(extract_session_id(body), Some("4202905934864668489".to_string()));
@@ -249,6 +344,50 @@ mod tests {
     fn extract_push_id_prefers_qkiaye() {
         let body = include_str!("../tests/fixtures/app_push_id.txt");
         assert_eq!(extract_push_id(body), Some("feeds/mcudyrk2a4khkz".to_string()));
+    }
+
+    #[test]
+    fn extract_snlim0e_from_real_wiz_global_data() {
+        let body = include_str!("../tests/fixtures/wiz_global_data.txt");
+        assert_eq!(
+            extract_snlim0e(body),
+            Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_all_from_real_wiz_global_data() {
+        let body = include_str!("../tests/fixtures/wiz_global_data.txt");
+        let state = extract_from_app_html(body);
+        assert_eq!(
+            state.access_token,
+            Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
+        );
+        assert_eq!(
+            state.build_label,
+            Some("boq_assistant-bard-web-server_20260806.17_p0".to_string())
+        );
+        assert_eq!(state.session_id, Some("-1594710263937718439".to_string()));
+        assert_eq!(state.push_id, Some("feeds/mcudyrk2a4khkz".to_string()));
+    }
+
+    #[test]
+    fn extract_snlim0e_rejects_invalid_token() {
+        // Token suffix has only 12 digits, not 13.
+        let body = r#"window.WIZ_global_data = {"SNlM0e":"bad:123456789012"};"#;
+        assert_eq!(extract_snlim0e(body), None);
+    }
+
+    #[test]
+    fn extract_push_id_rejects_non_feeds() {
+        let body = r#"window.WIZ_global_data = {"qKIAYe":"not-a-feed","KnDnFf":"also-not"};"#;
+        assert_eq!(extract_push_id(body), None);
+    }
+
+    #[test]
+    fn extract_session_id_rejects_empty() {
+        let body = r#"window.WIZ_global_data = {"FdrFJe":""};"#;
+        assert_eq!(extract_session_id(body), None);
     }
 
     #[test]

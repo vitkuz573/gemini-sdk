@@ -1,0 +1,24 @@
+{
+  "470": {
+    "url": "https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate?bl=boq_assistant-bard-web-server_20260806.17_p0&f.sid=-1594710263937718439&hl=ru&_reqid=3681781&rt=c",
+    "slot_0": null,
+    "slot_1": null,
+    "slot_2": null,
+    "slot_3_len": 0,
+    "slot_3": null,
+    "slot_4": null,
+    "slot_59": null,
+    "slot_96": null
+  },
+  "504": {
+    "url": "https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate?bl=boq_assistant-bard-web-server_20260806.17_p0&f.sid=-1594710263937718439&hl=ru&_reqid=4781781&rt=c",
+    "slot_0": null,
+    "slot_1": null,
+    "slot_2": null,
+    "slot_3_len": 0,
+    "slot_3": null,
+    "slot_4": null,
+    "slot_59": null,
+    "slot_96": null
+  }
+}
