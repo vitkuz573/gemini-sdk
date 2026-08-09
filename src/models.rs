@@ -151,6 +151,13 @@ impl ModelInfo {
 
 /// Derives a category from the model title or hex id as a fallback when the
 /// picker does not report one.
+///
+/// Precedence (first match wins):
+/// 1. `lite` → `FlashLite`
+/// 2. `thinking` / `deep` → `Thinking`
+/// 3. `pro` → `Pro`
+/// 4. `auto` → `Auto`
+/// 5. otherwise → `Fast`
 #[must_use]
 pub(crate) fn derive_category(id: &str, title: &str) -> ModelCategory {
     let combined = format!("{id} {title}").to_lowercase();
