@@ -222,7 +222,7 @@ fn format_model_list(models: Vec<gemini_sdk::ModelInfo>) -> String {
                 m.id(),
                 m.title(),
                 m.description(),
-                m.versioned_name().as_deref().unwrap_or(m.title()),
+                m.versioned_name().unwrap_or(m.title()),
                 m.category_enum()
             )
         })

@@ -277,14 +277,7 @@ impl GeminiClient {
         config: Option<GenerationConfig>,
     ) -> Result<ChatResponse> {
         let body = self.generate_raw(message, None, category, config).await?;
-        let response = parse_chat_response(&body)?;
-
-        if let Ok(state) = extract_conversation_state(&body) {
-            let mut session = self.inner.session.lock().await;
-            session.conversation_state = Some(map_state(state));
-        }
-
-        Ok(response)
+        parse_chat_response(&body)
     }
 
     /// Sends a generation request and returns the raw response body.
@@ -306,12 +299,7 @@ impl GeminiClient {
         }
         let body = String::from_utf8_lossy(&body_bytes).to_string();
 
-        if let Ok(state) = extract_conversation_state(&body) {
-            let mut session = self.inner.session.lock().await;
-            session.conversation_state = Some(map_state(state));
-        }
-
-        Ok(body)
+        self.parse_stream_body(&body).await
     }
 
     /// Starts a streaming generation request and returns the upstream response.
@@ -330,8 +318,9 @@ impl GeminiClient {
     /// Starts a streaming generation request and returns raw bytes.
     ///
     /// This lower-level method gives callers direct access to the upstream WIZ
-    /// byte stream. Conversation state is extracted from the consumed body by
-    /// the caller or by [`GeminiClient::generate_raw`].
+    /// byte stream. After the stream is consumed, callers should use
+    /// [`GeminiClient::parse_stream_body`] to extract conversation state and the
+    /// parsed response, or call [`GeminiClient::generate_raw`] which does both.
     pub async fn stream_generate_raw(
         &self,
         message: &ChatMessage,
@@ -404,6 +393,18 @@ impl GeminiClient {
         }
 
         Ok(response)
+    }
+
+    /// Extracts multi-turn conversation state from a fully consumed
+    /// `stream_generate_raw` body and stores it in the session.
+    ///
+    /// This helper is intended for callers that consume the byte stream
+    /// themselves; [`GeminiClient::generate_raw`] calls it automatically.
+    pub async fn ingest_conversation_state(&self, body: &str) {
+        if let Ok(state) = extract_conversation_state(body) {
+            let mut session = self.inner.session.lock().await;
+            session.conversation_state = Some(map_state(state));
+        }
     }
 
     async fn build_stream_generate_request(
