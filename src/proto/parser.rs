@@ -350,6 +350,9 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
             continue;
         }
         let json_start = line.find('[').unwrap_or(0);
+        // `find` returns a byte offset; ensure we start slicing on a char
+        // boundary so subsequent `char_indices()`-based slicing is valid.
+        let json_start = line[..json_start].chars().map(|c| c.len_utf8()).sum();
         let json_line = &line[json_start..];
         if json_line.is_empty() {
             continue;
