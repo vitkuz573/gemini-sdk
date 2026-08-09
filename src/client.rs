@@ -950,20 +950,53 @@ fn is_valid_waa_context_array(arr: &[Value]) -> bool {
 
 fn extract_waa_fingerprint_from_model_list(body: &str) -> Option<String> {
     // The Pro model block contains a 16-char hex id that is reused as the WAA
-    // fingerprint. Scan the otAQ7b response for the first 16-char hex token
-    // that appears more than once.
-    for (start, _) in body.match_indices('"') {
-        let inner = &body[start + 1..];
+    // fingerprint. Anchor the search to the Pro model entry and require the
+    // candidate id to appear inside the model list array (not anywhere else in
+    // the page). The mode list in the otAQ7b response is a JSON array where
+    // each model is represented as [id, name, description, ...].
+    let pro_block_start = body.find("\"Pro\"")?;
+    // Find the enclosing array that contains the Pro model entry so we only
+    // consider tokens inside the model list.
+    let list_start = body[..pro_block_start].rfind('[').unwrap_or(0);
+    let list_end = body[pro_block_start..]
+        .find("]]]")
+        .map(|i| pro_block_start + i + 3)
+        .unwrap_or(body.len());
+    let model_list = &body[list_start..list_end];
+
+    for (start, _) in model_list.match_indices('"') {
+        let inner = &model_list[start + 1..];
         let end = inner.find('"').unwrap_or(inner.len());
         let token = &inner[..end];
         if token.len() == 16
             && token.chars().all(|c| c.is_ascii_hexdigit())
-            && body.matches(token).count() > 1
+            && model_list.matches(token).count() > 1
         {
             return Some(token.to_string());
         }
     }
     None
+}
+
+#[cfg(test)]
+mod client_tests {
+    use super::*;
+
+    #[test]
+    fn extract_waa_fingerprint_anchors_to_pro_model_block() {
+        // Minimal otAQ7b-like model list with a decoy hex token outside the list.
+        let body = r#"decoytoken00000000 [[["cf41b0e0dd7d53e5","Flash-Lite",...],["fbb127bbb056c959","Flash",...],["9d8ca3786ebdfbea","Pro","Advanced",...]]]]"#;
+        assert_eq!(
+            extract_waa_fingerprint_from_model_list(body),
+            Some("9d8ca3786ebdfbea".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_waa_fingerprint_ignores_decoy_outside_model_list() {
+        let body = r#"outside1234567890 [[["fbb127bbb056c959","Flash",...]]]"#;
+        assert!(extract_waa_fingerprint_from_model_list(body).is_none());
+    }
 }
 
 fn credentials_to_sapisid_hash(cookies: &Cookies, origin: &str) -> Option<String> {
