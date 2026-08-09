@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: Core
-current_phase: "Phase 1: Stabilize v0.1 Core"
-current_plan: 4
-status: in_progress
-stopped_at: None
-last_updated: "2026-08-09T14:06:46.874Z"
+current_phase: 1 — Stabilize v0.1 Core
+current_plan: Complete
+status: Complete
+stopped_at: Phase 1 verified, UAT passed, security audit clean
+last_updated: "2026-08-09T22:55:00Z"
 progress:
   total_phases: 6
   completed_phases: 1
@@ -20,8 +20,8 @@ progress:
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
 **Current milestone:** v0.1
-**Current phase:** Phase 1: Stabilize v0.1 Core
-**Current Plan:** 4
+**Current phase:** 2 — Reliability & Protocol Hardening
+**Current Plan:** Not started
 **Total Plans in Phase:** 4
 
 milestone: v0.1
@@ -37,7 +37,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-08)
 
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
-| 1 — Stabilize v0.1 Core | △ In Progress | 3/4 | 75% |
+| 1 — Stabilize v0.1 Core | ✓ Complete | 4/4 | 100% |
 | 2 — Reliability & Protocol Hardening | ○ Pending | 0/3 | 0% |
 | 3 — Observability & Configurability | ○ Pending | 0/2 | 0% |
 | 4 — Advanced Media & Sessions | ○ Pending | 0/2 | 0% |
