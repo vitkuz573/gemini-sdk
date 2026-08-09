@@ -64,6 +64,14 @@ pub(crate) async fn upload_file(
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| Error::parse("file upload start response missing X-Goog-Upload-URL"))?;
 
+    let parsed = reqwest::Url::parse(upload_url)
+        .map_err(|e| Error::parse(format!("invalid upload URL: {e}")))?;
+    if parsed.scheme() != "https"
+        || !matches!(parsed.host_str(), Some(host) if host.ends_with(".google.com"))
+    {
+        return Err(Error::parse("upload URL has untrusted origin"));
+    }
+
     // Step 2: upload the bytes and finalize.
     let finalize_response = client
         .post(upload_url)
