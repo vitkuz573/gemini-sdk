@@ -1025,13 +1025,17 @@ impl<'a> ChatBuilder<'a> {
     /// This is useful for callers that need to control both text and image
     /// parts (or other future content types) directly.
     pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
-        let response = self.client.generate(&message, self.category, self.config).await?;
+        let response = self
+            .client
+            .generate_raw(&message, self.conversation.as_ref(), self.category, self.config.clone())
+            .await?;
+        let parsed = parse_chat_response(&response)?;
 
         if let Some(mut conversation) = self.conversation {
             conversation.add_message(message);
-            conversation.add_model_text(response.text.clone());
+            conversation.add_model_text(parsed.text.clone());
         }
 
-        Ok(response)
+        Ok(parsed)
     }
 }
