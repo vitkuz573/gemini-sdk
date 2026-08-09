@@ -36,8 +36,8 @@ async fn list_models_works() {
     let models = client.list_models().await.expect("list_models should succeed");
     assert!(!models.is_empty(), "expected at least one model");
     for model in &models {
-        assert!(!model.id.is_empty());
-        assert!(!model.title.is_empty());
+        assert!(!model.id().is_empty());
+        assert!(!model.title().is_empty());
     }
 }
 

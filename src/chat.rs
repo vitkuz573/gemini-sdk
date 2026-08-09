@@ -8,6 +8,7 @@ use crate::models::ModelCategory;
 
 /// A single message in a conversation.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ChatMessage {
     /// Role of the message author: `user` or `model`.
     pub role: String,
@@ -142,12 +143,13 @@ impl ThinkingLevel {
 
 /// A structured response from a chat completion.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct ChatResponse {
     /// Text content returned by the model.
-    pub text: String,
+    pub(crate) text: String,
     /// Model reasoning / thinking content (empty when the model does not
     /// expose its reasoning, e.g. for models without thinking enabled).
-    pub thinking: String,
+    pub(crate) thinking: String,
 }
 
 impl ChatResponse {
@@ -199,6 +201,7 @@ pub(crate) fn extract_prompt(message: &ChatMessage) -> Result<String> {
 
 /// An in-progress conversation that carries multi-turn state.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct Conversation {
     pub(crate) messages: Vec<ChatMessage>,
     pub(crate) model_category: Option<ModelCategory>,

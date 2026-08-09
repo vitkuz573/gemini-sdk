@@ -83,19 +83,20 @@ impl FromStr for ModelCategory {
 
 /// Metadata about a model available in the Gemini web frontend picker.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ModelInfo {
     /// Google's internal hex mode ID.
-    pub id: String,
+    pub(crate) id: String,
     /// Short title shown in the UI (e.g. "3.6 Flash").
-    pub title: String,
+    pub(crate) title: String,
     /// Longer description.
-    pub description: String,
+    pub(crate) description: String,
     /// Versioned name if available.
-    pub versioned_name: Option<String>,
+    pub(crate) versioned_name: Option<String>,
     /// Category reported by the model picker.
-    pub category: ModelCategory,
+    pub(crate) category: ModelCategory,
     /// Numeric enum value used in `StreamGenerate` slot 30.
-    pub category_enum: u64,
+    pub(crate) category_enum: u64,
 }
 
 impl ModelInfo {
@@ -109,6 +110,42 @@ impl ModelInfo {
             .as_deref()
             .filter(|s| !s.is_empty())
             .map_or_else(|| self.title.clone(), |s| s.to_string())
+    }
+
+    /// Returns the model's internal hex mode ID.
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Returns the short title shown in the UI (e.g. "3.6 Flash").
+    #[must_use]
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// Returns the longer model description, if any.
+    #[must_use]
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Returns the versioned name (e.g. "Gemini 3.6 Flash") if available.
+    #[must_use]
+    pub fn versioned_name(&self) -> Option<&str> {
+        self.versioned_name.as_deref()
+    }
+
+    /// Returns the model category reported by the model picker.
+    #[must_use]
+    pub fn category(&self) -> ModelCategory {
+        self.category
+    }
+
+    /// Returns the numeric enum value used in `StreamGenerate` slot 30.
+    #[must_use]
+    pub fn category_enum(&self) -> u64 {
+        self.category_enum
     }
 }
 

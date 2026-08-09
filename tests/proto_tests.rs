@@ -37,7 +37,7 @@ fn parse_model_list_extracts_gemini_flash() {
     let models = parse_model_list(body).unwrap();
     assert_eq!(models.len(), 1);
     assert_eq!(models[0].display_name(), "Gemini 3.6 Flash");
-    assert_eq!(models[0].category_enum, 1);
+    assert_eq!(models[0].category_enum(), 1);
 }
 
 #[test]
@@ -46,8 +46,8 @@ fn parse_model_list_from_real_fixture() {
     let models = parse_model_list(body).unwrap();
     assert!(!models.is_empty());
     for model in &models {
-        assert!(!model.id.is_empty());
-        assert!(!model.title.is_empty());
+        assert!(!model.id().is_empty());
+        assert!(!model.title().is_empty());
     }
 }
 

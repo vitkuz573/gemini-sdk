@@ -42,6 +42,7 @@ const OGADS_API_KEY: &str = "AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E";
 /// A `GeminiClient` holds the HTTP client, cookies, and extracted session state.
 /// It is cheaply cloneable; clones share the same underlying session.
 #[derive(Clone)]
+#[non_exhaustive]
 pub struct GeminiClient {
     inner: Arc<Inner>,
 }
@@ -955,6 +956,7 @@ fn map_proto_state(state: &crate::session::ConversationState) -> ProtoConversati
 }
 
 /// Builder returned by [`GeminiClient::chat`].
+#[non_exhaustive]
 pub struct ChatBuilder<'a> {
     client: &'a GeminiClient,
     conversation: Option<Conversation>,
