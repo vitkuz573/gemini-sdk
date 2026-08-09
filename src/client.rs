@@ -52,7 +52,7 @@ pub struct GeminiClient {
 
 struct Inner {
     http: Client,
-    cookies: std::sync::Mutex<Cookies>,
+    cookies: Mutex<Cookies>,
     session: Mutex<SessionState>,
     config: Mutex<ClientConfig>,
 }
@@ -164,8 +164,8 @@ impl GeminiClient {
     }
 
     /// Returns a clone of the cookies used by this client.
-    pub(crate) fn cookies(&self) -> Cookies {
-        self.inner.cookies.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+    async fn cookies(&self) -> Cookies {
+        self.inner.cookies.lock().await.clone()
     }
 
     fn with_config(cookies: Cookies, config: ClientConfig) -> Result<Self> {
@@ -183,7 +183,7 @@ impl GeminiClient {
         Ok(Self {
             inner: Arc::new(Inner {
                 http,
-                cookies: std::sync::Mutex::new(cookies),
+                cookies: Mutex::new(cookies),
                 session: Mutex::new(session),
                 config: Mutex::new(config),
             }),
@@ -219,7 +219,7 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let url = format!("{WEB_BASE_URL}/_/BardChatUi/data/batchexecute");
-        let cookies = self.cookies();
+        let cookies = self.cookies().await;
         let (params, body, headers, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid();
@@ -416,7 +416,7 @@ impl GeminiClient {
         prepared: &PreparedRequest,
     ) -> Result<(Vec<Value>, String, Vec<(String, String)>, String)> {
         let request_uuid = fresh_request_uuid();
-        let cookies = self.cookies();
+        let cookies = self.cookies().await;
         let (conversation_state, session_for_upload, language, waa_token, nonce) = {
             let mut session = self.inner.session.lock().await;
             session.nonce = Some(crate::proto::fresh_request_nonce());
@@ -518,7 +518,7 @@ impl GeminiClient {
     async fn run_waa_init_chain(&self) -> Result<()> {
         let (at, language, build_label, session_id, cookie_header, credentials) = {
             let (cookie_header, credentials) = {
-                let cookies = self.cookies();
+                let cookies = self.cookies().await;
                 (cookies.to_header_value(), cookies.clone())
             };
             let session = self.inner.session.lock().await;
@@ -732,7 +732,8 @@ impl GeminiClient {
     async fn fetch_app_page(&self) -> Result<String> {
         let (language, cookie_header) = {
             let session = self.inner.session.lock().await;
-            (session.language.clone(), self.cookies().to_header_value())
+            let cookie_header = self.cookies().await.to_header_value();
+            (session.language.clone(), cookie_header)
         };
 
         let url = format!("{WEB_BASE_URL}/app?hl={language}");
@@ -756,7 +757,7 @@ impl GeminiClient {
     }
 
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
-        let cookie_header = self.cookies().to_header_value();
+        let cookie_header = self.cookies().await.to_header_value();
 
         let language = self.inner.config.lock().await.language.clone();
         let response = self
@@ -780,9 +781,10 @@ impl GeminiClient {
         }
 
         {
-            let mut cookies = self.cookies();
+            let mut cookies = self.cookies().await;
             cookies.merge_response_cookies(response.cookies());
-            *self.inner.cookies.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = cookies;
+            let mut guard = self.inner.cookies.lock().await;
+            *guard = cookies;
         }
 
         self.fetch_app_page().await
