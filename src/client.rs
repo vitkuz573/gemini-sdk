@@ -991,27 +991,6 @@ fn extract_waa_fingerprint_from_model_list(body: &str) -> Option<String> {
     None
 }
 
-#[cfg(test)]
-mod client_tests {
-    use super::*;
-
-    #[test]
-    fn extract_waa_fingerprint_anchors_to_pro_model_block() {
-        // Minimal otAQ7b-like model list with a decoy hex token outside the list.
-        let body = r#"decoytoken00000000 [[["cf41b0e0dd7d53e5","Flash-Lite",...],["fbb127bbb056c959","Flash",...],["9d8ca3786ebdfbea","Pro","Advanced",...,"9d8ca3786ebdfbea"]]]"#;
-        assert_eq!(
-            extract_waa_fingerprint_from_model_list(body),
-            Some("9d8ca3786ebdfbea".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_waa_fingerprint_ignores_decoy_outside_model_list() {
-        let body = r#"outside1234567890 [[["fbb127bbb056c959","Flash",...]]]"#;
-        assert!(extract_waa_fingerprint_from_model_list(body).is_none());
-    }
-}
-
 fn credentials_to_sapisid_hash(cookies: &Cookies, origin: &str) -> Option<String> {
     cookies.to_credentials().ok()?.sapisid_hash(origin)
 }
@@ -1134,5 +1113,26 @@ impl<'a> ChatBuilder<'a> {
         }
 
         Ok(parsed)
+    }
+}
+
+#[cfg(test)]
+mod client_tests {
+    use super::*;
+
+    #[test]
+    fn extract_waa_fingerprint_anchors_to_pro_model_block() {
+        // Minimal otAQ7b-like model list with a decoy hex token outside the list.
+        let body = r#"decoytoken00000000 [[["cf41b0e0dd7d53e5","Flash-Lite",...],["fbb127bbb056c959","Flash",...],["9d8ca3786ebdfbea","Pro","Advanced",...,"9d8ca3786ebdfbea"]]]"#;
+        assert_eq!(
+            extract_waa_fingerprint_from_model_list(body),
+            Some("9d8ca3786ebdfbea".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_waa_fingerprint_ignores_decoy_outside_model_list() {
+        let body = r#"outside1234567890 [[["fbb127bbb056c959","Flash",...]]]"#;
+        assert!(extract_waa_fingerprint_from_model_list(body).is_none());
     }
 }
