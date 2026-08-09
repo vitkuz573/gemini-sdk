@@ -1,11 +1,9 @@
 //! Exponential-backoff retry helper for transient failures.
 
 use std::future::Future;
-use std::sync::Arc;
 use std::time::Duration;
 
 use backoff::{future::retry, ExponentialBackoff};
-use tokio::sync::Mutex;
 
 /// Initial retry interval for exponential backoff.
 const INITIAL_INTERVAL: Duration = Duration::from_millis(500);
@@ -35,23 +33,15 @@ where
         ..Default::default()
     };
 
-    let operation = Arc::new(Mutex::new(operation));
-
-    retry(backoff, || {
-        let operation = Arc::clone(&operation);
-        async move {
-            let op = operation.lock().await;
-            let fut = (*op)();
-            drop(op);
-            match fut.await {
-                Ok(value) => Ok(value),
-                Err(err) => {
-                    let sdk_err = crate::errors::Error::Request(err);
-                    if sdk_err.is_transient() {
-                        Err(backoff::Error::transient(sdk_err))
-                    } else {
-                        Err(backoff::Error::permanent(sdk_err))
-                    }
+    retry(backoff, || async {
+        match operation().await {
+            Ok(value) => Ok(value),
+            Err(err) => {
+                let sdk_err = crate::errors::Error::Request(err);
+                if sdk_err.is_transient() {
+                    Err(backoff::Error::transient(sdk_err))
+                } else {
+                    Err(backoff::Error::permanent(sdk_err))
                 }
             }
         }
