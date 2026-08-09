@@ -1,11 +1,9 @@
 ---
 phase: 01-stabilize-v0-1-core
-reviewed: 2026-08-09T12:30:00Z
+reviewed: 2026-08-09T18:15:00Z
 depth: deep
-files_reviewed: 16
+files_reviewed: 13
 files_reviewed_list:
-  - Cargo.toml
-  - README.md
   - examples/multi_turn_chat.rs
   - src/auth.rs
   - src/chat.rs
@@ -18,153 +16,128 @@ files_reviewed_list:
   - tests/auth_provider.rs
   - tests/integration_tests.rs
   - tests/proto_tests.rs
-  - tests/real_cookies.rs
   - tests/redaction.rs
 findings:
-  critical: 3
-  warning: 5
-  info: 2
-  total: 10
+  critical: 2
+  warning: 7
+  info: 4
+  total: 13
 status: issues_found
 ---
 
 # Phase 01: Code Review Report
 
-**Reviewed:** 2026-08-09T12:30:00Z
+**Reviewed:** 2026-08-09T18:15:00Z
 **Depth:** deep
-**Files Reviewed:** 16
+**Files Reviewed:** 13
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the v0.1 stabilization phase for `gemini-sdk`, covering the public API surface (`auth`, `chat`, `client`, `errors`, `models`, `retry`), examples, and integration tests. The code is well-structured, extensively documented, and the core test suite passes. However, a deep review surfaced a **build-breaking regression** in the `capture-fixtures` example caused by privatizing `ModelInfo` fields, a **probable multi-turn state loss bug** in `ChatBuilder::send_message_with_content`, a **session-state update race** in `generate`/`generate_raw`, and several smaller correctness/robustness issues in retry, parsing, WAA context handling, and the `accept_consent_and_refresh` flow.
+Reviewed the post-fix source of the v0.1 stabilization phase for `gemini-sdk`. The earlier review surfaced and fixed several critical and warning-tier issues (captured in `01-REVIEW-FIX.md`). A deep re-review of the resulting code still finds material correctness, security, and API-stability concerns that should be addressed before this phase ships, including a **secret leakage path via `Cookies` Display**, **SSRF / open redirect in upload consent handling**, **poisoned-mutex unwrapping that can panic**, **conversation state still not propagated from `ChatBuilder` through the public `generate` path**, and several smaller issues in parsing, retry semantics, and public API evolution.
 
 ## Critical Issues
 
-### CR-01: `capture_fixtures` example fails to compile after `ModelInfo` fields were privatized
+### CR-01: `Cookies` and `Credentials` leak secrets through `Display` / `to_header_value`
 
-**File:** `examples/capture_fixtures.rs:222-226`
-**Issue:** In `src/models.rs` the fields of `ModelInfo` were made private and accessor methods were added (`id()`, `title()`, `description()`, `versioned_name()`, `category_enum()`). The `capture_fixtures` example was not updated and still accesses the private fields directly. This breaks `cargo check --examples --features capture-fixtures`, `cargo test --all-targets --features capture-fixtures`, and `cargo clippy --all-features --all-targets`.
+**File:** `src/auth.rs:441-444`, `src/auth.rs:196-227`
+**Issue:** `Credentials` redacts secrets in `Debug` but provides a fully-revealing `to_header_value()` that is used by `Cookies` to implement `fmt::Display`. `Cookies` itself implements `Display` by calling `to_header_value()` with raw cookie values. Any code that formats a `Cookies` or `Credentials` value with `{}` instead of `{:?}` (e.g., error messages, logs, tracing spans, serde-style string formatting) will emit the complete session cookie header. This undermines the redaction design and is a realistic secret-exposure vector in async Rust code where `tracing::info!(cookies = %client.cookies())` is a natural mistake.
 
-```text
-error[E0616]: field `id` of struct `ModelInfo` is private
-error[E0616]: field `title` of struct `ModelInfo` is private
-error[E0616]: field `description` of struct `ModelInfo` is private
-error[E0616]: field `versioned_name` of struct `ModelInfo` is private
-error[E0616]: field `category_enum` of struct `ModelInfo` is private
-```
+**Fix:** Remove `impl fmt::Display for Cookies` (it is not required by any caller in the reviewed code) and make `to_header_value()` crate-private or require an explicit method name such as `to_cookie_header()`. If `Display` must be kept for compatibility, make it redact the same fields as `Debug`. Add a test that asserts `{}` formatting does not contain secret substrings.
 
-**Fix:** Replace direct field access with the public accessors:
+### CR-02: `accept_consent_and_refresh` follows an unvalidated URL from HTML and posts cookies to it
 
-```rust
-format!(
-    "[\"{}\",\"{}\",\"{}\",null,null,null,null,null,null,null,null,\"{}\",null,null,null,null,null,{}]",
-    m.id(),
-    m.title(),
-    m.description(),
-    m.versioned_name().unwrap_or(m.title()),
-    m.category_enum()
-)
-```
+**File:** `src/client.rs:758-789`
+**Issue:** `extract_consent_save_url` parses a URL from the `/app` HTML and `accept_consent_and_refresh` POSTs the user's full cookie header to it with no validation that the URL belongs to `consent.google.com` or the expected Google origin. A compromised `/app` response (MITM, malicious redirect, or HTML injection) can redirect the session cookies to an attacker-controlled URL. This is an SSRF/open-redirect credential-exfiltration risk.
 
-### CR-02: Multi-turn conversation state is discarded when using `ChatBuilder`
-
-**File:** `src/client.rs:1027-1036`
-**Issue:** `ChatBuilder::send_message_with_content` calls `self.client.generate(&message, self.category, self.config)`. `generate` internally calls `generate_raw` with `conversation: None`, which means the prepared request will never receive the previous `ConversationState`, even when the builder was created via `continue_conversation(conversation)`. The builder holds the conversation but never passes it to `generate_raw`. As a result, slot 96 remains `1` (fresh conversation) and slot 2 stays empty, so Gemini treats every turn as a first turn and multi-turn continuity is broken.
-
-The `generate` and `generate_raw` public methods accept an explicit `conversation` parameter, but the builder-level API ignores it.
-
-**Fix:** Add a `send_message_with_content_and_conversation` helper (or change the existing method) so the builder passes `self.conversation.as_ref()` into `generate_raw`:
+**Fix:** Validate the extracted URL before sending credentials to it:
 
 ```rust
-pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
-    let response = self
-        .client
-        .generate_raw(&message, self.conversation.as_ref(), self.category, self.config.clone())
-        .await?;
-    let parsed = parse_chat_response(&response)?;
-
-    if let Some(mut conversation) = self.conversation {
-        conversation.add_message(message);
-        conversation.add_model_text(parsed.text.clone());
-    }
-
-    Ok(parsed)
+fn is_trusted_consent_origin(url: &str) -> bool {
+    url.starts_with("https://consent.google.com/")
+        || url.starts_with("https://accounts.google.com/")
 }
 ```
 
-Also consider whether `GeminiClient::generate` should expose a conversation-aware overload for consistency.
-
-### CR-03: Race between state extraction and state update in `generate` / `generate_raw`
-
-**File:** `src/client.rs:273-315`
-**Issue:** Both `generate` and `generate_raw` call `stream_generate_raw`, then consume the full body, and then attempt to extract and store conversation state. However, `stream_generate_raw` itself does **not** update `session.conversation_state`. The state update is only attempted in `generate`/`generate_raw`. For `stream_generate` (the streaming public API) the caller is responsible for parsing the body, but the doc comment says "Conversation state is extracted from the consumed body by the caller or by `GeminiClient::generate_raw`" — yet there is no helper provided to do this, so streaming callers will almost certainly leave `session.conversation_state` stale.
-
-More importantly, because `generate_raw` updates state *after* consuming the body, and `generate` also parses the body and updates state again, a caller that uses `generate_raw` directly followed by `parse_chat_response` and then later calls `continue_conversation` on a `Conversation` built from an old snapshot will have a stale session. But the bigger correctness risk is that `stream_generate_raw` builds the request using the session's `conversation_state` (line 419), updates it nowhere, and therefore a subsequent `stream_generate` call will reuse the same stale state. This contradicts the intended "multi-turn conversation state" feature.
-
-**Fix:** Extract conversation state immediately after the request completes and before returning from `stream_generate_raw`, then store it in session state. Provide a public helper to parse streaming bodies for callers who consume the stream manually. Ensure the builder uses this updated state.
+Return an error if the URL does not match an allow-list of known Google consent origins. Additionally, consider limiting the forwarded cookies to the minimum required (e.g., `SOCS` flow cookies) rather than the entire signed-in header.
 
 ## Warnings
 
-### WR-01: `with_backoff` retries all `reqwest::Error`s that carry a 5xx/429 status but discards the response body needed for downstream error classification
+### WR-01: `Inner::cookies` mutex unwrap can panic on poison
+
+**File:** `src/client.rs:168`, `src/client.rs:785`
+**Issue:** `cookies()` and `accept_consent_and_refresh` use `lock().unwrap_or_else(std::sync::PoisonError::into_inner)`. While this recovers the data, any future panic in a thread that holds the mutex will still propagate a poison error to every caller; the `unwrap_or_else` only helps if the panic already happened. More importantly, if a task holding `cookies` panics, subsequent code that also uses `cookies()` silently continues with potentially corrupted data. The `cookies` mutex is synchronous and shared with async code, so a panic in one `await` point can leave all future cookie reads returning recovered-but-stale data.
+
+**Fix:** Prefer `tokio::sync::RwLock` or `tokio::sync::Mutex` for the cookie jar so poisoning is not a concern, or model `Cookies` as an `Arc<tokio::sync::RwLock<Cookies>>` with explicit recovery. If `std::sync::Mutex` is kept, document the panic-recovery contract and add a test that verifies poisoned locks do not silently corrupt state.
+
+### WR-02: `ChatBuilder` still does not use `Conversation` state when callers go through `GeminiClient::generate`
+
+**File:** `src/client.rs:276-284`, `src/client.rs:1057-1070`
+**Issue:** The fix for CR-02 changed `ChatBuilder::send_message_with_content` to call `generate_raw` with `self.conversation.as_ref()`, which is good. However, the public `GeminiClient::generate` method still hardcodes `None` for the conversation parameter. Callers who build a `Conversation` manually and then call `client.generate(&message, category, config)` instead of using the builder will still lose multi-turn state. The builder-level fix does not close the public API hole.
+
+**Fix:** Add a `generate_with_conversation` public method, or change `generate` to accept an optional `Conversation` parameter. If semver stability is required, add a new method and deprecate the old one, or make `generate` delegate to a new internal helper that accepts the conversation.
+
+### WR-03: `with_backoff` discards response bodies for error classification
 
 **File:** `src/retry.rs:26-60`
-**Issue:** `with_backoff` returns a `reqwest::Response` only on success. When `reqwest::Error` is returned (e.g., from `error_for_status()`), the original HTTP response body is lost because the operation closure does not read it before the error is produced. Downstream code in `client.rs` then reconstructs an `Error::api` without details in some paths (e.g., `stream_generate_raw` reads body for error, but `batchexecute_rpc` reads body after retry returns). More subtly, if a transient 5xx response contains a `BardErrorInfo` code in the body, that body is never inspected by the retry layer, so the SDK may retry a permanent Gemini-side error.
+**Issue:** `with_backoff` retries `reqwest::Error`s that carry 5xx/429 status codes, but it never sees the response body. If Gemini returns a transient HTTP status with a `BardErrorInfo` payload indicating a permanent failure, the SDK retries blindly. Conversely, permanent `reqwest` errors that wrap a 4xx status are classified as permanent without reading the body. This was acknowledged as skipped in `01-REVIEW-FIX.md`, but the issue remains in the shipped code.
 
-**Fix:** Do not call `error_for_status()` inside the retry closure. Instead, return the full `Response` from the closure and let the SDK classify status codes and bodies after retry completes. This keeps the body available for parsing `BardErrorInfo` and producing richer errors.
+**Fix:** Change the retry operation to return `Result<reqwest::Response, crate::Error>` and classify status/body inside the retry loop. Only convert to `reqwest::Error` after deciding whether the failure is transient. Alternatively, make `with_backoff` generic over an `is_transient` predicate supplied by each call site.
 
-### WR-02: `build_waa_context_header` can produce an invalid JSON array when mutating an ogads context
+### WR-04: `parse_response_parts` silently ignores parse failures and empty results
 
-**File:** `src/client.rs:861-900`
-**Issue:** If `context` is a JSON array with length >= 16, the function mutates index 15 with the UUID and index 4 with the fingerprint and returns it. If the original array is malformed or has different semantics for those indices, the header sent to Gemini will be incorrect. There is no validation that the array actually matches the expected `x-goog-ext-525001261-jspb` shape. The fallback path hardcodes the same 17-element template, but the mutation path trusts the upstream response unconditionally.
+**File:** `src/proto/parser.rs:342-476`
+**Issue:** The function silently `continue`s on every JSON parse error, missing `wrb.fr` marker, and malformed part. If the entire body is garbage, it eventually returns either a `BardErrorInfo` error or a generic "could not parse response" error with no context about what failed. This makes debugging production failures difficult and can mask protocol drift.
 
-Additionally, `run_waa_init_chain` falls back to `build_default_waa_context()` when ogads fails (line 564), but the default context uses a hardcoded fingerprint that may not match the live session, which the spike findings flag as fragile (see skill requirement: WAA context must be obtained without Chrome automation).
+**Fix:** Collect the last parse error (or a count of skipped lines) and include it in the final error message. When returning `Err(Error::parse(...))`, include a short snippet of the input body (truncated and with secrets redacted) so operators can diagnose protocol changes.
 
-**Fix:** Validate the ogads response array length and element types against the known header shape before mutating. If validation fails, fall back to the default template and log a warning. Document that the default fingerprint is a best-effort fallback.
+### WR-05: `extract_waa_fingerprint_from_model_list` can return an arbitrary 16-character hex token
 
-### WR-03: `parse_response_parts` JSON bracket scanner can slice in the middle of a UTF-8 multibyte character
+**File:** `src/client.rs:933-949`
+**Issue:** The heuristic scans the model-list body for any 16-character all-hex string that appears more than once and returns the first one. The body can contain many such tokens (hashes, IDs, experiment labels). The function can pick the wrong fingerprint, causing the WAA context header to be incorrect and the streaming request to fail or be flagged.
 
-**File:** `src/proto/parser.rs:352-378`
-**Issue:** The scanner finds the first `'['` and then scans character-by-character to find the balanced outer array. It then slices with `&json_line[s..e]`. `char_indices()` yields byte offsets, and slicing at those offsets is valid only if the start and end positions fall on character boundaries. While `char_indices()` guarantees this for the characters it yields, if `json_start` is not on a char boundary (possible if the line contains a multibyte character before `'['`), then `json_line` itself starts mid-character and subsequent slices may be invalid. This is a latent panic risk on non-ASCII response content.
+**Fix:** Anchor the search to the known Pro model block or to the structure around the mode ID field. Validate that the candidate appears in a position that matches the captured protocol (e.g., immediately after a known model-name marker) before returning it.
 
-**Fix:** Ensure `json_start` is at a char boundary before slicing, or use `line.find('[')` on the original string and then slice from a validated boundary. Prefer `serde_json` streaming or `memchr` over hand-rolled bracket counting.
+### WR-06: `upload_file` follows an arbitrary upload URL from the upstream response
 
-### WR-04: `accept_consent_and_refresh` merges response cookies into a local clone that is immediately dropped
+**File:** `src/upload.rs:61-65`, `src/upload.rs:68-69`
+**Issue:** The second upload step POSTs the file bytes to the URL returned in `x-goog-upload-url` from the first step. While this is part of the resumable-upload protocol, the URL is not validated against an expected origin (`push.clients6.google.com` or a known Google upload host). A malicious or compromised initial response could redirect the bytes to an attacker-controlled host, exfiltrating image data.
 
-**File:** `src/client.rs:773-778`
-**Issue:** The function creates a local clone of the client's cookies, merges `Set-Cookie` headers from the consent response into it, and then drops the clone. The client's actual `self.inner.cookies` is never updated, so the newly acquired `SOCS` cookie is lost. This defeats the "Consent / SOCS cookie auto-acquisition" feature advertised in the README and `lib.rs`.
+**Fix:** Validate that the upload URL has a host matching `*.google.com` or `*.clients6.google.com` before following it. Parse the URL and reject unexpected schemes or hosts.
 
-**Fix:** Update `self.inner.cookies` directly. Because `Inner::cookies` is not behind a lock, this can be done with a clone-and-replace:
+### WR-07: `generate_raw` drops non-UTF-8 bytes instead of surfacing the error
 
-```rust
-{
-    let mut cookies = self.inner.cookies.clone();
-    cookies.merge_response_cookies(response.cookies());
-    self.inner.cookies = cookies;
-}
-```
+**File:** `src/client.rs:303`
+**Issue:** `String::from_utf8_lossy` replaces invalid UTF-8 with the replacement character and silently continues. If Gemini ever returns binary or malformed UTF-8, the SDK will pass a lossy string into the parser, which may then produce confusing errors or silently corrupt the conversation state.
 
-Then re-fetch `/app` so the updated cookies are used for subsequent extraction.
-
-### WR-05: `Conversation::add_message` chain mutates `parts` directly, bypassing builder invariants
-
-**File:** `src/chat.rs:222-238`
-**Issue:** `ChatBuilder::send_message_with_images` pushes `ContentPart::Image` directly into `message.parts` (line 1012) and `add_user_text`/`add_model_text` push messages into `Conversation::messages`. Because `parts` and `messages` are public, callers can construct messages with empty prompts, unsupported image URLs, or invalid role strings, and the validation in `extract_prompt` / `prepare_request` only runs at request time. This is acceptable for a low-level SDK, but the public docs claim "Multi-turn conversation state" without clarifying that callers are responsible for keeping roles consistent.
-
-**Fix:** Consider making `ChatMessage::parts` private (or crate-public) and exposing only constructors/append helpers that enforce invariants. At minimum, document that `parts` and `messages` are low-level escape hatches and that malformed conversations will fail at send time.
+**Fix:** Use `String::from_utf8` and return a `Parse` error when the body is not valid UTF-8, so the caller knows the response was malformed rather than receiving a best-effort corrupted string.
 
 ## Info
 
-### IN-01: `PreparedRequest` is publicly exported but marked `#[doc(hidden)]` and contains public fields
+### IN-01: `PreparedRequest` is publicly exported but `#[doc(hidden)]` with public fields
 
-**File:** `src/chat.rs:254-265`, `src/lib.rs:88-89`
-**Issue:** `PreparedRequest` is re-exported from the crate root (implied by the comment) and used by benchmarks and tests. Its fields are public and it is `#[doc(hidden)]`, which is an awkward API surface: downstream code can depend on it without documentation, and future field additions are breaking changes. The `api_stability.rs` test does not cover it.
+**File:** `src/chat.rs:268-280`, `src/lib.rs:88-89`
+**Issue:** `PreparedRequest` is re-exported from the crate root (the comment says it is "intentionally public for benchmarks and advanced use") but hidden from docs and has public fields. This creates a semver hazard: adding or removing fields is a breaking change for any downstream code that uses it, yet it is not documented as part of the stable surface. The `api_stability.rs` test does not cover it.
 
-**Fix:** Either fully document `PreparedRequest` and commit to its stability, or keep it crate-private and expose a dedicated `gemini_sdk::chat::PreparedRequest` only under a benchmark/test-only gate.
+**Fix:** Either remove the public re-export and expose it only under a `benches` or `unstable` feature, or document it fully, mark it `#[non_exhaustive]`, and add it to the API-stability tests.
 
-### IN-02: `tests/real_cookies.rs` skips image upload test silently when `GEMINI_PUSH_ID` is absent, but docs imply image uploads work with default push id
+### IN-02: `tests/real_cookies.rs` uses a non-standard cookie source and skips upload tests unnecessarily
 
-**File:** `tests/real_cookies.rs:91-94`, `src/session.rs:48-54`
-**Issue:** `SessionState::effective_push_id` already falls back to a hardcoded default when `GEMINI_PUSH_ID` is unset, and the upload endpoint itself does not strictly require an env-provided push id. The test skips image upload unless `GEMINI_PUSH_ID` is set, which reduces coverage. More importantly, `real_cookies.rs` reads cookies from `/tmp/opencode/gemini_cookies.env` but the README and other tests use the `GEMINI_COOKIES` environment variable, creating a documentation/test inconsistency.
+**File:** `tests/real_cookies.rs:12-26`
+**Issue:** The live-cookie test loads cookies from `/tmp/opencode/gemini_cookies.env` instead of the `GEMINI_COOKIES` environment variable used by `integration_tests.rs` and the examples. This creates friction and inconsistency. It also skips `upload_image_works` unless `GEMINI_PUSH_ID` is set, even though `SessionState::effective_push_id` already falls back to a hardcoded default.
 
-**Fix:** Unify cookie loading to use `std::env::var("GEMINI_COOKIES")` like `integration_tests.rs`, and remove the `GEMINI_PUSH_ID` skip (or document why it is required). Ensure the documented test commands in `README.md` actually exercise the upload test.
+**Fix:** Unify live-cookie loading to use `std::env::var("GEMINI_COOKIES")` and remove the `GEMINI_PUSH_ID` skip so the upload path is exercised by the default test run.
+
+### IN-03: Several protocol magic numbers and array indices are undocumented
+
+**File:** `src/proto/parser.rs:19-27`, `src/proto/slots.rs:72-92`
+**Issue:** Indices such as `PART_TEXT_INDEX = 1`, `PART_THINKING_INDEX = 37`, slot numbers 30, 80, 96, etc., are hardcoded with only brief comments. When Google changes the protocol, maintainers will struggle to map these indices back to the captured traffic.
+
+**Fix:** Add a `docs/protocol.md` or inline comments that map each index to the captured field name or protobuf field number from the HAR captures. This is especially important for the 97-slot request list.
+
+### IN-04: `GeminiClient::from_hashmap` and `from_cookies` duplicate `from_cookie_header` semantics with no added value
+
+**File:** `src/client.rs:99-117`
+**Issue:** `from_cookies`, `from_hashmap`, and `from_cookie_header` all validate the same required cookies and build the same client. Having three nearly identical constructors increases API surface area without clear differentiation. `from_hashmap` is a trivial alias for `from_cookies`.
+
+**Fix:** Deprecate or remove `from_hashmap`, or give it distinct semantics (e.g., do not validate required cookies, allowing lazy validation). Document the intended use case for each constructor.
