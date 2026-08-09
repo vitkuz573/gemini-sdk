@@ -281,6 +281,11 @@ pub(crate) fn extract_quoted_value(block: &str, key: &str) -> Option<String> {
     None
 }
 
+/// True if the consent save URL belongs to a trusted Google origin.
+pub(crate) fn is_trusted_consent_origin(url: &str) -> bool {
+    url.starts_with("https://consent.google.com/") || url.starts_with("https://accounts.google.com/")
+}
+
 /// Extracts the consent save URL from `/app` HTML when a consent banner is required.
 pub(crate) fn extract_consent_save_url(body: &str) -> Option<String> {
     let payload_start = body.find("id=\"bard-initial-data\"")?;
@@ -299,8 +304,12 @@ pub(crate) fn extract_consent_save_url(body: &str) -> Option<String> {
     let value: BardInitialData = serde_json::from_str(&decoded).ok()?;
     value
         .reject_save_url
-        .filter(|s| !s.is_empty())
-        .or_else(|| value.accept_save_url.filter(|s| !s.is_empty()))
+        .filter(|s| !s.is_empty() && is_trusted_consent_origin(s))
+        .or_else(|| {
+            value
+                .accept_save_url
+                .filter(|s| !s.is_empty() && is_trusted_consent_origin(s))
+        })
 }
 
 impl From<ConversationState> for ProtoConversationState {
@@ -399,6 +408,20 @@ mod tests {
             extract_consent_save_url(body),
             Some("https://consent.google.com/save?x=1".to_string())
         );
+    }
+
+    #[test]
+    fn extract_consent_url_rejects_untrusted_origin() {
+        let body = r#"<div id="bard-initial-data" data-payload="{&quot;acNycb&quot;:&quot;https://evil.example.com/save&quot;}"></div>"#;
+        assert_eq!(extract_consent_save_url(body), None);
+    }
+
+    #[test]
+    fn is_trusted_consent_origin_allow_lists_google() {
+        assert!(is_trusted_consent_origin("https://consent.google.com/save?x=1"));
+        assert!(is_trusted_consent_origin("https://accounts.google.com/save"));
+        assert!(!is_trusted_consent_origin("https://evil.example.com/save"));
+        assert!(!is_trusted_consent_origin("http://consent.google.com/save"));
     }
 
     #[test]
