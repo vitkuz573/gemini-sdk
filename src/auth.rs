@@ -195,7 +195,7 @@ impl Credentials {
 
     /// Serialises the credentials into a `Cookie` header value.
     #[must_use]
-    pub fn to_header_value(&self) -> String {
+    pub(crate) fn to_header_value(&self) -> String {
         let mut pairs: Vec<(&str, &str)> = Vec::new();
         pairs.push((PSID, self.psid.as_str()));
         pairs.push((PSIDCC, self.psidcc.as_str()));
@@ -440,7 +440,7 @@ impl Extend<(String, String)> for Cookies {
 
 impl fmt::Display for Cookies {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_header_value())
+        write!(f, "<{} cookies>", self.inner.len())
     }
 }
 
@@ -576,6 +576,16 @@ mod tests {
         let value = creds.to_header_value();
         assert!(value.starts_with(&format!("{PSID}=a; {PSIDCC}=b; {PAPISID}=c")));
         assert!(value.contains("extra_a=first; extra_z=last"));
+    }
+
+    #[test]
+    fn cookies_display_redacts_secrets() {
+        let mut cookies = Cookies::new();
+        cookies.insert("__Secure-1PSID", "secret-psid");
+        cookies.insert("__Secure-1PSIDCC", "secret-psidcc");
+        let display = format!("{}", cookies);
+        assert!(!display.contains("secret-psid"));
+        assert_eq!(display, "<2 cookies>");
     }
 
     #[test]
