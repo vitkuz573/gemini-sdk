@@ -1,10 +1,9 @@
 ---
 phase: 01-stabilize-v0-1-core
-reviewed: 2026-08-09T13:45:00Z
-depth: deep
-files_reviewed: 14
+reviewed: 2026-08-09T00:00:00Z
+depth: standard
+files_reviewed: 13
 files_reviewed_list:
-  - .planning/intel/API-SURFACE.md
   - examples/multi_turn_chat.rs
   - src/auth.rs
   - src/chat.rs
@@ -19,111 +18,125 @@ files_reviewed_list:
   - tests/proto_tests.rs
   - tests/redaction.rs
 findings:
-  critical: 2
-  warning: 7
-  info: 3
+  critical: 3
+  warning: 5
+  info: 4
   total: 12
 status: issues_found
 ---
 
-# Phase 01-stabilize-v0-1-core: Code Review Report
+# Phase 01: Code Review Report
 
-**Reviewed:** 2026-08-09T13:45:00Z
-**Depth:** deep
-**Files Reviewed:** 14
+**Reviewed:** 2026-08-09
+**Depth:** standard
+**Files Reviewed:** 13
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the public API surface, client/session logic, auth, chat types, retry, errors, model metadata, and the supporting test suite. The crate compiles and the majority of tests pass, but one existing unit test fails on `main` and several correctness, security, and robustness issues were found. The most serious concerns are (1) session integrity: `needs_init()` only checks `build_label` and `session_id`, so once those are populated any later upstream state change (e.g. a 401/403 during a request, cookie refresh, consent re-prompt) never triggers re-initialization, and (2) a broken WAA fingerprint extractor that fails the only test covering it and silently degrades attestation. Several smaller issues around error handling, protocol compliance, and maintainability are also noted below.
+Reviewed the core SDK surface of the `gemini-sdk` crate: auth/cookie handling, chat model types, the main `GeminiClient`, errors, retry logic, the public `lib.rs` exports, and the associated integration/example tests. The code is generally well-structured and extensively tested, but several correctness and robustness issues remain. Most notably, one of the client's own unit tests currently fails, and there are gaps in input validation, session freshness, error handling, and API consistency that can cause silent failures or panics at runtime.
+
+## Structural Findings (fallow)
+
+No structural findings were provided.
+
+## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: Failing unit test indicates broken WAA fingerprint extraction
+### CR-01: Unit test `extract_waa_fingerprint_anchors_to_pro_model_block` fails
 
-**File:** `src/client.rs:951-993` (`extract_waa_fingerprint_from_model_list` and its unit test)
-**Issue:** The unit test `extract_waa_fingerprint_anchors_to_pro_model_block` fails with `left: None, right: Some("9d8ca3786ebdfbea")`. The extractor looks for `"]]]"` as the list terminator, but the test fixture is `...]]"` (two closing brackets, then a quote). Because the search for the end of the model list fails, the code falls back to `body.len()`, then scans a much larger model string. The fingerprint does appear in that larger string, but the duplicate-count filter (`model_list.matches(token).count() > 1`) rejects a unique token, so `None` is returned. The implementation therefore does not satisfy the documented requirement of anchoring to the Pro model block and will silently omit the live fingerprint, degrading the WAA/attestation context.
-**Fix:** Change the extractor to parse the actual nested JSON array returned by `otAQ7b` instead of using string heuristics. At minimum, fix the heuristic to tolerate `]]` terminators and remove or correct the duplicate-count check so that the unique Pro fingerprint is returned. Add a failing/real fixture to the test suite.
+**File:** `src/client.rs:986-999`
+**Issue:** The inline unit test `client::client_tests::extract_waa_fingerprint_anchors_to_pro_model_block` currently panics with `left == right failed: left: None, right: Some("9d8ca3786ebdfbea")`. The test fixture contains `"..."` string literals inside the model list, which the parser's `match_indices('"')` will iterate over; the `"Pro"` block is present, but the algorithm still returns `None`. This indicates the extraction logic or its test is incorrect. A failing test in the submitted implementation is a ship-blocking defect.
+**Fix:** Either correct the parser implementation or update the test fixture to match the real response shape that the parser is intended to support. Re-run `cargo test` after the fix.
 
 ```rust
-// Conceptual fix: parse the JSON payload and extract the Pro model id.
-let parsed: Value = serde_json::from_str(payload)?;
-// navigate to the mode list and find the entry whose name == "Pro",
-// then return its hex id.
+// src/client.rs:989
+let body = r#"decoytoken00000000 [[["cf41b0e0dd7d53e5","Flash-Lite",...],["fbb127bbb056c959","Flash",...],["9d8ca3786ebdfbea","Pro","Advanced",...]]]]"#;
+assert_eq!(
+    extract_waa_fingerprint_from_model_list(body),
+    Some("9d8ca3786ebdfbea".to_string())
+);
 ```
 
-### CR-02: `SessionState::needs_init()` is under-specified and prevents recovery from upstream state changes
+### CR-02: `CookieHeaderProvider` swallows typed `CredentialsError`
 
-**File:** `src/session.rs:60-62`
-**Issue:** `needs_init()` returns true only when both `build_label` and `session_id` are `None`. Once those two fields are populated (which happens on the first `/app` fetch), `ensure_session()` in `src/client.rs:476-482` never re-runs `init_session()` again. If Google later returns a sign-out redirect, a consent re-prompt, a 401/403, or the `SNlM0e`/`bl`/`f.sid` values rotate, the client continues using stale session state. This is the root cause class that the spike findings warn against ("do not hardcode `bl` or `f.sid`; always extract from `/app` HTML"), but the implementation does not re-extract after the first call.
-**Fix:** Track a `last_init_time` or an explicit `initialized` flag, and add a method `session_is_stale()` that re-fetches `/app` when transient auth errors (`NotSignedIn`, 401/403 API errors) occur or after a configurable TTL. In the short term, call `init_session()` inside `generate_raw`/`stream_generate_raw` when the response indicates an auth/session failure, and reset `build_label`/`session_id` on `NotSignedIn`.
+**File:** `src/auth.rs:334-337`
+**Issue:** `CookieHeaderProvider::credentials` maps any `CredentialsError` to `crate::Error::Config(String)`. This discards the structured error kind (`MissingPsid` vs `MissingPsidcc`) and forces callers to parse strings if they want to distinguish missing-cookie errors. Because `CookieHeaderProvider::new` already validates the header eagerly, the error cannot occur in normal use, but the conversion is still lossy and inconsistent with `CredentialsProvider` implementations that return `CredentialsError` directly.
+**Fix:** Add a `From<CredentialsError>` impl for `crate::Error`, or expose `CredentialsError` through `crate::Error::Config` with a dedicated variant, so callers retain structured error information.
+
+### CR-03: `Cookies::to_credentials` silently drops duplicate cookie values
+
+**File:** `src/auth.rs:447-452`
+**Issue:** `Cookies::to_header_value` serializes the underlying `HashMap`, which has one entry per key. If a caller inserted duplicate keys (e.g. multiple `__Secure-1PSID` values) into the jar, `to_credentials` will silently use the last-inserted value. While the current API only exposes `insert`, internal `merge_response_cookies` can overwrite values without warning. This is acceptable for cookies, but the conversion to `Credentials` then runs `validate()` and can fail for reasons that no longer match the original header.
+**Fix:** Document that `Cookies` keeps one value per cookie name, or deduplicate in `from_header` with deterministic behavior. More importantly, ensure that `merge_response_cookies` does not silently downgrade `CredentialsError` into a generic `Config` string (see CR-02).
 
 ## Warnings
 
-### WR-01: `extract_waa_fingerprint` in `session.rs` duplicates and conflicts with `client.rs` extractor
+### WR-01: `GeminiClient::with_language` uses blocking lock inside async crate
 
-**File:** `src/session.rs:102-122` and `src/client.rs:951-979`
-**Issue:** Two independent heuristics attempt to extract the same Pro model fingerprint. `session.rs` scans a fixed 600-byte window after `"Pro"` and requires the token appear more than once in the whole body. `client.rs` searches for `"]]]"` list terminators and also requires more than one match. The duplicate logic is inconsistent and, as shown by CR-01, the `client.rs` version is broken. Maintaining two string-based parsers for the same upstream value is a bug vector.
-**Fix:** Delete one implementation and have both callers use the same parser. Prefer a JSON-based extraction from the `otAQ7b` response payload (see CR-01) so that the same code path serves WAA context construction and session bootstrap.
+**File:** `src/client.rs:138-144` and `src/client.rs:158-164`
+**Issue:** `with_language`, `with_max_retries`, and `with_timeout` call `self.inner.config.blocking_lock()` from an async library. If these builder methods are called inside an async context (common for SDK users), they can block the async runtime thread. The builder methods are synchronous by design, but the internal `Mutex` is `tokio::sync::Mutex`, which is intended for async locking. Using `blocking_lock` inside what looks like a plain synchronous builder is surprising and can cause runtime stalls.
+**Fix:** Use `std::sync::Mutex` for `ClientConfig` if the locks are only ever held synchronously, or make the builder methods async and use `lock().await`. Prefer `std::sync::Mutex` because the config is only set at construction time and never held across await points.
 
-### WR-02: `stream_generate_raw` swallows successful response bodies on HTTP errors
+### WR-02: `ensure_session` treats missing `build_label` and `session_id` as the only init triggers
 
-**File:** `src/client.rs:409-413`
-**Issue:** When the upstream returns a non-2xx status, the code reads the response text and returns it as a `Parse`/`Api` error message. For some Gemini errors (e.g. `BardErrorInfo`), the body contains actionable JSON that `extract_bard_error_code` and the parser know how to handle. Returning a raw string means callers lose structured diagnostics and the retry logic cannot classify the error correctly.
-**Fix:** Before returning `Error::api(status, text)`, attempt to parse the body for a `BardErrorInfo` code. If present, emit a typed `Error::Api { status, message: "Gemini returned BardErrorInfo [{code}]" }` (matching the parser's existing logic) and consider specific codes as transient or `NotSignedIn`.
+**File:** `src/session.rs:60-62`
+**Issue:** `SessionState::needs_init` returns true only when **both** `build_label` and `session_id` are `None`. If one is present and the other is missing (e.g. extraction partially failed), the SDK will skip re-initialization and send requests with incomplete session state. This can produce confusing `400` responses from Gemini.
+**Fix:** Require both values to be present to consider the session initialized:
 
-### WR-03: `prepare_request` ignores `conversation_state` for multi-turn history
+```rust
+pub(crate) fn needs_init(&self) -> bool {
+    self.build_label.is_none() || self.session_id.is_none()
+}
+```
 
-**File:** `src/chat.rs:283-312`
-**Issue:** The function signature accepts `conversation: Option<&Conversation>` but never reads `conversation.messages`. The only state carried forward is the server-side `ConversationState` (ids + continuation token). This means the SDK cannot reconstruct a conversation from its local message history without relying entirely on Google's continuation token. If the continuation token expires or the server resets state, the local `Conversation` object becomes useless. The doc comment on `Conversation` says "callers that mutate it directly are responsible…", but the SDK itself never uses the history it stores.
-**Fix:** Either implement history flattening into the prompt (with clear limits and token counting) or document that `Conversation` is only a client-side cache and that multi-turn support requires server-side state. If the latter, rename the type or make the limitation explicit to avoid user surprise.
+### WR-03: `ingest_conversation_state` ignores parse failures silently
 
-### WR-04: `send_with_retry` retries only `reqwest::Error`, not SDK transient errors
+**File:** `src/client.rs:423-428`
+**Issue:** `ingest_conversation_state` discards any error from `extract_conversation_state`. If the response body is malformed or the conversation state cannot be parsed, the SDK continues with stale state. The next `continue_conversation` call will then send invalid state to the server, likely producing a `400` or terminating the conversation.
+**Fix:** Return `Result<(), Error>` from `ingest_conversation_state` and propagate the parse error, or at least log it at warning level so callers know multi-turn state may be broken.
 
-**File:** `src/retry.rs:26-60` and `src/client.rs:852-858`
-**Issue:** `with_backoff` requires `Fut: Future<Output = Result<T, reqwest::Error>>`. All callers therefore return `reqwest::Response` and check status/parsing *after* the retry wrapper exits. Any `Error::Transient` or `Error::Api { status: 5xx }` raised inside `batchexecute_rpc`, `waa_create`, etc. is never retried because it is not a `reqwest::Error`. For example, a transient "WAA Create failed" returns immediately with no retries.
-**Fix:** Generalize the retry helper to accept an async closure returning `crate::Result<T>` and use `Error::is_transient()` to decide retryability. Alternatively, wrap the whole operation (including status checks) into the closure passed to `send_with_retry`.
+### WR-04: `generate_raw` treats invalid UTF-8 lossily
 
-### WR-05: `build_stream_generate_body` double-encodes the inner request list
+**File:** `src/client.rs:319`
+**Issue:** The response bytes are converted with `String::from_utf8_lossy(&body_bytes).to_string()`. If Gemini ever returns non-UTF-8 bytes (e.g. a binary error payload or corrupt stream), the lossy replacement characters will be fed into `parse_chat_response` and `ingest_conversation_state`, potentially hiding the real error or corrupting conversation state.
+**Fix:** Use `String::from_utf8(body_bytes).map_err(|e| Error::Parse(format!("invalid UTF-8 in response: {e}")))?` to surface malformed payloads as parse errors.
 
-**File:** `src/proto/mod.rs:38-49`
-**Issue:** The body is built as `f.req=[null, <inner_json_string>]`, where `inner_json` is a JSON string produced by `serde_json::to_string`. The captured protocol shape (per the spike reference) sends `f.req=[null,"<inner_req_list JSON>"]`: the inner list is a JSON string inside the outer JSON array. The current implementation produces `f.req=[null, "[...]"]` after URL encoding, which is the intended shape, but it relies on the inner value being a string rather than a nested array. Verify this against a real fixture; if the inner array is serialized as an array (not a string), the server will reject it. The unit test only checks that `f.req=` and `at=` are present, not the structural correctness.
-**Fix:** Add a unit test that decodes the URL-encoded `f.req` value, parses it as JSON, and asserts that index 1 is a JSON string containing the inner req list (or the array, depending on the actual protocol). Keep the implementation aligned with the captured traffic.
-
-### WR-06: `extract_bard_error_code` parses arbitrary bracket contents after a substring match
+### WR-05: `extract_bard_error_code` does not validate that the code is numeric
 
 **File:** `src/proto/parser.rs:612-619`
-**Issue:** The function searches for `"BardErrorInfo"` anywhere in the body, then grabs the first `[` after it and the first `]` after that. This is fragile: a `BardErrorInfo` object that contains nested arrays or appears inside a larger JSON string can yield the wrong numeric slice. It also accepts negative numbers or overflow because `parse::<u64>()` will fail silently (returns `None`), but a malformed slice such as `"-1,100"` could be parsed as an `i64` were the signature different.
-**Fix:** Parse the body as JSON and navigate to the `BardErrorInfo` field by path. If performance is a concern, use a small state machine that respects string literals and brackets. Add tests for nested-array and false-positive cases.
-
-### WR-07: `CookieHeaderProvider::new` clones the header twice and discards parsed `Credentials`
-
-**File:** `src/auth.rs:323-328`
-**Issue:** `new` parses the header to validate it, throws away the resulting `Credentials`, stores only the raw string, and re-parses on every `credentials()` call. This is inefficient and, more importantly, means any validation/normalization performed by `Credentials::from_header` is lost. If the stored header is later mutated in memory, the provider has no defense (though `String` is immutable in safe Rust, this still reflects poor data hygiene).
-**Fix:** Store the parsed `Credentials` directly in `CookieHeaderProvider`. This removes the duplicate parse, preserves validation, and simplifies the `CredentialsProvider` implementation.
+**Issue:** `extract_bard_error_code` finds the first `[...]` after `BardErrorInfo` and parses the trimmed contents as a `u64`. If the bracket contains non-numeric text, `parse().ok()` returns `None`, which callers interpret as "no error code". This can mask structured error information in the response.
+**Fix:** Add unit tests for non-numeric contents and consider returning the raw string when parsing fails, so callers can still see the upstream error detail.
 
 ## Info
 
-### IN-01: Hard-coded API keys for WAA and ogads are checked into source
+### IN-01: `derive_category` has overlapping keyword matching order
 
-**File:** `src/client.rs:40-41`
-**Issue:** `WAA_API_KEY` and `OGADS_API_KEY` are public Google API keys embedded in the source code. They are not secrets in the traditional sense (they are visible in browser traffic and are client-side keys), but they are tied to a specific Google project and may be rotated or rate-limited. Shipping them in library source reduces operational flexibility and could violate terms of service if abused.
-**Fix:** Move the keys to environment-variable defaults (e.g. `const WAA_API_KEY: &str = env!("GEMINI_WAA_API_KEY", "...default...")`) or document them prominently as borrowed from captured traffic with a plan to make them configurable.
+**File:** `src/models.rs:155-168`
+**Issue:** The heuristic checks `lite`, then `thinking`/`deep`, then `pro`, then `auto`. Because "Flash-Lite" contains neither `thinking`, `deep`, `pro`, nor `auto`, it correctly maps to `FlashLite`. However, a hypothetical "DeepPro" title would map to `Thinking` because `deep` is checked before `pro`. This may be intentional, but it is surprising and undocumented.
+**Fix:** Document the precedence in the function doc comment, or reorder the checks so more specific categories take precedence.
 
-### IN-02: `attestation` module is `pub` but the feature is optional and may expose internal surface
+### IN-02: `api_stability.rs` does not assert construction prevention at compile time
 
-**File:** `src/lib.rs:76-77`
-**Issue:** The `attestation` module is declared `pub mod attestation` under `#[cfg(feature = "browser-attestation")]`. Because the module contents were not reviewed here, its public API surface is unknown. If it exposes constructors that accept untrusted input (e.g. a path to a Chrome binary), it could become a command-injection vector.
-**Fix:** Audit the `attestation` module for public functions taking paths or shell strings. If it is not meant for direct use, mark the module `pub(crate)` or constrain its public exports.
+**File:** `tests/api_stability.rs`
+**Issue:** The tests verify public field absence by using only constructors and accessors, but they do not actually attempt struct-literal construction guarded by `compile_fail` doctests or `static_assertions`. The assertions are therefore runtime-only and could miss future regressions where a field accidentally becomes public.
+**Fix:** Add `compile_fail` doctests in the source types, or use `static_assertions::assert_not_impl_any!` to enforce that the public API cannot be constructed literally.
 
-### IN-03: `tests/api_stability.rs` has an empty assertion for `ModelInfo`
+### IN-03: `retry::with_backoff` wraps the operation in an unnecessary `Arc<Mutex>`
 
-**File:** `tests/api_stability.rs:25-31`
-**Issue:** The test `model_info_has_no_public_fields` does not actually assert that fields are private; it only creates an `Option<ModelInfo>` and discards it. If a future change adds public fields, this test will not catch it.
-**Fix:** Add a negative compile test (e.g. using `trybuild`) or at least construct a `ModelInfo` through the intended public path and assert field access is impossible. A `compile_fail` doctest on each struct is a lightweight option.
+**File:** `src/retry.rs:38-46`
+**Issue:** The operation closure is placed in an `Arc<Mutex<>>` and locked on every retry. The closure is `Fn()` (not `FnMut`), so the lock is unnecessary; the closure can be called directly. The current code adds overhead and a dependency on `tokio::sync::Mutex` for a pure retry helper.
+**Fix:** Remove the `Arc<Mutex>` wrapper and call `operation()` directly inside the retry future.
+
+### IN-04: `ChatBuilder::send_message_with_content` clones `self.config` even when `None`
+
+**File:** `src/client.rs:1109-1111`
+**Issue:** The call always passes `self.config.clone()` into `generate_raw`, even though `generate_raw` takes `Option<GenerationConfig>` and cloning an `Option` is cheap. This is harmless but inconsistent with the rest of the code, which uses `Option<GenerationConfig>` without forcing a clone at the call site.
+**Fix:** Pass `self.config` without cloning, or document why a clone is required (e.g. because `self` is consumed).
 
 ---
 
-_Reviewed: 2026-08-09T13:45:00Z_
+_Reviewed: 2026-08-09_
 _Reviewer: the agent (gsd-code-reviewer)_
-_Depth: deep_
+_Depth: standard_
