@@ -99,3 +99,40 @@ impl Error {
         Self::Transient(message.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use static_assertions::assert_impl_all;
+
+    use super::*;
+
+    #[test]
+    fn error_is_send_sync_static() {
+        assert_impl_all!(Error: Send, Sync, std::error::Error);
+        static_assertions::assert_type_eq_all!(Error, Error);
+        fn assert_static<T: 'static>() {}
+        assert_static::<Error>();
+    }
+
+    #[test]
+    fn is_transient_detects_transient_variants() {
+        assert!(Error::Transient("network".to_string()).is_transient());
+        assert!(Error::RateLimited("too many".to_string()).is_transient());
+        assert!(Error::Timeout("deadline".to_string()).is_transient());
+        assert!(Error::api(
+            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
+            "server error"
+        )
+        .is_transient());
+        assert!(Error::api(reqwest::StatusCode::TOO_MANY_REQUESTS, "rate limited").is_transient());
+    }
+
+    #[test]
+    fn is_transient_rejects_permanent_variants() {
+        assert!(!Error::Config("bad config".to_string()).is_transient());
+        assert!(!Error::Parse("bad json".to_string()).is_transient());
+        assert!(!Error::BadRequest("invalid".to_string()).is_transient());
+        assert!(!Error::NotSignedIn("expired".to_string()).is_transient());
+        assert!(!Error::api(reqwest::StatusCode::BAD_REQUEST, "client error").is_transient());
+    }
+}
