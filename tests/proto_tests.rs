@@ -1,6 +1,6 @@
 //! Protocol-level unit/integration tests.
 
-use gemini_sdk::chat::{ContentPart, PreparedRequest};
+use gemini_sdk::chat::{ContentPart, ImageSource, PreparedRequest};
 use gemini_sdk::models::ModelCategory;
 use gemini_sdk::proto::parser::{
     extract_bard_error_code, extract_conversation_state, parse_chat_response, parse_model_list,
@@ -196,6 +196,27 @@ fn build_inner_req_list_with_conversation_state() {
 }
 
 #[test]
+fn build_inner_req_list_slot_30_reflects_model_category() {
+    for (category, expected) in [
+        (ModelCategory::Fast, 1),
+        (ModelCategory::Thinking, 2),
+        (ModelCategory::Pro, 3),
+        (ModelCategory::Auto, 4),
+        (ModelCategory::FastDynamicThinking, 5),
+        (ModelCategory::FlashLite, 6),
+    ] {
+        let prepared = PreparedRequest {
+            prompt: "hello".to_string(),
+            inline_images: vec![],
+            config: None,
+            category,
+        };
+        let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
+        assert_eq!(inner[30], serde_json::json!([expected]), "slot 30 for {category:?}");
+    }
+}
+
+#[test]
 fn derive_attachment_filename_extensions() {
     assert_eq!(derive_attachment_filename("image/png", 0), "attachment.png");
     assert_eq!(derive_attachment_filename("image/jpeg", 0), "attachment.jpg");
@@ -211,4 +232,30 @@ fn base64_decode_tolerates_whitespace() {
 #[test]
 fn base64_decode_rejects_invalid() {
     assert!(base64_decode("!!!").is_err());
+}
+
+#[test]
+fn image_source_from_bytes_encodes_base64() {
+    let image = ImageSource::from_bytes("image/png", b"fake-image-bytes");
+    let (mime, data) = match image {
+        ImageSource::InlineData { mime_type, data } => (mime_type, data),
+        ImageSource::Url { .. } => panic!("expected inline data"),
+    };
+    assert_eq!(mime, "image/png");
+    assert_eq!(data, "ZmFrZS1pbWFnZS1ieXRlcw==");
+}
+
+#[test]
+fn build_inner_req_list_with_inline_images() {
+    let prepared = PreparedRequest {
+        prompt: "Look at this".to_string(),
+        inline_images: vec![("image/png".to_string(), "ZmFrZQ==".to_string())],
+        config: None,
+        category: ModelCategory::Auto,
+    };
+    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
+    // Inline images are uploaded first and become WebAttachments; without
+    // uploading, the empty-attachment path still builds a valid slot 0.
+    assert!(inner[0].is_array());
+    assert_eq!(inner[0][0], serde_json::json!("Look at this"));
 }
