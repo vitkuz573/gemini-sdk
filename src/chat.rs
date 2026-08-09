@@ -242,6 +242,12 @@ impl Conversation {
     pub fn messages(&self) -> &[ChatMessage] {
         &self.messages
     }
+
+    /// Returns the model category selected for this conversation, if any.
+    #[must_use]
+    pub fn model_category(&self) -> Option<ModelCategory> {
+        self.model_category
+    }
 }
 
 /// Internal type used when preparing a generation request.

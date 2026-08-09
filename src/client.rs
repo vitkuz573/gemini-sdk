@@ -1014,6 +1014,12 @@ impl<'a> ChatBuilder<'a> {
         self.send_message_with_content(message).await
     }
 
+    /// Returns the model category that will be used for this turn.
+    #[must_use]
+    pub fn category(&self) -> ModelCategory {
+        self.category
+    }
+
     /// Sends a fully built [`ChatMessage`].
     ///
     /// This is useful for callers that need to control both text and image

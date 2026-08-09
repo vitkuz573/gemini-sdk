@@ -45,3 +45,34 @@ async fn live_text_chat() {
     let response = client.chat().send_message("Hi").await.unwrap();
     assert!(!response.text().is_empty());
 }
+
+#[test]
+fn conversation_history_grows_with_turns() {
+    let mut conv = Conversation::new();
+    conv.add_user_text("hi").add_model_text("hello");
+    assert_eq!(conv.messages().len(), 2);
+    assert_eq!(conv.messages()[0].role, "user");
+    assert_eq!(conv.messages()[1].role, "model");
+}
+
+#[test]
+fn conversation_preserves_category_across_clone() {
+    let conv = Conversation::new().with_model_category(ModelCategory::Pro);
+    let cloned = conv.clone();
+    assert_eq!(conv.model_category(), Some(ModelCategory::Pro));
+    assert_eq!(cloned.model_category(), Some(ModelCategory::Pro));
+}
+
+#[test]
+fn continue_conversation_uses_conversation_category() {
+    // Build a client only to obtain a ChatBuilder; the test never makes a
+    // network call because `send_message` is not invoked.
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
+    )
+    .unwrap();
+
+    let conv = Conversation::new().with_model_category(ModelCategory::Thinking);
+    let builder = client.continue_conversation(conv);
+    assert_eq!(builder.category(), ModelCategory::Thinking);
+}
