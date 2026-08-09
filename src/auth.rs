@@ -118,7 +118,8 @@ impl Credentials {
     /// cookies, a SAPISID source, and the legacy `SID`, `HSID`, `SSID` auth
     /// cookies.
     ///
-    /// For a server-authoritative check, use [`GeminiClient::verify_signed_in`].
+    /// For a server-authoritative check, use
+    /// [`crate::client::GeminiClient::verify_signed_in`].
     #[must_use]
     pub fn is_signed_in(&self) -> bool {
         self.has_cookie_credentials()

@@ -42,7 +42,8 @@
 //! - `browser-attestation` — enables the headless-Chrome CDP attestation module
 //!   required for image uploads and true multi-turn state.
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
+#![deny(rustdoc::broken_intra_doc_links)]
 #![warn(clippy::all)]
 #![allow(clippy::pedantic)]
 #![allow(
