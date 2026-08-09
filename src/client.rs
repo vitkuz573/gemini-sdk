@@ -9,6 +9,8 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 use tracing::debug;
 
+use std::sync::Mutex as StdMutex;
+
 use crate::auth::{Cookies, Credentials, CredentialsProvider};
 use crate::chat::{
     prepare_request, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
@@ -54,7 +56,7 @@ struct Inner {
     http: Client,
     cookies: Mutex<Cookies>,
     session: Mutex<SessionState>,
-    config: Mutex<ClientConfig>,
+    config: StdMutex<ClientConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -159,7 +161,11 @@ impl GeminiClient {
     where
         F: FnOnce(&mut ClientConfig),
     {
-        let mut config = self.inner.config.blocking_lock();
+        let mut config = self
+            .inner
+            .config
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         f(&mut config);
     }
 
@@ -185,7 +191,7 @@ impl GeminiClient {
                 http,
                 cookies: Mutex::new(cookies),
                 session: Mutex::new(session),
-                config: Mutex::new(config),
+                config: StdMutex::new(config),
             }),
         })
     }
@@ -775,7 +781,7 @@ impl GeminiClient {
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
         let cookie_header = self.cookies().await.to_header_value();
 
-        let language = self.inner.config.lock().await.language.clone();
+        let language = self.inner.config.lock().unwrap_or_else(|e| e.into_inner()).language.clone();
         let response = self
             .inner
             .http
