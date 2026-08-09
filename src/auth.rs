@@ -292,7 +292,7 @@ impl TryFrom<String> for Credentials {
 ///
 /// Implement this trait to source credentials from environment variables, files,
 /// keyrings, or other external stores without changing the simple
-/// [`GeminiClient::from_cookie_header`] constructor.
+/// [`crate::GeminiClient::from_cookie_header`] constructor.
 ///
 /// A boxed-future signature is used to keep the trait object-safe and avoid an
 /// extra `async-trait` runtime dependency.
