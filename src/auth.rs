@@ -250,13 +250,13 @@ impl Credentials {
 
 impl fmt::Debug for Credentials {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let redact = |v: &str| {
+        fn redact(v: &str) -> String {
             if v.is_empty() {
                 String::from("(empty)")
             } else {
                 String::from("<redacted>")
             }
-        };
+        }
         f.debug_struct("Credentials")
             .field("psid", &redact(&self.psid))
             .field("psidcc", &redact(&self.psidcc))
