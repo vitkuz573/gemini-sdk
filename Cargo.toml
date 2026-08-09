@@ -6,9 +6,22 @@ edition = "2021"
 license = "MIT"
 description = "A clean, well-structured, production-ready Rust SDK for interacting with the Google Gemini/Bard web frontend."
 repository = "https://github.com/vitkuz573/gemini-sdk"
+readme = "README.md"
 keywords = ["gemini", "bard", "google", "ai", "sdk"]
 categories = ["api-bindings", "network-programming", "asynchronous"]
 rust-version = "1.80"
+exclude = [
+    ".planning",
+    ".opencode",
+    "docs",
+    "benches",
+    "tests",
+    "examples",
+    "clippy.toml",
+    "rustfmt.toml",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+]
 
 [workspace]
 members = ["."]
