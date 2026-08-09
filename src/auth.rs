@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Name of the primary session cookie.
@@ -283,6 +285,56 @@ impl TryFrom<String> for Credentials {
 
     fn try_from(header: String) -> Result<Self, Self::Error> {
         Self::from_header(&header)
+    }
+}
+
+/// Async provider of [`Credentials`].
+///
+/// Implement this trait to source credentials from environment variables, files,
+/// keyrings, or other external stores without changing the simple
+/// [`GeminiClient::from_cookie_header`] constructor.
+///
+/// A boxed-future signature is used to keep the trait object-safe and avoid an
+/// extra `async-trait` runtime dependency.
+pub trait CredentialsProvider: Send + Sync {
+    /// Resolves the credentials used to authenticate requests.
+    fn credentials(&self) -> Pin<Box<dyn Future<Output = crate::Result<Credentials>> + Send + '_>>;
+}
+
+impl CredentialsProvider for Credentials {
+    fn credentials(&self) -> Pin<Box<dyn Future<Output = crate::Result<Credentials>> + Send + '_>> {
+        let creds = self.clone();
+        Box::pin(async move { Ok(creds) })
+    }
+}
+
+/// Default provider that parses a `Cookie` header string on demand.
+#[derive(Debug, Clone)]
+pub struct CookieHeaderProvider {
+    header: String,
+}
+
+impl CookieHeaderProvider {
+    /// Creates a provider from a raw `Cookie` header value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the header is missing required cookies.
+    pub fn new(header: impl Into<String>) -> Result<Self, CredentialsError> {
+        let header = header.into();
+        // Validate eagerly so construction fails fast with a typed error.
+        let _ = Credentials::from_header(&header)?;
+        Ok(Self { header })
+    }
+}
+
+impl CredentialsProvider for CookieHeaderProvider {
+    fn credentials(&self) -> Pin<Box<dyn Future<Output = crate::Result<Credentials>> + Send + '_>> {
+        let header = self.header.clone();
+        Box::pin(async move {
+            Credentials::from_header(&header)
+                .map_err(|e| crate::Error::Config(e.to_string()))
+        })
     }
 }
 

@@ -9,7 +9,7 @@ use serde_json::Value;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-use crate::auth::{Cookies, Credentials};
+use crate::auth::{Cookies, Credentials, CredentialsProvider};
 use crate::chat::{
     prepare_request, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, PreparedRequest,
@@ -111,6 +111,24 @@ impl GeminiClient {
     /// underlying HTTP client cannot be built.
     pub fn from_hashmap(cookies: HashMap<String, String>) -> Result<Self> {
         Self::from_cookies(cookies)
+    }
+
+    /// Creates a client from any [`CredentialsProvider`].
+    ///
+    /// This is the extension point for custom auth sources: implement
+    /// [`CredentialsProvider`] to read credentials from environment variables,
+    /// files, keyrings, etc., then pass the provider to this constructor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider cannot produce credentials or if the
+    /// underlying HTTP client cannot be built.
+    pub async fn from_provider<P>(provider: P) -> Result<Self>
+    where
+        P: CredentialsProvider + 'static,
+    {
+        let credentials = provider.credentials().await?;
+        Self::from_credentials(credentials)
     }
 
     /// Sets the language code sent to the Gemini frontend.
