@@ -178,6 +178,18 @@ No stubs were introduced. All deliverables are backed by passing tests or compil
 
 None - no external service configuration required.
 
+## Self-Check: PASSED
+
+- [x] `tests/integration_tests.rs` updated with multi-turn tests.
+- [x] `tests/proto_tests.rs` updated with category slot and inline image tests.
+- [x] `examples/multi_turn_chat.rs` created and registered in `Cargo.toml`.
+- [x] Commits `41e10a6`, `1f2c846`, `42eb8bb`, and `54618bf` exist.
+- [x] `cargo test --test integration_tests --quiet` passes (6 passed, 2 ignored).
+- [x] `cargo test --test proto_tests --quiet` passes (23 passed).
+- [x] `cargo build --examples --quiet` succeeds.
+- [x] `cargo clippy --all-targets -- -D warnings` passes.
+- [x] `STATE.md`, `ROADMAP.md`, and `REQUIREMENTS.md` updated.
+
 ## Next Phase Readiness
 - Chat and media behavior is validated for v0.1.
 - Ready for Plan 01-04 (reliability verification and tooling/publish gates).

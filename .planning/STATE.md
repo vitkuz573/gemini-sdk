@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: Core
 current_phase: "Phase 1: Stabilize v0.1 Core"
-current_plan: 3
+current_plan: 4
 status: in_progress
 stopped_at: None
-last_updated: "2026-08-09T13:36:55.015Z"
+last_updated: "2026-08-09T13:48:41.235Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,7 +21,7 @@ progress:
 **Initialized:** 2026-08-08
 **Current milestone:** v0.1
 **Current phase:** Phase 1: Stabilize v0.1 Core
-**Current Plan:** 3
+**Current Plan:** 4
 **Total Plans in Phase:** 4
 
 milestone: v0.1
@@ -37,7 +37,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-08)
 
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
-| 1 — Stabilize v0.1 Core | △ In Progress | 1/4 | 25% |
+| 1 — Stabilize v0.1 Core | △ In Progress | 3/4 | 75% |
 | 2 — Reliability & Protocol Hardening | ○ Pending | 0/3 | 0% |
 | 3 — Observability & Configurability | ○ Pending | 0/2 | 0% |
 | 4 — Advanced Media & Sessions | ○ Pending | 0/2 | 0% |
@@ -73,6 +73,7 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 |-------|------|----------|-------|
 | Phase 01-stabilize-v0-1-core P01 | 13m 52s | 3 tasks | 9 files |
 | Phase 01-stabilize-v0-1-core P02 | 19min | 3 tasks | 5 files |
+| Phase 01-stabilize-v0-1-core P03 | 6 min | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -80,9 +81,11 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 - [Phase ?]: Privatized ChatResponse and ModelInfo fields and added accessors to strengthen forward compatibility beyond #[non_exhaustive].
 - [Phase ?]: CredentialsProvider uses Pin<Box<dyn Future>> to avoid async-trait dependency — Keeps trait object-safe and dependency surface minimal for v0.1 per RESEARCH.md Pattern 4
 - [Phase ?]: Credentials Debug shows '<redacted>' / '(empty)' with no prefix leakage — Eliminates secret prefix entropy and length disclosure in logs
+- [Phase ?]: Added Conversation::model_category() and ChatBuilder::category() accessors — Enables external integration tests to verify category preservation without exposing mutable internal fields, preserving #[non_exhaustive] forward-compatibility.
+- [Phase ?]: Kept prepare_request pub(crate) for inline-image coverage — Inline-image encoding is verified via PreparedRequest construction in proto tests and ImageSource::from_bytes unit tests; no need to widen visibility.
 
 ## Session
 
-**Last session:** 2026-08-09T13:35:31.933Z
+**Last session:** 2026-08-09T13:47:07.569Z
 **Stopped at:** None
 **Resume file:** None

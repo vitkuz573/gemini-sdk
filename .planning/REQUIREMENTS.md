@@ -21,15 +21,15 @@
 
 ### Chat
 
-- [ ] **CHAT-01**: Text-only chat returns a complete `ChatResponse` with text and optional reasoning content.
+- [x] **CHAT-01**: Text-only chat returns a complete `ChatResponse` with text and optional reasoning content.
 - [ ] **CHAT-02**: Streaming chat yields `ChatResponse` chunks via `futures::Stream`.
-- [ ] **CHAT-03**: Multi-turn `Conversation` preserves state across turns and can be cloned/shared safely.
+- [x] **CHAT-03**: Multi-turn `Conversation` preserves state across turns and can be cloned/shared safely.
 - [ ] **CHAT-04**: System instructions and generation config (temperature, top_p, max_tokens) can be set per chat or per client.
-- [ ] **CHAT-05**: Model category selection (`Auto`, `Pro`, `Flash`, etc.) is preserved and validated.
+- [x] **CHAT-05**: Model category selection (`Auto`, `Pro`, `Flash`, etc.) is preserved and validated.
 
 ### Media
 
-- [ ] **MEDIA-01**: Inline image uploads encode data and produce a usable upload ID.
+- [x] **MEDIA-01**: Inline image uploads encode data and produce a usable upload ID.
 - [ ] **MEDIA-02**: Upload progress is observable through an async callback or stream.
 - [ ] **MEDIA-03**: Audio and video uploads are supported with the same progress semantics as images.
 
@@ -111,12 +111,12 @@
 | AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Complete |
 | AUTH-04 | Phase 2 | Pending |
-| CHAT-01 | Phase 1 | Pending |
+| CHAT-01 | Phase 1 | Complete |
 | CHAT-02 | Phase 2 | Pending |
-| CHAT-03 | Phase 1 | Pending |
+| CHAT-03 | Phase 1 | Complete |
 | CHAT-04 | Phase 2 | Pending |
-| CHAT-05 | Phase 1 | Pending |
-| MEDIA-01 | Phase 1 | Pending |
+| CHAT-05 | Phase 1 | Complete |
+| MEDIA-01 | Phase 1 | Complete |
 | MEDIA-02 | Phase 3 | Pending |
 | MEDIA-03 | Phase 4 | Pending |
 | PROTO-01 | Phase 2 | Pending |
