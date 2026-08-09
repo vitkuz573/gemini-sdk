@@ -343,6 +343,7 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
     // Maps a response-part id to the most complete content seen so far.
     let mut accs: Vec<(String, PartContent)> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
+    let mut last_error: Option<String> = None;
 
     for line in body.lines() {
         let line = line.trim();
@@ -382,17 +383,26 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
 
         let parsed: Value = match serde_json::from_str(balanced) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(e) => {
+                last_error = Some(format!("invalid outer JSON: {e}"));
+                continue;
+            }
         };
         let arr = match parsed.as_array() {
             Some(a) => a,
-            None => continue,
+            None => {
+                last_error = Some("outer value is not an array".to_string());
+                continue;
+            }
         };
 
         for item in arr {
             let entry = match item.as_array() {
                 Some(e) if e.len() >= 3 => e,
-                _ => continue,
+                _ => {
+                    last_error = Some("wrb.fr entry is not an array of length >= 3".to_string());
+                    continue;
+                }
             };
             let rpc_id = entry[0].as_str().unwrap_or("");
             if rpc_id != "wrb.fr" {
@@ -400,31 +410,47 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
             }
             let json_str = match entry[2].as_str() {
                 Some(s) => s,
-                None => continue,
+                None => {
+                    last_error = Some("wrb.fr payload is not a string".to_string());
+                    continue;
+                }
             };
             let inner_parsed: Value = match serde_json::from_str(json_str) {
                 Ok(v) => v,
-                Err(_) => continue,
+                Err(e) => {
+                    last_error = Some(format!("invalid wrb.fr payload JSON: {e}"));
+                    continue;
+                }
             };
             let inner_arr = match inner_parsed.as_array() {
                 Some(a) => a,
-                None => continue,
+                None => {
+                    last_error = Some("wrb.fr payload is not an array".to_string());
+                    continue;
+                }
             };
             let parts_json = if let Some(parts) = inner_arr.get(4).and_then(|v| v.as_array()) {
                 parts
             } else if let Some(first) = inner_arr.first().and_then(|v| v.as_array()) {
                 match first.get(4).and_then(|v| v.as_array()) {
                     Some(parts) => parts,
-                    None => continue,
+                    None => {
+                        last_error = Some("candidate parts array not found at index 4".to_string());
+                        continue;
+                    }
                 }
             } else {
+                last_error = Some("candidate wrapper is not an array".to_string());
                 continue;
             };
 
             for part in parts_json {
                 let part_arr = match part.as_array() {
                     Some(a) => a,
-                    None => continue,
+                    None => {
+                        last_error = Some("candidate part is not an array".to_string());
+                        continue;
+                    }
                 };
                 let id = part_arr.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let content = extract_part_content(part_arr);
@@ -469,10 +495,45 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                 message: format!("Gemini returned BardErrorInfo [{code}]"),
             });
         }
-        Err(Error::parse("could not parse response from Gemini web frontend"))
+        let snippet = redact_body_snippet(body, 200);
+        Err(Error::parse(format!(
+            "could not parse response from Gemini web frontend (last error: {:?}; snippet: {})",
+            last_error, snippet
+        )))
     } else {
         Ok(all_parts)
     }
+}
+
+/// Returns a short, redacted prefix of a response body for diagnostics.
+fn redact_body_snippet(body: &str, max_len: usize) -> String {
+    let end = body.char_indices().map(|(i, _)| i).nth(max_len).unwrap_or(body.len());
+    let snippet = &body[..end];
+    // Redact values that look like cookie values or long tokens.
+    let mut out = String::with_capacity(snippet.len());
+    let mut in_value = false;
+    let mut name_start = 0usize;
+    let mut prev = '\0';
+    for (i, c) in snippet.char_indices() {
+        if c == '=' && !in_value && i > name_start {
+            in_value = true;
+            out.push(c);
+        } else if in_value && (c == ';' || c == ',' || c.is_whitespace()) {
+            if prev != '=' {
+                out.push_str("<redacted>");
+            }
+            in_value = false;
+            name_start = i + c.len_utf8();
+            out.push(c);
+        } else if !in_value {
+            out.push(c);
+        }
+        prev = c;
+    }
+    if in_value {
+        out.push_str("<redacted>");
+    }
+    out
 }
 
 fn is_id_string(s: &str) -> bool {
