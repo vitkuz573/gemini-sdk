@@ -14,9 +14,9 @@
 
 ### Auth
 
-- [ ] **AUTH-01**: Cookie-based auth accepts a header string and validates required cookies (`__Secure-1PSID`, `__Secure-1PSIDCC`).
-- [ ] **AUTH-02**: A `CredentialsProvider` trait allows custom auth sources (env, file, keyring) without changing `GeminiClient` API.
-- [ ] **AUTH-03**: Credentials are fully redacted in `Debug` output.
+- [x] **AUTH-01**: Cookie-based auth accepts a header string and validates required cookies (`__Secure-1PSID`, `__Secure-1PSIDCC`).
+- [x] **AUTH-02**: A `CredentialsProvider` trait allows custom auth sources (env, file, keyring) without changing `GeminiClient` API.
+- [x] **AUTH-03**: Credentials are fully redacted in `Debug` output.
 - [ ] **AUTH-04**: Consent flow (`SOCS` cookie acquisition) persists merged cookies back into the client state.
 
 ### Chat
@@ -107,9 +107,9 @@
 | API-02 | Phase 1 | Complete |
 | API-03 | Phase 1 | Complete |
 | API-04 | Phase 1 | Complete |
-| AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 1 | Pending |
-| AUTH-03 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
+| AUTH-02 | Phase 1 | Complete |
+| AUTH-03 | Phase 1 | Complete |
 | AUTH-04 | Phase 2 | Pending |
 | CHAT-01 | Phase 1 | Pending |
 | CHAT-02 | Phase 2 | Pending |

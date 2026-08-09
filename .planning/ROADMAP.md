@@ -26,9 +26,11 @@
 
 - [x] 01-01-PLAN.md
 
+2/4 plans executed
+
 1/4 plans executed
 
-- [ ] 01-02-PLAN.md — Auth ergonomics: CredentialsProvider trait and redaction.
+- [x] 01-02-PLAN.md — Auth ergonomics: CredentialsProvider trait and redaction.
 - [ ] 01-03-PLAN.md — Chat + media tests and multi-turn example.
 - [ ] 01-04-PLAN.md — Reliability verification and tooling/publish gates.
 

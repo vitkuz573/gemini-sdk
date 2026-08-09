@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: Core
 current_phase: "Phase 1: Stabilize v0.1 Core"
-current_plan: 2
+current_plan: 3
 status: in_progress
 stopped_at: None
-last_updated: "2026-08-09T13:24:32.616Z"
+last_updated: "2026-08-09T13:36:55.015Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -21,7 +21,7 @@ progress:
 **Initialized:** 2026-08-08
 **Current milestone:** v0.1
 **Current phase:** Phase 1: Stabilize v0.1 Core
-**Current Plan:** 2
+**Current Plan:** 3
 **Total Plans in Phase:** 4
 
 milestone: v0.1
@@ -72,14 +72,17 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
 | Phase 01-stabilize-v0-1-core P01 | 13m 52s | 3 tasks | 9 files |
+| Phase 01-stabilize-v0-1-core P02 | 19min | 3 tasks | 5 files |
 
 ## Decisions
 
 - [Phase ?]: Used runtime API stability tests instead of trybuild to keep dev-dependency footprint minimal.
 - [Phase ?]: Privatized ChatResponse and ModelInfo fields and added accessors to strengthen forward compatibility beyond #[non_exhaustive].
+- [Phase ?]: CredentialsProvider uses Pin<Box<dyn Future>> to avoid async-trait dependency — Keeps trait object-safe and dependency surface minimal for v0.1 per RESEARCH.md Pattern 4
+- [Phase ?]: Credentials Debug shows '<redacted>' / '(empty)' with no prefix leakage — Eliminates secret prefix entropy and length disclosure in logs
 
 ## Session
 
-**Last session:** 2026-08-09T13:22:22.052Z
+**Last session:** 2026-08-09T13:35:31.933Z
 **Stopped at:** None
 **Resume file:** None
