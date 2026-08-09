@@ -13,6 +13,10 @@ pub struct ChatMessage {
     /// Role of the message author: `user` or `model`.
     pub role: String,
     /// Content parts that make up this message.
+    ///
+    /// This field is public to allow low-level construction, but callers are
+    /// responsible for keeping roles and part types consistent with what the
+    /// Gemini web frontend expects. Malformed messages will fail at send time.
     pub parts: Vec<ContentPart>,
 }
 
@@ -41,6 +45,12 @@ impl ChatMessage {
             role: role.into(),
             parts: vec![ContentPart::Image(source)],
         }
+    }
+
+    /// Appends a content part to this message.
+    pub fn with_part(mut self, part: ContentPart) -> Self {
+        self.parts.push(part);
+        self
     }
 }
 
@@ -200,6 +210,11 @@ pub(crate) fn extract_prompt(message: &ChatMessage) -> Result<String> {
 }
 
 /// An in-progress conversation that carries multi-turn state.
+///
+/// `messages` is public as a low-level escape hatch, but callers that mutate it
+/// directly are responsible for keeping roles and part types valid. Malformed
+/// conversations will fail at send time when `extract_prompt` validates the
+/// outgoing message.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct Conversation {

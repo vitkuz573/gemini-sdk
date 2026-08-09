@@ -1038,10 +1038,9 @@ impl<'a> ChatBuilder<'a> {
         text: impl Into<String>,
         images: Vec<ImageSource>,
     ) -> Result<ChatResponse> {
-        let mut message = ChatMessage::user(text);
-        for image in images {
-            message.parts.push(ContentPart::Image(image));
-        }
+        let message = images.into_iter().fold(ChatMessage::user(text), |m, image| {
+            m.with_part(ContentPart::Image(image))
+        });
         self.send_message_with_content(message).await
     }
 
