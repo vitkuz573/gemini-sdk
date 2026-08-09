@@ -272,14 +272,30 @@ impl GeminiClient {
 
     /// Sends a generation request and returns the parsed response.
     ///
-    /// Prefer using [`GeminiClient::chat`] for an ergonomic API.
+    /// Prefer using [`GeminiClient::chat`] for an ergonomic API. If you need to
+    /// pass an existing [`Conversation`] use [`GeminiClient::generate_with_conversation`].
     pub async fn generate(
         &self,
         message: &ChatMessage,
         category: ModelCategory,
         config: Option<GenerationConfig>,
     ) -> Result<ChatResponse> {
-        let body = self.generate_raw(message, None, category, config).await?;
+        self.generate_with_conversation(message, None, category, config).await
+    }
+
+    /// Sends a generation request with optional conversation state and returns
+    /// the parsed response.
+    ///
+    /// This is the public entry point for callers that manage a
+    /// [`Conversation`] manually instead of using the builder API.
+    pub async fn generate_with_conversation(
+        &self,
+        message: &ChatMessage,
+        conversation: Option<&Conversation>,
+        category: ModelCategory,
+        config: Option<GenerationConfig>,
+    ) -> Result<ChatResponse> {
+        let body = self.generate_raw(message, conversation, category, config).await?;
         parse_chat_response(&body)
     }
 
