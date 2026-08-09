@@ -42,7 +42,7 @@
 
 ### Reliability
 
-- [ ] **REL-01**: Retries use exponential backoff with jitter for transient HTTP errors and rate limits.
+- [x] **REL-01**: Retries use exponential backoff with jitter for transient HTTP errors and rate limits.
 - [ ] **REL-02**: Non-async builder methods do not call `blocking_lock` inside a Tokio runtime.
 - [ ] **REL-03**: WAA / ogads attestation failures surface a typed error instead of silently falling back to synthetic context.
 - [ ] **REL-04**: A shared `reqwest::Client` can be injected to control connection pooling.
@@ -61,10 +61,10 @@
 
 ### Tooling & Release
 
-- [ ] **TOOL-01**: `cargo test` passes without live cookies using fixtures and mocked fixtures.
-- [ ] **TOOL-02**: `cargo clippy --all-targets -- -D warnings` passes.
-- [ ] **TOOL-03**: `cargo doc --no-deps` builds with no warnings.
-- [ ] **TOOL-04**: Examples compile and demonstrate text chat, streaming, image upload, and multi-turn.
+- [x] **TOOL-01**: `cargo test` passes without live cookies using fixtures and mocked fixtures.
+- [x] **TOOL-02**: `cargo clippy --all-targets -- -D warnings` passes.
+- [x] **TOOL-03**: `cargo doc --no-deps` builds with no warnings.
+- [x] **TOOL-04**: Examples compile and demonstrate text chat, streaming, image upload, and multi-turn.
 - [ ] **TOOL-05**: Crate is published to crates.io with a valid `Cargo.toml` manifest and LICENSE file.
 
 ## v2 Requirements
@@ -123,7 +123,7 @@
 | PROTO-02 | Phase 2 | Pending |
 | PROTO-03 | Phase 3 | Pending |
 | PROTO-04 | Phase 2 | Pending |
-| REL-01 | Phase 1 | Pending |
+| REL-01 | Phase 1 | Complete |
 | REL-02 | Phase 2 | Pending |
 | REL-03 | Phase 2 | Pending |
 | REL-04 | Phase 3 | Pending |
@@ -133,10 +133,10 @@
 | ADV-01 | Phase 5 | Pending |
 | ADV-02 | Phase 4 | Pending |
 | ADV-03 | Phase 5 | Pending |
-| TOOL-01 | Phase 1 | Pending |
-| TOOL-02 | Phase 1 | Pending |
-| TOOL-03 | Phase 1 | Pending |
-| TOOL-04 | Phase 1 | Pending |
+| TOOL-01 | Phase 1 | Complete |
+| TOOL-02 | Phase 1 | Complete |
+| TOOL-03 | Phase 1 | Complete |
+| TOOL-04 | Phase 1 | Complete |
 | TOOL-05 | Phase 6 | Pending |
 
 **Coverage:**

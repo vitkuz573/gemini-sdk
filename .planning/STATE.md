@@ -6,13 +6,13 @@ current_phase: "Phase 1: Stabilize v0.1 Core"
 current_plan: 4
 status: in_progress
 stopped_at: None
-last_updated: "2026-08-09T13:48:41.235Z"
+last_updated: "2026-08-09T14:06:46.874Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 17
 ---
 
 # Project State
@@ -74,6 +74,7 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 | Phase 01-stabilize-v0-1-core P01 | 13m 52s | 3 tasks | 9 files |
 | Phase 01-stabilize-v0-1-core P02 | 19min | 3 tasks | 5 files |
 | Phase 01-stabilize-v0-1-core P03 | 6 min | 3 tasks | 6 files |
+| Phase 01-stabilize-v0-1-core P04 | 12min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -83,9 +84,10 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 - [Phase ?]: Credentials Debug shows '<redacted>' / '(empty)' with no prefix leakage — Eliminates secret prefix entropy and length disclosure in logs
 - [Phase ?]: Added Conversation::model_category() and ChatBuilder::category() accessors — Enables external integration tests to verify category preservation without exposing mutable internal fields, preserving #[non_exhaustive] forward-compatibility.
 - [Phase ?]: Kept prepare_request pub(crate) for inline-image coverage — Inline-image encoding is verified via PreparedRequest construction in proto tests and ImageSource::from_bytes unit tests; no need to widen visibility.
+- [Phase ?]: Phase 1 Plan 4: Extended Error::is_transient to inspect reqwest::Error::status() so transport-level 429/5xx errors are retried.
 
 ## Session
 
-**Last session:** 2026-08-09T13:47:07.569Z
+**Last session:** 2026-08-09T14:05:07.821Z
 **Stopped at:** None
 **Resume file:** None
