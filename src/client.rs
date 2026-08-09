@@ -985,7 +985,7 @@ mod client_tests {
     #[test]
     fn extract_waa_fingerprint_anchors_to_pro_model_block() {
         // Minimal otAQ7b-like model list with a decoy hex token outside the list.
-        let body = r#"decoytoken00000000 [[["cf41b0e0dd7d53e5","Flash-Lite",...],["fbb127bbb056c959","Flash",...],["9d8ca3786ebdfbea","Pro","Advanced",...]]]]"#;
+        let body = r#"decoytoken00000000 [[["cf41b0e0dd7d53e5","Flash-Lite",...],["fbb127bbb056c959","Flash",...],["9d8ca3786ebdfbea","Pro","Advanced",...,"9d8ca3786ebdfbea"]]]"#;
         assert_eq!(
             extract_waa_fingerprint_from_model_list(body),
             Some("9d8ca3786ebdfbea".to_string())
