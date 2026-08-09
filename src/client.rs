@@ -322,9 +322,10 @@ impl GeminiClient {
         while let Some(chunk) = response.chunk().await.map_err(Error::Request)? {
             body_bytes.extend_from_slice(&chunk);
         }
-        let body = String::from_utf8_lossy(&body_bytes).to_string();
+        let body = String::from_utf8(body_bytes)
+            .map_err(|e| Error::Parse(format!("invalid UTF-8 in response: {e}")))?;
 
-        self.ingest_conversation_state(&body).await;
+        self.ingest_conversation_state(&body).await?;
         Ok(body)
     }
 
@@ -426,11 +427,17 @@ impl GeminiClient {
     ///
     /// This helper is intended for callers that consume the byte stream
     /// themselves; [`GeminiClient::generate_raw`] calls it automatically.
-    pub async fn ingest_conversation_state(&self, body: &str) {
-        if let Ok(state) = extract_conversation_state(body) {
-            let mut session = self.inner.session.lock().await;
-            session.conversation_state = Some(map_state(state));
-        }
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the response body cannot be parsed for conversation
+    /// state. On success the session state is updated; on error it is left
+    /// unchanged so the next turn does not send corrupt state upstream.
+    pub async fn ingest_conversation_state(&self, body: &str) -> Result<()> {
+        let state = extract_conversation_state(body)?;
+        let mut session = self.inner.session.lock().await;
+        session.conversation_state = Some(map_state(state));
+        Ok(())
     }
 
     async fn build_stream_generate_request(
