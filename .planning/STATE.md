@@ -3,7 +3,9 @@
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
 **Current milestone:** v0.1
-**Current phase:** Phase 1 — Stabilize v0.1 Core
+**Current phase:** Phase 1: Stabilize v0.1 Core
+
+milestone: v0.1
 
 ## Project Reference
 

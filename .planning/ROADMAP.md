@@ -4,11 +4,11 @@
 **Created:** 2026-08-08
 **Goal:** Stable, documented, semver-respecting Rust SDK for the Gemini web frontend, published on crates.io.
 
-## Phase 1 — Stabilize v0.1 Core
+## Phase 1: Stabilize v0.1 Core
 
 **Goal:** Lock the public API, fix auth ergonomics, and make the SDK publishable as v0.1.
 
-**Covers requirements:** API-01, API-02, API-03, API-04, AUTH-01, AUTH-02, AUTH-03, CHAT-01, CHAT-02, CHAT-03, CHAT-05, MEDIA-01, REL-01, TOOL-01, TOOL-02, TOOL-03, TOOL-04
+**Requirements:** API-01, API-02, API-03, API-04, AUTH-01, AUTH-02, AUTH-03, CHAT-01, CHAT-02, CHAT-03, CHAT-05, MEDIA-01, REL-01, TOOL-01, TOOL-02, TOOL-03, TOOL-04
 
 **Key outcomes:**
 - Public API marked and documented for forward compatibility.
@@ -23,11 +23,11 @@
 
 ---
 
-## Phase 2 — Reliability & Protocol Hardening
+## Phase 2: Reliability & Protocol Hardening
 
 **Goal:** Eliminate known fragility from CONCERNS.md and make the SDK resilient to Google's protocol drift.
 
-**Covers requirements:** AUTH-04, CHAT-04, PROTO-01, PROTO-02, PROTO-04, REL-02, REL-03
+**Requirements:** AUTH-04, CHAT-04, PROTO-01, PROTO-02, PROTO-04, REL-02, REL-03
 
 **Key outcomes:**
 - Cookie merge persists back into client state.
@@ -42,11 +42,11 @@
 
 ---
 
-## Phase 3 — Observability & Configurability
+## Phase 3: Observability & Configurability
 
 **Goal:** Let production users observe, meter, and tune the SDK without forking it.
 
-**Covers requirements:** PROTO-03, REL-04, OBS-01, OBS-02, MEDIA-02
+**Requirements:** PROTO-03, REL-04, OBS-01, OBS-02, MEDIA-02
 
 **Key outcomes:**
 - Request/response hooks API.
@@ -61,11 +61,11 @@
 
 ---
 
-## Phase 4 — Advanced Media & Sessions
+## Phase 4: Advanced Media & Sessions
 
 **Goal:** Support richer media types and persistent sessions.
 
-**Covers requirements:** MEDIA-03, ADV-02
+**Requirements:** MEDIA-03, ADV-02
 
 **Key outcomes:**
 - Audio and video upload paths.
@@ -77,11 +77,11 @@
 
 ---
 
-## Phase 5 — Tools & Auto-Refresh
+## Phase 5: Tools & Auto-Refresh
 
 **Goal:** Add function calling and reduce manual auth maintenance.
 
-**Covers requirements:** ADV-01, ADV-03, OBS-03
+**Requirements:** ADV-01, ADV-03, OBS-03
 
 **Key outcomes:**
 - Tools / function calling round-trip.
@@ -94,11 +94,11 @@
 
 ---
 
-## Phase 6 — v1.0 Release
+## Phase 6: v1.0 Release
 
 **Goal:** Polish documentation, verify semver, and publish v1.0.
 
-**Covers requirements:** TOOL-05
+**Requirements:** TOOL-05
 
 **Key outcomes:**
 - Final API audit and deprecation cleanup.
