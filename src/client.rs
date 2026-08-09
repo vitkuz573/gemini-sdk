@@ -52,7 +52,7 @@ pub struct GeminiClient {
 
 struct Inner {
     http: Client,
-    cookies: Cookies,
+    cookies: std::sync::Mutex<Cookies>,
     session: Mutex<SessionState>,
     config: Mutex<ClientConfig>,
 }
@@ -165,7 +165,7 @@ impl GeminiClient {
 
     /// Returns a clone of the cookies used by this client.
     pub(crate) fn cookies(&self) -> Cookies {
-        self.inner.cookies.clone()
+        self.inner.cookies.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
     }
 
     fn with_config(cookies: Cookies, config: ClientConfig) -> Result<Self> {
@@ -183,7 +183,7 @@ impl GeminiClient {
         Ok(Self {
             inner: Arc::new(Inner {
                 http,
-                cookies,
+                cookies: std::sync::Mutex::new(cookies),
                 session: Mutex::new(session),
                 config: Mutex::new(config),
             }),
@@ -219,7 +219,7 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let url = format!("{WEB_BASE_URL}/_/BardChatUi/data/batchexecute");
-        let cookies = self.inner.cookies.clone();
+        let cookies = self.cookies();
         let (params, body, headers, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid();
@@ -416,7 +416,7 @@ impl GeminiClient {
         prepared: &PreparedRequest,
     ) -> Result<(Vec<Value>, String, Vec<(String, String)>, String)> {
         let request_uuid = fresh_request_uuid();
-        let cookies = self.inner.cookies.clone();
+        let cookies = self.cookies();
         let (conversation_state, session_for_upload, language, waa_token, nonce) = {
             let mut session = self.inner.session.lock().await;
             session.nonce = Some(crate::proto::fresh_request_nonce());
@@ -517,14 +517,18 @@ impl GeminiClient {
     /// the session state.
     async fn run_waa_init_chain(&self) -> Result<()> {
         let (at, language, build_label, session_id, cookie_header, credentials) = {
+            let (cookie_header, credentials) = {
+                let cookies = self.cookies();
+                (cookies.to_header_value(), cookies.clone())
+            };
             let session = self.inner.session.lock().await;
             (
                 session.access_token.clone(),
                 session.language.clone(),
                 session.build_label.clone(),
                 session.session_id.clone(),
-                self.inner.cookies.to_header_value(),
-                self.inner.cookies.clone(),
+                cookie_header,
+                credentials,
             )
         };
 
@@ -728,7 +732,7 @@ impl GeminiClient {
     async fn fetch_app_page(&self) -> Result<String> {
         let (language, cookie_header) = {
             let session = self.inner.session.lock().await;
-            (session.language.clone(), self.inner.cookies.to_header_value())
+            (session.language.clone(), self.cookies().to_header_value())
         };
 
         let url = format!("{WEB_BASE_URL}/app?hl={language}");
@@ -752,7 +756,7 @@ impl GeminiClient {
     }
 
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
-        let cookie_header = self.inner.cookies.to_header_value();
+        let cookie_header = self.cookies().to_header_value();
 
         let language = self.inner.config.lock().await.language.clone();
         let response = self
@@ -776,8 +780,9 @@ impl GeminiClient {
         }
 
         {
-            let mut cookies = self.inner.cookies.clone();
+            let mut cookies = self.cookies();
             cookies.merge_response_cookies(response.cookies());
+            *self.inner.cookies.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = cookies;
         }
 
         self.fetch_app_page().await
@@ -915,11 +920,11 @@ fn is_valid_waa_context_array(arr: &[Value]) -> bool {
         return false;
     }
     // Index 4 must be a fingerprint (string) or null.
-    if !arr.get(4).map_or(false, |v| v.is_null() || v.is_string()) {
+    if !arr.get(4).is_some_and(|v| v.is_null() || v.is_string()) {
         return false;
     }
     // Index 15 must be a uuid/string or null (we will overwrite it).
-    if !arr.get(15).map_or(false, |v| v.is_null() || v.is_string()) {
+    if !arr.get(15).is_some_and(|v| v.is_null() || v.is_string()) {
         return false;
     }
     true
