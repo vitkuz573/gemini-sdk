@@ -323,8 +323,8 @@ impl GeminiClient {
     ///
     /// This lower-level method gives callers direct access to the upstream WIZ
     /// byte stream. After the stream is consumed, callers should use
-    /// [`GeminiClient::parse_stream_body`] to extract conversation state and the
-    /// parsed response, or call [`GeminiClient::generate_raw`] which does both.
+    /// [`GeminiClient::ingest_conversation_state`] to persist state, or call
+    /// [`GeminiClient::generate_raw`] which does both.
     pub async fn stream_generate_raw(
         &self,
         message: &ChatMessage,
