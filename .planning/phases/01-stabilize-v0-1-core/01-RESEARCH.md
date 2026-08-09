@@ -442,22 +442,13 @@ let response2 = client
 
 **If this table is empty:** Not applicable — assumptions are listed above.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should `ChatResponse` expose a streaming API in v0.1?**
-   - What we know: CHAT-02 requires streaming to yield `ChatResponse` chunks via `futures::Stream`. The current `stream_generate` returns a raw `reqwest::Response`.
-   - What's unclear: Whether a typed stream adapter should be implemented in Phase 1 or deferred.
-   - Recommendation: Defer the typed stream adapter to Phase 2/3; in Phase 1, stabilize the raw streaming method signature and document that parsing is caller-managed.
+1. **Should `ChatResponse` expose a streaming API in v0.1?** — RESOLVED: Defer the typed stream adapter to Phase 2/3; in Phase 1, stabilize the raw streaming method signature and document that parsing is caller-managed.
 
-2. **How should `CredentialsProvider` expose async behavior?**
-   - What we know: Providers may read from files, env, or keyrings; some may need async.
-   - What's unclear: Whether the trait should be async (requires `async-trait` or RPITIT) or sync with the client initializing auth once.
-   - Recommendation: Use `async-trait` for simplicity given MSRV 1.80, or define a `Pin<Box<dyn Future>>` signature to avoid the extra dependency. Prefer the latter for v0.1 to keep dependency surface small.
+2. **How should `CredentialsProvider` expose async behavior?** — RESOLVED: Define a `Pin<Box<dyn Future>>` signature to avoid the extra `async-trait` dependency and keep the dependency surface small for v0.1.
 
-3. **What is the exact `Cargo.toml` metadata needed for crates.io?**
-   - What we know: `name`, `version`, `authors`, `edition`, `license`, `description`, `repository`, `keywords`, `categories`, and `rust-version` are already present.
-   - What's unclear: Whether additional fields (`readme`, `homepage`, `exclude`) are required for v0.1.
-   - Recommendation: Add `readme = "README.md"` and review `exclude` to keep the `.crate` file small; `cargo package` already succeeds.
+3. **What is the exact `Cargo.toml` metadata needed for crates.io?** — RESOLVED: Add `readme = "README.md"` and an `exclude` array (`.planning/`, `.opencode/`, `docs/`, `benches/`, `tests/`, `examples/`, config files) to keep the `.crate` file small.
 
 ## Environment Availability
 
