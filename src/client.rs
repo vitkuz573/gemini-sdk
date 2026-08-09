@@ -33,6 +33,9 @@ const OGADS_BASE_URL: &str = "https://ogads-pa.clients6.google.com";
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
 const X_CLIENT_DATA: &str = "CI7yygE=";
+/// Best-effort default fingerprint used when the live session does not yield
+/// one (e.g., ogads init failed). The captured `Pro` model id is reused as a
+/// stand-in but may not match the live model selection — see spike findings.
 const WAA_FINGERPRINT_DEFAULT: &str = "e6fa609c3fa255c0";
 const WAA_API_KEY: &str = "AIzaSyBGb5fGAyC-pRcRU6MUHb__b_vKha71HRE";
 const OGADS_API_KEY: &str = "AIzaSyCbsbvGCe7C9mCtdaTycZB2eUFuzsYKG_E";
@@ -299,7 +302,8 @@ impl GeminiClient {
         }
         let body = String::from_utf8_lossy(&body_bytes).to_string();
 
-        self.parse_stream_body(&body).await
+        self.ingest_conversation_state(&body).await;
+        Ok(body)
     }
 
     /// Starts a streaming generation request and returns the upstream response.
@@ -864,18 +868,18 @@ fn build_waa_context_header(
     context: Option<&str>,
     uuid: &str,
 ) -> String {
-    // Prefer a context returned by ogads if it is a valid JSON array.
+    // Prefer a context returned by ogads if it matches the known header shape.
     if let Some(ctx) = context {
-        if ctx.starts_with('[') {
-            if let Ok(Value::Array(mut arr)) = serde_json::from_str::<Value>(ctx) {
-                if arr.len() >= 16 {
-                    arr[15] = serde_json::json!(uuid);
-                    if arr.get(4).map_or(true, |v| v.is_null()) {
-                        arr[4] = serde_json::json!(fingerprint.unwrap_or(WAA_FINGERPRINT_DEFAULT));
-                    }
-                    return serde_json::to_string(&arr).unwrap_or_default();
+        if let Ok(Value::Array(arr)) = serde_json::from_str::<Value>(ctx) {
+            if is_valid_waa_context_array(&arr) {
+                let mut arr = arr;
+                arr[15] = serde_json::json!(uuid);
+                if arr.get(4).map_or(true, |v| v.is_null()) {
+                    arr[4] = serde_json::json!(fingerprint.unwrap_or(WAA_FINGERPRINT_DEFAULT));
                 }
+                return serde_json::to_string(&arr).unwrap_or_default();
             }
+            debug!("ogads WAA context has unexpected shape; falling back to default template");
         }
     }
     serde_json::json!([
@@ -898,6 +902,27 @@ fn build_waa_context_header(
         uuid
     ])
     .to_string()
+}
+
+/// Validates that an ogads response array looks like the expected
+/// `x-goog-ext-525001261-jspb` header shape before we mutate it.
+fn is_valid_waa_context_array(arr: &[Value]) -> bool {
+    // The header is a 17-element array with specific scalar shapes at indices
+    // we touch. This is intentionally conservative: if the upstream response
+    // changes, we fall back to the default template rather than send garbage.
+    const EXPECTED_LEN: usize = 17;
+    if arr.len() != EXPECTED_LEN {
+        return false;
+    }
+    // Index 4 must be a fingerprint (string) or null.
+    if !arr.get(4).map_or(false, |v| v.is_null() || v.is_string()) {
+        return false;
+    }
+    // Index 15 must be a uuid/string or null (we will overwrite it).
+    if !arr.get(15).map_or(false, |v| v.is_null() || v.is_string()) {
+        return false;
+    }
+    true
 }
 
 fn extract_waa_fingerprint_from_model_list(body: &str) -> Option<String> {
