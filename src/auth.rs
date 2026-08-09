@@ -254,7 +254,7 @@ impl fmt::Debug for Credentials {
             if v.is_empty() {
                 String::from("(empty)")
             } else {
-                format!("{}...<redacted>", &v[..v.len().min(4)])
+                String::from("<redacted>")
             }
         };
         f.debug_struct("Credentials")
@@ -533,7 +533,7 @@ mod tests {
         let debug = format!("{creds:?}");
         assert!(!debug.contains("secret-psid"));
         assert!(!debug.contains("secret-papi"));
-        assert!(debug.contains("redacted"));
+        assert!(debug.contains("\"<redacted>\""));
     }
 
     #[test]
