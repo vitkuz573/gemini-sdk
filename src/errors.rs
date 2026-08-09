@@ -109,7 +109,6 @@ mod tests {
     #[test]
     fn error_is_send_sync_static() {
         assert_impl_all!(Error: Send, Sync, std::error::Error);
-        static_assertions::assert_type_eq_all!(Error, Error);
         fn assert_static<T: 'static>() {}
         assert_static::<Error>();
     }

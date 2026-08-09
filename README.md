@@ -93,6 +93,22 @@ WIZ slot layout, response frames, and attestation flow, see
 - `errors` — Strongly-typed error enum with transient detection.
 - `attestation` *(feature)* — Headless Chrome CDP payload capture.
 
+## Semver policy
+
+This crate follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+- **Before v1.0 (0.x.y):** minor version bumps (`0.1.0` → `0.2.0`) may include
+  breaking changes. Patch version bumps (`0.1.0` → `0.1.1`) are reserved for
+  backwards-compatible bug fixes, documentation improvements, and internal
+  refactorings that do not change the public API.
+- **After v1.0:** breaking changes are only introduced in major version bumps
+  (`1.x.y` → `2.0.0`). Minor versions add functionality in a backwards-compatible
+  manner, and patch versions contain only bug fixes.
+
+Public types that are expected to grow over time are marked with
+`#[non_exhaustive]` and their fields are kept private; use the provided
+constructors and accessor methods to remain compatible with future releases.
+
 ## Development
 
 ```bash
