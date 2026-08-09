@@ -1077,6 +1077,9 @@ pub struct ChatBuilder<'a> {
     config: Option<GenerationConfig>,
 }
 
+// ChatBuilder consumes `self` on send, so cloning the optional config at the
+// call site is unnecessary: `generate_raw` only borrows it for the request.
+
 impl<'a> ChatBuilder<'a> {
     /// Sets the model category (and therefore the model family) to use.
     pub fn with_category(mut self, category: ModelCategory) -> Self {
@@ -1121,7 +1124,7 @@ impl<'a> ChatBuilder<'a> {
     pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
         let response = self
             .client
-            .generate_raw(&message, self.conversation.as_ref(), self.category, self.config.clone())
+            .generate_raw(&message, self.conversation.as_ref(), self.category, self.config)
             .await?;
         let parsed = parse_chat_response(&response)?;
 
