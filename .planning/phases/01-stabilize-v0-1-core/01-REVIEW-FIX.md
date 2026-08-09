@@ -1,79 +1,104 @@
 ---
 phase: 01-stabilize-v0-1-core
-fixed_at: 2026-08-09T16:21:48Z
+fixed_at: 2026-08-09T22:20:00Z
 review_path: .planning/phases/01-stabilize-v0-1-core/01-REVIEW.md
 iteration: 1
-findings_in_scope: 8
-fixed: 7
+findings_in_scope: 9
+fixed: 8
 skipped: 1
 status: partial
 ---
 
 # Phase 01: Code Review Fix Report
 
-**Fixed at:** 2026-08-09T16:21:48Z
-**Source review:** `.planning/phases/01-stabilize-v0-1-core/01-REVIEW.md`
+**Fixed at:** 2026-08-09T22:20:00Z
+**Source review:** .planning/phases/01-stabilize-v0-1-core/01-REVIEW.md
 **Iteration:** 1
 
 **Summary:**
-- Findings in scope: 8
-- Fixed: 7
+- Findings in scope: 9
+- Fixed: 8
 - Skipped: 1
 
 ## Fixed Issues
 
-### CR-01: `capture_fixtures` example fails to compile after `ModelInfo` fields were privatized
+### CR-01: `Cookies` and `Credentials` leak secrets through `Display` / `to_header_value`
 
-**Files modified:** `examples/capture_fixtures.rs`
-**Commit:** 5229179
-**Applied fix:** Replaced direct field access on `ModelInfo` with the public accessor methods `id()`, `title()`, `description()`, `versioned_name()`, and `category_enum()`.
+**Files modified:** `src/auth.rs`
+**Commit:** `a9de263`
+**Applied fix:**
+- Changed `impl fmt::Display for Cookies` to print `<N cookies>` instead of the full header value.
+- Made `Credentials::to_header_value` `pub(crate)` so external callers cannot accidentally reveal secrets.
+- Added a test asserting `{}` formatting does not contain secret substrings.
 
-### CR-02: Multi-turn conversation state is discarded when using `ChatBuilder`
+### CR-02: `accept_consent_and_refresh` follows an unvalidated URL from HTML and posts cookies to it
+
+**Files modified:** `src/session.rs`
+**Commit:** `df4dd18`
+**Applied fix:**
+- Added `is_trusted_consent_origin()` helper allowing only `https://consent.google.com/` and `https://accounts.google.com/`.
+- `extract_consent_save_url` now filters both `reject_save_url` and `accept_save_url` through the allow-list before returning them.
+- Added unit tests covering trusted origins and rejection of untrusted / non-HTTPS origins.
+
+### WR-01: Broken rustdoc intra-doc link fails `cargo doc`
 
 **Files modified:** `src/client.rs`
-**Commit:** 685bf97
-**Applied fix:** `ChatBuilder::send_message_with_content` now calls `generate_raw` with `self.conversation.as_ref()` and passes the parsed response through `parse_chat_response`, then appends the user message and model text to the local `Conversation`. This preserves multi-turn continuity through the session's conversation state.
+**Commit:** `330fb73`
+**Applied fix:**
+- Replaced the non-existent `[`GeminiClient::parse_stream_body`]` link with `[`GeminiClient::ingest_conversation_state`]` in the `stream_generate_raw` docs.
+- Verified with `cargo doc --no-deps --all-features`.
 
-### CR-03: Race between state extraction and state update in `generate` / `generate_raw`
-
-**Files modified:** `src/client.rs`
-**Commit:** 73d5764
-**Applied fix:** Conversation state extraction is now centralized in `generate_raw` via a new `ingest_conversation_state` helper that updates the session. `generate` no longer re-extracts state, and streaming callers that consume `stream_generate_raw` can call `ingest_conversation_state` to keep the session current.
-
-### WR-02: `build_waa_context_header` can produce an invalid JSON array when mutating an ogads context
+### WR-02: `Inner::cookies` mutex unwrap can panic on poison
 
 **Files modified:** `src/client.rs`
-**Commit:** aed7722
-**Applied fix:** Added `is_valid_waa_context_array` to verify the 17-element ogads array shape and the scalar/null types at indices 4 and 15 before mutation. Invalid contexts now fall back to the default template with a logged warning. Also documented that `WAA_FINGERPRINT_DEFAULT` is a best-effort fallback.
+**Commit:** `22f73b7`
+**Applied fix:**
+- Replaced `std::sync::Mutex<Cookies>` with `tokio::sync::Mutex<Cookies>`.
+- Made `cookies()` async and updated all call sites (list_models, build_stream_generate_request, run_waa_init_chain, fetch_app_page, accept_consent_and_refresh).
+- Removed all `std::sync::PoisonError::into_inner` recovery paths.
 
-### WR-03: `parse_response_parts` JSON bracket scanner can slice in the middle of a UTF-8 multibyte character
+### WR-03: `ChatBuilder` fixes do not close the public `GeminiClient::generate` hole for conversation state
+
+**Files modified:** `src/client.rs`
+**Commit:** `3da8c51`
+**Applied fix:**
+- Refactored `generate()` to delegate to a new public `generate_with_conversation()` method that accepts `Option<&Conversation>`.
+- Preserved the existing `generate` signature for semver stability while exposing the new API for callers managing `Conversation` manually.
+
+### WR-05: `parse_response_parts` silently ignores all parse failures
 
 **Files modified:** `src/proto/parser.rs`
-**Commit:** de29a7a
-**Applied fix:** The bracket scanner now aligns `json_start` to the nearest char boundary before slicing, avoiding latent panics on non-ASCII response content.
+**Commit:** `0b0df97`
+**Applied fix:**
+- Added a `last_error` accumulator capturing the specific failure reason for each skipped branch.
+- When no parts are parsed and no Bard error code is found, the returned parse error now includes `last_error` and a short, redacted body snippet (via a new `redact_body_snippet` helper).
 
-### WR-04: `accept_consent_and_refresh` merges response cookies into a local clone that is immediately dropped
+### WR-06: `extract_waa_fingerprint_from_model_list` can return an arbitrary 16-character hex token
 
 **Files modified:** `src/client.rs`
-**Commit:** b884374
-**Applied fix:** Put `Inner::cookies` behind a `std::sync::Mutex<Cookies>` so the consent flow can atomically clone, merge `Set-Cookie` headers, and write the updated cookies back to the shared client state. All cookie reads were routed through a `cookies()` helper to keep clones consistent.
+**Commit:** `d83a3cc`
+**Applied fix:**
+- Anchored the search to the Pro model block by locating `"Pro"` and limiting the scan to the enclosing model-list array.
+- Added unit tests confirming the correct token is selected and decoy tokens outside the model list are ignored.
 
-### WR-05: `Conversation::add_message` chain mutates `parts` directly, bypassing builder invariants
+### WR-07: `upload_file` follows an arbitrary upload URL from the upstream response
 
-**Files modified:** `src/chat.rs`, `src/client.rs`
-**Commit:** 64686e8
-**Applied fix:** Added `ChatMessage::with_part` and updated `ChatBuilder::send_message_with_images` to use it. Added doc comments on `ChatMessage::parts` and `Conversation` clarifying that the public fields are low-level escape hatches and that callers are responsible for valid roles and part types; malformed conversations will fail at send time when `extract_prompt` runs.
+**Files modified:** `src/upload.rs`
+**Commit:** `1901271`
+**Applied fix:**
+- Parsed the `x-goog-upload-url` header and validated scheme (`https`) and host (ends with `.google.com`) using `reqwest::Url` before following it.
+- Returns a parse error with an untrusted-origin message if validation fails.
 
 ## Skipped Issues
 
-### WR-01: `with_backoff` retries all `reqwest::Error`s that carry a 5xx/429 status but discards the response body needed for downstream error classification
+### WR-04: `with_backoff` discards response bodies for error classification
 
 **File:** `src/retry.rs:26-60`
-**Reason:** The suggested change (return the full `Response` from the retry closure instead of `reqwest::Error`) requires redesigning the `with_backoff` signature and all call sites in `client.rs`, including `send_with_retry`, `batchexecute_rpc`, `stream_generate_raw`, and the retry unit tests. It also affects how `error_for_status()` is applied and how `BardErrorInfo` bodies are parsed in error paths. This is a medium-sized cross-file refactor with behavioral implications for retry classification and error body handling that is better reviewed and validated with additional integration tests before landing. The current retry behavior still matches the original design intent (retry transient HTTP statuses) and the issue is acknowledged.
-**Original issue:** `with_backoff` returns a `reqwest::Response` only on success. When `reqwest::Error` is returned (e.g., from `error_for_status()`), the original HTTP response body is lost because the operation closure does not read it before the error is produced.
+**Reason:** Changing `with_backoff` to inspect response bodies would require a broader refactor of all three call sites in `src/client.rs` (list_models, stream_generate_raw, batchexecute_rpc) and the retry test suite. The current closure signature is baked into `send_with_retry`, and a safe change would need either response-body buffering inside the retry loop or a new generic `is_transient` predicate. The suggested classification logic (inspecting `BardErrorInfo` payloads for permanent codes) is also not fully aligned with the existing `Error::is_transient` implementation. Skipped to avoid a risky structural change without a targeted design; recommend addressing in a dedicated retry refactor.
+**Original issue:** `with_backoff` retries `reqwest::Error`s that carry 5xx/429 status codes, but it never sees the response body. If Gemini returns a transient HTTP status with a `BardErrorInfo` payload indicating a permanent failure, the SDK retries blindly. Conversely, permanent `reqwest` errors that wrap a 4xx status are classified as permanent without reading the body.
 
 ---
 
-_Fixed: 2026-08-09T16:21:48Z_
+_Fixed: 2026-08-09T22:20:00Z_
 _Fixer: the agent (gsd-code-fixer)_
 _Iteration: 1_
