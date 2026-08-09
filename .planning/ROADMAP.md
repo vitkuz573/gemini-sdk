@@ -19,7 +19,13 @@
 
 **Mode:** standard
 **Depends on:** —
-**Estimated waves:** 3
+**Estimated waves:** 2
+
+**Plans:**
+- [ ] 01-01-PLAN.md — Stabilize public API surface and documentation lints.
+- [ ] 01-02-PLAN.md — Auth ergonomics: CredentialsProvider trait and redaction.
+- [ ] 01-03-PLAN.md — Chat + media tests and multi-turn example.
+- [ ] 01-04-PLAN.md — Reliability verification and tooling/publish gates.
 
 ---
 
