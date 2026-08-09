@@ -74,6 +74,7 @@ impl Error {
     pub fn is_transient(&self) -> bool {
         matches!(self, Self::Transient(_) | Self::RateLimited(_) | Self::Timeout(_))
             || matches!(self, Self::Api { status, .. } if status.is_server_error() || status.as_u16() == 429)
+            || matches!(self, Self::Request(e) if e.status().is_some_and(|s| s.is_server_error() || s.as_u16() == 429))
     }
 
     /// Creates an API error from an HTTP status and a message.
