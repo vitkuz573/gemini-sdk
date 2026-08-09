@@ -68,7 +68,7 @@ fn parse_chat_response_detects_bard_error_1100() {
 #[test]
 fn extract_bard_error_code_parses_code() {
     let body = include_str!("fixtures/bard_error_1096.json");
-    assert_eq!(extract_bard_error_code(body), Some(1096));
+    assert_eq!(extract_bard_error_code(body), Some("1096".to_string()));
 }
 
 #[test]

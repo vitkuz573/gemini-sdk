@@ -608,14 +608,23 @@ fn parsed_parts_content(parsed: &Value) -> Vec<PartContent> {
     out
 }
 
-/// Extracts the numeric code from a `BardErrorInfo` wrapper if present.
-pub fn extract_bard_error_code(body: &str) -> Option<u64> {
+/// Extracts the error code from a `BardErrorInfo` wrapper if present.
+///
+/// The bracket contents are returned as a string even when they are not
+/// purely numeric, so callers can surface structured upstream error details
+/// instead of silently discarding them.
+pub fn extract_bard_error_code(body: &str) -> Option<String> {
     let start = body.find("BardErrorInfo")?;
     let after = &body[start..];
     let open = after.find('[')?;
     let close = after[open..].find(']')?;
     let inner = &after[open + 1..open + close];
-    inner.trim().parse().ok()
+    let code = inner.trim();
+    if code.is_empty() {
+        None
+    } else {
+        Some(code.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -639,7 +648,22 @@ mod tests {
     #[test]
     fn extract_bard_error_code_1096() {
         let body = include_str!("../../tests/fixtures/bard_error_1096.json");
-        assert_eq!(extract_bard_error_code(body), Some(1096));
+        assert_eq!(extract_bard_error_code(body), Some("1096".to_string()));
+    }
+
+    #[test]
+    fn extract_bard_error_code_preserves_non_numeric_code() {
+        let body = r#"[["wrb.fr","BardErrorInfo",null,null,["AUTHENTICATION_ERROR"],null]]"#;
+        assert_eq!(
+            extract_bard_error_code(body),
+            Some("\"AUTHENTICATION_ERROR\"".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_bard_error_code_ignores_empty_code() {
+        let body = r#"[["wrb.fr","BardErrorInfo",null,null,[],null]]"#;
+        assert_eq!(extract_bard_error_code(body), None);
     }
 
     #[test]
