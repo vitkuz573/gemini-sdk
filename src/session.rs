@@ -58,7 +58,7 @@ impl SessionState {
     }
 
     pub(crate) fn needs_init(&self) -> bool {
-        self.build_label.is_none() && self.session_id.is_none()
+        self.build_label.is_none() || self.session_id.is_none()
     }
 
     pub(crate) fn generate_reqid() -> String {
