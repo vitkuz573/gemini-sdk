@@ -57,6 +57,10 @@ pub enum Error {
     #[error("not signed in: {0}")]
     NotSignedIn(String),
 
+    /// Cookie / credentials validation failed.
+    #[error("credentials error: {0}")]
+    Credentials(#[from] crate::auth::CredentialsError),
+
     /// An attestation-related error (browser attestation feature).
     #[cfg(feature = "browser-attestation")]
     #[error("attestation error: {0}")]

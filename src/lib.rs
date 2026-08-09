@@ -80,7 +80,7 @@ pub mod attestation;
 mod retry;
 mod session;
 
-pub use auth::{Cookies, CookieHeaderProvider, Credentials, CredentialsProvider};
+pub use auth::{Cookies, CookieHeaderProvider, Credentials, CredentialsError, CredentialsProvider};
 pub use chat::{
     ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig, ImageSource,
     ThinkingLevel,

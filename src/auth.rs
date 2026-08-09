@@ -331,10 +331,7 @@ impl CookieHeaderProvider {
 impl CredentialsProvider for CookieHeaderProvider {
     fn credentials(&self) -> Pin<Box<dyn Future<Output = crate::Result<Credentials>> + Send + '_>> {
         let header = self.header.clone();
-        Box::pin(async move {
-            Credentials::from_header(&header)
-                .map_err(|e| crate::Error::Config(e.to_string()))
-        })
+        Box::pin(async move { Credentials::from_header(&header).map_err(crate::Error::from) })
     }
 }
 
