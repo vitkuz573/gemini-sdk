@@ -339,6 +339,9 @@ impl CredentialsProvider for CookieHeaderProvider {
 ///
 /// Prefer [`Credentials`] for new code. `Cookies` is kept as a thin wrapper
 /// around a map for cases where callers want to manipulate arbitrary cookies.
+///
+/// Note: `Cookies` stores one value per cookie name. Inserting a duplicate name
+/// overwrites the previous value, and `to_credentials` validates the final set.
 #[derive(Debug, Clone, Default)]
 pub struct Cookies {
     inner: HashMap<String, String>,
@@ -351,6 +354,10 @@ impl Cookies {
     }
 
     /// Parses a raw `Cookie` header value such as the one copied from a browser.
+    ///
+    /// Duplicate cookie names are not preserved: the last value wins. This
+    /// matches the behaviour of the underlying map and of browser cookie jars
+    /// when serialised back to a header.
     ///
     /// # Example
     ///
@@ -443,6 +450,11 @@ impl fmt::Display for Cookies {
 
 impl Cookies {
     /// Builds `Credentials` from the cookies in the jar.
+    ///
+    /// Because `Cookies` keeps one value per cookie name, duplicate values that
+    /// were present in the original header have already been collapsed. The
+    /// returned error is a typed [`CredentialsError`] rather than a generic
+    /// string so callers can distinguish `MissingPsid` from `MissingPsidcc`.
     pub fn to_credentials(&self) -> Result<Credentials, CredentialsError> {
         Credentials::from_header(&self.to_header_value())
     }
