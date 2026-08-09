@@ -7,10 +7,10 @@
 
 ### Public API
 
-- [ ] **API-01**: `GeminiClient`, `ChatBuilder`, `Conversation`, and `ChatResponse` types are marked `#[non_exhaustive]` or otherwise documented for forward compatibility.
-- [ ] **API-02**: All public error types live in a dedicated module and implement `std::error::Error` + `Send` + `Sync` + `'static`.
-- [ ] **API-03**: Breaking changes to public types are only introduced in minor 0.x versions before v1.0 and in major versions after v1.0.
-- [ ] **API-04**: Crate compiles with `#![deny(missing_docs)]` on public items.
+- [x] **API-01**: `GeminiClient`, `ChatBuilder`, `Conversation`, and `ChatResponse` types are marked `#[non_exhaustive]` or otherwise documented for forward compatibility.
+- [x] **API-02**: All public error types live in a dedicated module and implement `std::error::Error` + `Send` + `Sync` + `'static`.
+- [x] **API-03**: Breaking changes to public types are only introduced in minor 0.x versions before v1.0 and in major versions after v1.0.
+- [x] **API-04**: Crate compiles with `#![deny(missing_docs)]` on public items.
 
 ### Auth
 
@@ -103,10 +103,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| API-01 | Phase 1 | Pending |
-| API-02 | Phase 1 | Pending |
-| API-03 | Phase 1 | Pending |
-| API-04 | Phase 1 | Pending |
+| API-01 | Phase 1 | Complete |
+| API-02 | Phase 1 | Complete |
+| API-03 | Phase 1 | Complete |
+| API-04 | Phase 1 | Complete |
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Pending |
 | AUTH-03 | Phase 1 | Pending |
@@ -140,6 +140,7 @@
 | TOOL-05 | Phase 6 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 34 total
 - Mapped to phases: 34
 - Unmapped: 0 ✓

@@ -11,6 +11,7 @@
 **Requirements:** API-01, API-02, API-03, API-04, AUTH-01, AUTH-02, AUTH-03, CHAT-01, CHAT-03, CHAT-05, MEDIA-01, REL-01, TOOL-01, TOOL-02, TOOL-03, TOOL-04
 
 **Key outcomes:**
+
 - Public API marked and documented for forward compatibility.
 - `CredentialsProvider` trait replaces raw cookie strings where appropriate.
 - Error types consolidated and semver-friendly.
@@ -22,7 +23,11 @@
 **Estimated waves:** 3
 
 **Plans:**
-- [ ] 01-01-PLAN.md — Stabilize public API surface and documentation lints.
+
+- [x] 01-01-PLAN.md
+
+1/4 plans executed
+
 - [ ] 01-02-PLAN.md — Auth ergonomics: CredentialsProvider trait and redaction.
 - [ ] 01-03-PLAN.md — Chat + media tests and multi-turn example.
 - [ ] 01-04-PLAN.md — Reliability verification and tooling/publish gates.
@@ -36,6 +41,7 @@
 **Requirements:** AUTH-04, CHAT-02, CHAT-04, PROTO-01, PROTO-02, PROTO-04, REL-02, REL-03
 
 **Key outcomes:**
+
 - Cookie merge persists back into client state.
 - Blocking locks removed from synchronous builder methods.
 - WAA / ogads failures surface typed errors.
@@ -55,6 +61,7 @@
 **Requirements:** PROTO-03, REL-04, OBS-01, OBS-02, MEDIA-02
 
 **Key outcomes:**
+
 - Request/response hooks API.
 - `tracing` spans across auth, request, parse, upload.
 - Injectable `reqwest::Client` for connection pool control.
@@ -74,6 +81,7 @@
 **Requirements:** MEDIA-03, ADV-02
 
 **Key outcomes:**
+
 - Audio and video upload paths.
 - Session save/restore helpers for conversation and auth state.
 
@@ -90,6 +98,7 @@
 **Requirements:** ADV-01, ADV-03, OBS-03
 
 **Key outcomes:**
+
 - Tools / function calling round-trip.
 - Auto cookie refresh / consent re-acquisition.
 - Metrics facade for requests, retries, parse failures, attestation.
@@ -107,6 +116,7 @@
 **Requirements:** TOOL-05
 
 **Key outcomes:**
+
 - Final API audit and deprecation cleanup.
 - MSRV policy documented and verified.
 - crates.io publication with changelog and release notes.
