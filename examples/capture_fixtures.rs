@@ -219,11 +219,11 @@ fn format_model_list(models: Vec<gemini_sdk::ModelInfo>) -> String {
         .map(|m| {
             format!(
                 "[\"{}\",\"{}\",\"{}\",null,null,null,null,null,null,null,null,\"{}\",null,null,null,null,null,{}]",
-                m.id,
-                m.title,
-                m.description,
-                m.versioned_name.as_deref().unwrap_or(&m.title),
-                m.category_enum
+                m.id(),
+                m.title(),
+                m.description(),
+                m.versioned_name().as_deref().unwrap_or(m.title()),
+                m.category_enum()
             )
         })
         .collect();
