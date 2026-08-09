@@ -8,7 +8,7 @@
 
 **Goal:** Lock the public API, fix auth ergonomics, and make the SDK publishable as v0.1.
 
-**Requirements:** API-01, API-02, API-03, API-04, AUTH-01, AUTH-02, AUTH-03, CHAT-01, CHAT-02, CHAT-03, CHAT-05, MEDIA-01, REL-01, TOOL-01, TOOL-02, TOOL-03, TOOL-04
+**Requirements:** API-01, API-02, API-03, API-04, AUTH-01, AUTH-02, AUTH-03, CHAT-01, CHAT-03, CHAT-05, MEDIA-01, REL-01, TOOL-01, TOOL-02, TOOL-03, TOOL-04
 
 **Key outcomes:**
 - Public API marked and documented for forward compatibility.
@@ -19,7 +19,7 @@
 
 **Mode:** standard
 **Depends on:** —
-**Estimated waves:** 2
+**Estimated waves:** 3
 
 **Plans:**
 - [ ] 01-01-PLAN.md — Stabilize public API surface and documentation lints.
@@ -33,7 +33,7 @@
 
 **Goal:** Eliminate known fragility from CONCERNS.md and make the SDK resilient to Google's protocol drift.
 
-**Requirements:** AUTH-04, CHAT-04, PROTO-01, PROTO-02, PROTO-04, REL-02, REL-03
+**Requirements:** AUTH-04, CHAT-02, CHAT-04, PROTO-01, PROTO-02, PROTO-04, REL-02, REL-03
 
 **Key outcomes:**
 - Cookie merge persists back into client state.

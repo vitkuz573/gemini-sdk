@@ -112,7 +112,7 @@
 | AUTH-03 | Phase 1 | Pending |
 | AUTH-04 | Phase 2 | Pending |
 | CHAT-01 | Phase 1 | Pending |
-| CHAT-02 | Phase 1 | Pending |
+| CHAT-02 | Phase 2 | Pending |
 | CHAT-03 | Phase 1 | Pending |
 | CHAT-04 | Phase 2 | Pending |
 | CHAT-05 | Phase 1 | Pending |
