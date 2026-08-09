@@ -65,6 +65,10 @@ name = "stream_chat"
 path = "examples/stream_chat.rs"
 
 [[example]]
+name = "multi_turn_chat"
+path = "examples/multi_turn_chat.rs"
+
+[[example]]
 name = "capture_fixtures"
 path = "examples/capture_fixtures.rs"
 required-features = ["capture-fixtures"]
