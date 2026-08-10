@@ -30,6 +30,11 @@ use crate::locale_model_config::{
     LocaleConfig, LocaleTools, ModelConfig, ToolsConfig,
     CYRIKD_RPC_ID, KU4JYF_RPC_ID, TE6DCF_RPC_ID, WHPPME_RPC_ID,
 };
+use crate::settings::{
+    build_get_scheduled_prompts_payload, build_get_usage_stats_payload,
+    parse_scheduled_prompts_response, parse_usage_stats_response,
+    ScheduledPrompts, UsageStats, JSF9QC_RPC_ID, XPSWPD_RPC_ID,
+};
 use crate::user_profile::{
     build_get_last_selected_mode_payload, build_get_user_info_payload,
     build_set_last_selected_mode_payload, parse_last_selected_mode_response,
@@ -1220,6 +1225,150 @@ impl GeminiClient {
         }
 
         parse_tools_config_response(&text)
+    }
+
+    /// Returns usage statistics for the signed-in account.
+    ///
+    /// Sends the `jSf9Qc` batchexecute RPC to `/usage` and parses the response
+    /// into a [`UsageStats`] wrapper. The inner value is an opaque
+    /// [`serde_json::Value`] to tolerate undocumented shape drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_usage_stats", level = "info", skip_all, fields(operation = "gemini.get_usage_stats"))]
+    pub async fn get_usage_stats(&self) -> Result<UsageStats> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", JSF9QC_RPC_ID.to_string()),
+                ("source-path", "/usage".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_usage_stats_payload();
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                JSF9QC_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_usage_stats_response(&text)
+    }
+
+    /// Returns the user's scheduled prompts.
+    ///
+    /// Sends the `XPSWpd` batchexecute RPC to `/scheduled` and parses the
+    /// response into a [`ScheduledPrompts`] wrapper. The inner value is an
+    /// opaque [`serde_json::Value`] to tolerate undocumented shape drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_scheduled_prompts", level = "info", skip_all, fields(operation = "gemini.get_scheduled_prompts"))]
+    pub async fn get_scheduled_prompts(&self) -> Result<ScheduledPrompts> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", XPSWPD_RPC_ID.to_string()),
+                ("source-path", "/scheduled".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_scheduled_prompts_payload();
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                XPSWPD_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_scheduled_prompts_response(&text)
     }
 
     /// Refreshes credentials from a provider and re-initializes the session.
