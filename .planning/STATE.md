@@ -4,9 +4,11 @@ milestone: v0.1
 milestone_name: Core
 current_phase: 6 — v1.0 Release
 current_plan: Complete
-status: Complete
-stopped_at: Phase 6 complete, all plans executed and verified
-last_updated: "2026-08-10T04:00:00Z"
+status: Awaiting next milestone
+stopped_at: None
+last_updated: "2026-08-10T07:34:06.989Z"
+last_activity: 2026-08-10
+last_activity_desc: Milestone v0.1 completed and archived
 progress:
   total_phases: 6
   completed_phases: 6
@@ -91,3 +93,14 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 **Last session:** 2026-08-09T14:05:07.821Z
 **Stopped at:** None
 **Resume file:** None
+
+## Current Position
+
+Phase: Milestone v0.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-10 — Milestone v0.1 completed and archived
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
