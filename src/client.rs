@@ -710,9 +710,7 @@ impl GeminiClient {
         // skip the live /app init flow.
         let already_initialised = {
             let session = self.inner.session.lock().await;
-            session.build_label.is_some()
-                && session.session_id.is_some()
-                && session.access_token.is_some()
+            session.build_label.is_some() && session.session_id.is_some()
         };
         if !already_initialised {
             self.ensure_session().await?;
@@ -1529,7 +1527,7 @@ impl GeminiClient {
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", "otAQ7b".to_string()),
-                ("source-path", "/".to_string()),
+                ("source-path", "/app".to_string()),
                 ("hl", session.language.clone()),
                 ("_reqid", reqid),
                 ("rt", "c".to_string()),
@@ -2082,7 +2080,7 @@ impl GeminiClient {
     )]
     pub async fn verify_signed_in(&self) -> Result<bool> {
         let body = self.fetch_app_page().await?;
-        Ok(extract_signed_in_state(&body).is_some())
+        Ok(crate::session::looks_like_signed_in_html(&body))
     }
 
     /// Fetches `/app` and returns a diagnostic result describing whether the
@@ -2112,11 +2110,15 @@ impl GeminiClient {
                     let cookies = self.cookies().await;
                     cookies.to_credentials().map(|c| c.missing_legacy_cookies()).unwrap_or_default()
                 };
+                // Modern sessions may no longer expose S06Grb/oPEP7c even when
+                // the cookies are accepted. If the page otherwise looks like a
+                // valid app session, report signed-in via the fallback.
+                let signed_in = crate::session::looks_like_app_session_html(&body);
                 return Ok(AppDiagnostics {
-                    signed_in: false,
+                    signed_in,
                     gaia_id: None,
                     email: None,
-                    failure_reason: Some(reason),
+                    failure_reason: if signed_in { None } else { Some(reason) },
                     missing_legacy_cookies: missing_legacy,
                 });
             }
@@ -2133,7 +2135,7 @@ impl GeminiClient {
     async fn init_session(&self) -> Result<()> {
         let body = self.fetch_app_page().await?;
 
-        if extract_signed_in_state(&body).is_none() {
+        if !crate::session::looks_like_signed_in_html(&body) {
             let reason = diagnose_signed_in_state(&body)
                 .err()
                 .map(|f| f.to_string())

@@ -85,6 +85,15 @@ pub fn parse_scheduled_prompts_response(body: &str) -> Result<ScheduledPrompts> 
 
 fn extract_inner_value(body: &str, rpc_id: &str) -> Result<Value> {
     let rpc_entry = extract_rpc_entry(body, rpc_id)?;
+
+    // The live frontend sometimes returns a bare null payload for these
+    // settings RPCs when the account has no data to expose. Treat that as an
+    // empty JSON object so callers can continue.
+    let payload_value = rpc_entry.get(PAYLOAD).or_else(|| rpc_entry.get(PAYLOAD_ALT));
+    if payload_value.map_or(true, |v| v.is_null()) {
+        return Ok(Value::Object(serde_json::Map::new()));
+    }
+
     let payload_str = extract_payload_str(&rpc_entry)?;
     serde_json::from_str(payload_str)
         .map_err(|e| Error::parse(format!("failed to parse {rpc_id} inner payload: {e}")))
@@ -165,6 +174,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_usage_stats_null_payload_returns_empty_object() {
+        let body = r#")] } '\n\n[["wrb.fr","jSf9Qc",null,null,null,[7],"generic"]]"#;
+        let result = parse_usage_stats_response(body).unwrap();
+        assert_eq!(result.value(), &serde_json::json!({}));
+    }
+
+    #[test]
     fn parse_usage_stats_extracts_payload() {
         let body = r#")] } '
 
@@ -174,6 +190,13 @@ mod tests {
             result.value(),
             &serde_json::json!({"requests_today": 12, "requests_total": 345})
         );
+    }
+
+    #[test]
+    fn parse_scheduled_prompts_null_payload_returns_empty_object() {
+        let body = r#")] } '\n\n[["wrb.fr","XPSWpd",null,null,null,[7],"generic"]]"#;
+        let result = parse_scheduled_prompts_response(body).unwrap();
+        assert_eq!(result.value(), &serde_json::json!({}));
     }
 
     #[test]

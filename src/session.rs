@@ -175,13 +175,40 @@ impl std::fmt::Display for SignedInFailure {
 }
 
 /// Extract session parameters from the `/app` HTML body.
-/// Returns `true` when the `/app` HTML body contains the signed-in markers.
+///
+/// Returns `true` when the `/app` HTML body contains the signed-in markers
+/// (`S06Grb` + `oPEP7c`). Because Google has stopped emitting those markers for
+/// some valid signed-in sessions, this function also accepts the page as
+/// authenticated when it contains a well-formed `window.WIZ_global_data` block
+/// with both a `cfb2h` build label and an `FdrFJe` session id.
 ///
 /// This is the single authoritative check used by the client to decide whether
 /// the supplied cookies have been accepted by Gemini as an authenticated
 /// session.
 pub(crate) fn looks_like_signed_in_html(body: &str) -> bool {
-    diagnose_signed_in_html(body).is_ok()
+    if diagnose_signed_in_html(body).is_ok() {
+        return true;
+    }
+    looks_like_app_session_html(body)
+}
+
+/// Returns true when the `/app` HTML body is a valid Gemini app page even if
+/// the legacy `S06Grb`/`oPEP7c` signed-in markers are absent.
+///
+/// This fallback is intentionally conservative: it requires the canonical
+/// `window.WIZ_global_data` block, a `cfb2h` build label, and an `FdrFJe`
+/// session id. Without these values the SDK cannot build batchexecute or
+/// `StreamGenerate` requests, so proceeding would be useless anyway.
+pub(crate) fn looks_like_app_session_html(body: &str) -> bool {
+    let Some(block) = extract_wiz_global_data_block_safe(body) else {
+        return false;
+    };
+    extract_quoted_value(block, "cfb2h")
+        .as_deref()
+        .is_some_and(|v| v.starts_with("boq_assistant-bard-web-"))
+        && extract_quoted_value(block, "FdrFJe")
+            .as_deref()
+            .is_some_and(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_digit() || c == '-'))
 }
 
 /// Diagnoses why the `/app` HTML body does not contain signed-in markers.
@@ -190,6 +217,10 @@ pub(crate) fn looks_like_signed_in_html(body: &str) -> bool {
 /// `Err(SignedInFailure)` with the first failing condition. This is used for
 /// logging and telemetry so callers can distinguish "cookies rejected" from
 /// "HTML shape changed".
+///
+/// Note: `looks_like_signed_in_html` also accepts pages that pass
+/// `looks_like_app_session_html` even when this function returns an error, so
+/// callers that only need a boolean should use that helper instead.
 pub(crate) fn diagnose_signed_in_html(body: &str) -> Result<(String, String), SignedInFailure> {
     let block =
         extract_wiz_global_data_block_safe(body).ok_or(SignedInFailure::MissingWizGlobalData)?;
@@ -713,5 +744,25 @@ mod tests {
         let body = r#"<html></html>"#;
         let result = diagnose_signed_in_html(body);
         assert_eq!(result.unwrap_err(), SignedInFailure::MissingWizGlobalData);
+    }
+
+    #[test]
+    fn looks_like_signed_in_html_accepts_app_session_fallback() {
+        // Modern /app responses no longer emit S06Grb/oPEP7c for some sessions,
+        // but still contain enough WIZ data to run batchexecute.
+        let body = r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260807.00_p0","FdrFJe":"-1234567890123456789"};"#;
+        assert!(looks_like_signed_in_html(body));
+    }
+
+    #[test]
+    fn looks_like_app_session_html_rejects_without_build_label() {
+        let body = r#"window.WIZ_global_data = {"FdrFJe":"-1234567890123456789"};"#;
+        assert!(!looks_like_app_session_html(body));
+    }
+
+    #[test]
+    fn looks_like_app_session_html_rejects_without_session_id() {
+        let body = r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260807.00_p0"};"#;
+        assert!(!looks_like_app_session_html(body));
     }
 }

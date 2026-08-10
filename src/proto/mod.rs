@@ -98,7 +98,7 @@ pub fn build_sjbwce_body(at: Option<&str>) -> String {
 
 /// Builds the JSON body for the WAA `Create` RPC.
 pub fn build_waa_create_body() -> String {
-    serde_json::to_string(&json!([[null, "br1aemAN9owlYRs9NnsA"]])).unwrap_or_default()
+    serde_json::to_string(&json!(["br1aemAN9owlYRs9NnsA"])).unwrap_or_default()
 }
 
 /// Builds the JSON body for the ogads `GetAsyncData` RPC.

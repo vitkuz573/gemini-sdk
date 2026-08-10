@@ -23,7 +23,7 @@ pub(crate) const L5ADHE_RPC_ID: &str = "L5adhe";
 /// All fields are optional because the frontend omits or nulls entries for
 /// accounts that have not shared them, or for partially-enrolled sessions.
 /// Callers should avoid logging these values because they contain PII.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct UserInfo {
     name: Option<String>,
     photo_url: Option<String>,
@@ -109,8 +109,20 @@ fn build_last_selected_mode_payload_inner(mode_id: Option<&str>) -> Value {
 /// Parses the batchexecute response body returned by the `o30O0e` RPC.
 ///
 /// Missing or null fields are returned as `None` instead of producing an error.
+/// When the payload is null/empty/missing entirely, an empty [`UserInfo`] is
+/// returned so callers can continue without treating a bare identity RPC reply
+/// as fatal.
 pub fn parse_user_info_response(body: &str) -> Result<UserInfo> {
     let rpc_entry = extract_rpc_entry(body, O30O0E_RPC_ID)?;
+
+    // The live frontend sometimes returns a bare `["wrb.fr","o30O0e",null,...]`
+    // entry for sessions that do not expose profile data. Treat that as an
+    // empty identity rather than a parse failure.
+    let payload_value = rpc_entry.get(PAYLOAD).or_else(|| rpc_entry.get(PAYLOAD_ALT));
+    if payload_value.map_or(true, |v| v.is_null()) {
+        return Ok(UserInfo::default());
+    }
+
     let payload_str = extract_payload_str(&rpc_entry)?;
     let inner: Value = serde_json::from_str(payload_str)
         .map_err(|e| Error::parse(format!("failed to parse o30O0e inner payload: {e}")))?;
@@ -131,6 +143,14 @@ pub fn parse_user_info_response(body: &str) -> Result<UserInfo> {
 /// A non-string (including `null`) yields `LastSelectedMode { mode_id: None }`.
 pub fn parse_last_selected_mode_response(body: &str) -> Result<LastSelectedMode> {
     let rpc_entry = extract_rpc_entry(body, L5ADHE_RPC_ID)?;
+
+    // The live frontend sometimes returns a bare null payload when no mode
+    // preference is stored. Treat that the same as an unset mode.
+    let payload_value = rpc_entry.get(PAYLOAD).or_else(|| rpc_entry.get(PAYLOAD_ALT));
+    if payload_value.map_or(true, |v| v.is_null()) {
+        return Ok(LastSelectedMode { mode_id: None });
+    }
+
     let payload_str = extract_payload_str(&rpc_entry)?;
     let inner: Value = serde_json::from_str(payload_str)
         .map_err(|e| Error::parse(format!("failed to parse L5adhe inner payload: {e}")))?;
@@ -287,11 +307,25 @@ mod tests {
 
     #[test]
     fn parse_user_info_handles_wrapped_array() {
-        let body = r#")] } '
-
-[[["wrb.fr","o30O0e","{\"name\":\"Wrapped\"}",null,null,null,"generic"]]]"#;
+        let body = r#")] } '\n\n[[["wrb.fr","o30O0e","{\"name\":\"Wrapped\"}",null,null,null,"generic"]]]"#;
         let info = parse_user_info_response(body).unwrap();
         assert_eq!(info.name(), Some("Wrapped"));
+    }
+
+    #[test]
+    fn parse_user_info_null_payload_returns_default() {
+        // Live sessions sometimes return a bare null payload with no identity
+        // fields. This should yield an empty UserInfo instead of a parse error.
+        let body = r#")] } '\n\n[["wrb.fr","o30O0e",null,null,null,[3],"generic"]]"#;
+        let info = parse_user_info_response(body).unwrap();
+        assert_eq!(info, UserInfo::default());
+    }
+
+    #[test]
+    fn parse_last_selected_mode_null_payload_returns_none() {
+        let body = r#")] } '\n\n[["wrb.fr","L5adhe",null,null,null,[7],"generic"]]"#;
+        let mode = parse_last_selected_mode_response(body).unwrap();
+        assert_eq!(mode.mode_id(), None);
     }
 
     #[test]
