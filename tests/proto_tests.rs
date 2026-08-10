@@ -304,3 +304,30 @@ fn build_inner_req_list_with_inline_images() {
     assert!(inner[0].is_array());
     assert_eq!(inner[0][0], serde_json::json!("Look at this"));
 }
+
+#[test]
+fn system_instruction_in_slot0() {
+    let config = gemini_sdk::chat::GenerationConfig::default()
+        .with_system_instruction("You are a Rust expert");
+    let prepared = PreparedRequest {
+        prompt: "hello".to_string(),
+        inline_images: vec![],
+        config: Some(config),
+        category: ModelCategory::Auto,
+    };
+    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
+    let prompt = inner[0][0].as_str().expect("slot 0 prompt is a string");
+    assert!(prompt.starts_with("You are a Rust expert\nhello"));
+}
+
+#[test]
+fn no_system_instruction_preserved() {
+    let prepared = PreparedRequest {
+        prompt: "hello".to_string(),
+        inline_images: vec![],
+        config: None,
+        category: ModelCategory::Auto,
+    };
+    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
+    assert_eq!(inner[0][0], serde_json::json!("hello"));
+}

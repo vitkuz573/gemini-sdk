@@ -122,6 +122,17 @@ pub struct GenerationConfig {
     /// Desired thinking level (when supported).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_level: Option<ThinkingLevel>,
+    /// Optional system instruction prepended to the user prompt.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_instruction: Option<String>,
+}
+
+impl GenerationConfig {
+    /// Sets the system instruction for this generation config.
+    pub fn with_system_instruction(mut self, instruction: impl Into<String>) -> Self {
+        self.system_instruction = Some(instruction.into());
+        self
+    }
 }
 
 /// Thinking level requested for a generation.

@@ -1,9 +1,11 @@
 //! Main SDK client.
 
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::Stream;
 use reqwest::Client;
 use serde_json::Value;
 use tokio::sync::{Mutex, RwLock};
@@ -14,9 +16,12 @@ use crate::chat::{
     prepare_request, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, PreparedRequest,
 };
+
 use crate::errors::{Error, Result};
 use crate::models::{ModelCategory, ModelInfo};
-use crate::proto::parser::{extract_conversation_state, parse_chat_response, parse_model_list};
+use crate::proto::parser::{
+    extract_conversation_state, parse_chat_response, parse_model_list, parse_response_parts,
+};
 use crate::proto::slots::{build_inner_req_list, ConversationState as ProtoConversationState};
 use crate::proto::{
     build_batchexecute_body, build_esy5d_body, build_ogads_body, build_sjbwce_body,
@@ -62,6 +67,7 @@ struct ClientConfig {
     language: String,
     max_retries: usize,
     timeout: Duration,
+    system_instruction: Option<String>,
 }
 
 impl Default for ClientConfig {
@@ -70,6 +76,7 @@ impl Default for ClientConfig {
             language: "en".to_string(),
             max_retries: 3,
             timeout: Duration::from_secs(120),
+            system_instruction: None,
         }
     }
 }
@@ -155,6 +162,16 @@ impl GeminiClient {
     pub async fn with_timeout(self, timeout: Duration) -> Self {
         let mut config = self.inner.config.write().await;
         config.timeout = timeout;
+        drop(config);
+        self
+    }
+
+    /// Sets a client-level default system instruction applied when no per-turn
+    /// instruction is provided.
+    pub async fn with_system_instruction(self, instruction: impl Into<String>) -> Self {
+        let instruction = instruction.into();
+        let mut config = self.inner.config.write().await;
+        config.system_instruction = Some(instruction);
         drop(config);
         self
     }
@@ -279,6 +296,77 @@ impl GeminiClient {
         self.generate_with_conversation(message, None, category, config).await
     }
 
+    /// Returns a stream of incremental `ChatResponse` chunks.
+    ///
+    /// The stream parses each line-delimited WIZ frame as it arrives and yields
+    /// a [`ChatResponse`] built from the accumulated text and thinking content
+    /// seen so far. After the upstream stream ends, the full response body is
+    /// ingested into the client's conversation state so that multi-turn chats
+    /// can continue.
+    pub async fn generate_stream(
+        &self,
+        message: &ChatMessage,
+        category: ModelCategory,
+        config: Option<GenerationConfig>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatResponse>> + Send>>> {
+        let response = self.stream_generate_raw(message, None, category, config).await?;
+        let client = self.clone();
+        Ok(Self::stream_responses(response.bytes_stream(), client))
+    }
+
+    fn stream_responses<S>(
+        byte_stream: S,
+        client: GeminiClient,
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatResponse>> + Send>>
+    where
+        S: Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>> + Send + Unpin + 'static,
+    {
+        use async_stream::try_stream;
+        use futures::StreamExt;
+
+        Box::pin(try_stream! {
+            let mut bytes_stream = byte_stream;
+            let mut line_buffer = String::new();
+            let mut full_body = String::new();
+
+            while let Some(chunk) = bytes_stream.next().await {
+                let chunk = chunk.map_err(Error::Request)?;
+                let text = String::from_utf8_lossy(&chunk);
+                line_buffer.push_str(&text);
+                full_body.push_str(&text);
+
+                let mut remaining = String::new();
+                let mut split = line_buffer.split('\n').peekable();
+                while let Some(line) = split.next() {
+                    if split.peek().is_none() {
+                        remaining.push_str(line);
+                        break;
+                    }
+                    if !line.trim().is_empty() {
+                        if let Ok(parts) = parse_response_parts(line) {
+                            if !parts.is_empty() {
+                                let response = build_chat_response_from_parts(&parts)?;
+                                yield response;
+                            }
+                        }
+                    }
+                }
+                line_buffer = remaining;
+            }
+
+            if !line_buffer.trim().is_empty() {
+                if let Ok(parts) = parse_response_parts(&line_buffer) {
+                    if !parts.is_empty() {
+                        let response = build_chat_response_from_parts(&parts)?;
+                        yield response;
+                    }
+                }
+            }
+
+            client.ingest_conversation_state(&full_body).await?;
+        })
+    }
+
     /// Sends a generation request with optional conversation state and returns
     /// the parsed response.
     ///
@@ -291,6 +379,17 @@ impl GeminiClient {
         category: ModelCategory,
         config: Option<GenerationConfig>,
     ) -> Result<ChatResponse> {
+        let config = if config.is_some() {
+            config
+        } else {
+            self.inner
+                .config
+                .read()
+                .await
+                .system_instruction
+                .clone()
+                .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
+        };
         let body = self.generate_raw(message, conversation, category, config).await?;
         parse_chat_response(&body)
     }
@@ -986,6 +1085,20 @@ fn credentials_to_sapisid_hash(cookies: &Cookies, origin: &str) -> Option<String
     cookies.to_credentials().ok()?.sapisid_hash(origin)
 }
 
+/// Builds a [`ChatResponse`] from parsed content parts.
+fn build_chat_response_from_parts(parts: &[ContentPart]) -> Result<ChatResponse> {
+    let mut texts = Vec::new();
+    let mut thinkings = Vec::new();
+    for part in parts {
+        match part {
+            ContentPart::Text(t) => texts.push(t.clone()),
+            ContentPart::Thinking(t) => thinkings.push(t.clone()),
+            ContentPart::Image(_) => {}
+        }
+    }
+    Ok(ChatResponse::new(texts.join("")).with_thinking(thinkings.join("")))
+}
+
 fn map_state(state: ProtoConversationState) -> crate::session::ConversationState {
     crate::session::ConversationState {
         conversation_id: state.conversation_id,
@@ -1063,6 +1176,13 @@ impl<'a> ChatBuilder<'a> {
         self
     }
 
+    /// Sets a system instruction for this turn.
+    pub fn with_system_instruction(mut self, instruction: impl Into<String>) -> Self {
+        let config = self.config.unwrap_or_default();
+        self.config = Some(config.with_system_instruction(instruction));
+        self
+    }
+
     /// Sends a text-only message.
     pub async fn send_message(self, text: impl Into<String>) -> Result<ChatResponse> {
         let message = ChatMessage::user(text);
@@ -1092,9 +1212,21 @@ impl<'a> ChatBuilder<'a> {
     /// This is useful for callers that need to control both text and image
     /// parts (or other future content types) directly.
     pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
+        let config = if self.config.is_some() {
+            self.config
+        } else {
+            self.client
+                .inner
+                .config
+                .read()
+                .await
+                .system_instruction
+                .clone()
+                .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
+        };
         let response = self
             .client
-            .generate_raw(&message, self.conversation.as_ref(), self.category, self.config)
+            .generate_raw(&message, self.conversation.as_ref(), self.category, config)
             .await?;
         let parsed = parse_chat_response(&response)?;
 
@@ -1110,6 +1242,7 @@ impl<'a> ChatBuilder<'a> {
 #[cfg(test)]
 mod client_tests {
     use super::*;
+    use futures::StreamExt;
 
     #[test]
     fn extract_waa_fingerprint_anchors_to_pro_model_block() {
@@ -1125,5 +1258,43 @@ mod client_tests {
     fn extract_waa_fingerprint_ignores_decoy_outside_model_list() {
         let body = r#"outside1234567890 [[["fbb127bbb056c959","Flash",...]]]"#;
         assert!(extract_waa_fingerprint_from_model_list(body).is_none());
+    }
+
+    #[tokio::test]
+    async fn stream_responses_yields_text_and_ingests_state() {
+        let body = include_str!("../tests/fixtures/conversation_state.json");
+        let bytes_stream = futures::stream::iter(vec![Ok(bytes::Bytes::from(body))]);
+        let client = GeminiClient::from_cookie_header(
+            "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
+        )
+        .unwrap();
+
+        let mut stream = GeminiClient::stream_responses(bytes_stream, client.clone());
+        let mut chunks = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            chunks.push(chunk.unwrap());
+        }
+
+        assert!(!chunks.is_empty());
+        let last = chunks.last().unwrap();
+        assert!(!last.text().is_empty());
+
+        let session = client.inner.session.lock().await;
+        assert!(session.conversation_state.is_some());
+    }
+
+    #[tokio::test]
+    async fn stream_responses_handles_empty_body() {
+        let bytes_stream = futures::stream::iter(Vec::<std::result::Result<bytes::Bytes, reqwest::Error>>::new());
+        let client = GeminiClient::from_cookie_header(
+            "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
+        )
+        .unwrap();
+
+        let mut stream = GeminiClient::stream_responses(bytes_stream, client);
+        let first = stream.next().await;
+        // Empty body has no parseable chunks; conversation-state ingestion may
+        // produce an error, but the stream must not panic.
+        assert!(first.is_none() || first.unwrap().is_err());
     }
 }

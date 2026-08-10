@@ -70,7 +70,11 @@ pub fn build_inner_req_list(
         None => build_fallback_base(conversation_state),
     };
 
-    inner[SLOT_PROMPT] = build_slot0(&request.prompt, attachments);
+    let system_instruction = request
+        .config
+        .as_ref()
+        .and_then(|c| c.system_instruction.as_deref());
+    inner[SLOT_PROMPT] = build_slot0(&request.prompt, attachments, system_instruction);
     inner[SLOT_LANGUAGE] = json!([language]);
     inner[SLOT_WAA_TOKEN] = waa_token.map_or_else(|| Value::Null, |t| json!(t));
     inner[SLOT_NONCE] = json!(nonce);
@@ -146,7 +150,11 @@ fn build_fallback_base(conversation_state: Option<&ConversationState>) -> Vec<Va
     slots
 }
 
-fn build_slot0(prompt: &str, attachments: &[WebAttachment]) -> Value {
+fn build_slot0(prompt: &str, attachments: &[WebAttachment], system_instruction: Option<&str>) -> Value {
+    let prompt = match system_instruction {
+        Some(instruction) => format!("{instruction}\n{prompt}"),
+        None => prompt.to_string(),
+    };
     if attachments.is_empty() {
         json!([prompt, 0, null, null, null, null, 0])
     } else {
