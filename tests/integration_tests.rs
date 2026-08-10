@@ -652,6 +652,179 @@ async fn get_last_selected_mode_returns_none_for_null() {
 }
 
 #[tokio::test]
+async fn get_locale_tools_returns_value() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/cYRIkd_locale_tools.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.get_locale_tools().await;
+    assert!(result.is_ok(), "get_locale_tools failed: {:?}", result);
+    assert_eq!(
+        result.unwrap().value(),
+        &serde_json::json!({"tools": ["tool1", "tool2"]})
+    );
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let body = std::str::from_utf8(&requests[0].body).unwrap();
+    assert!(body.contains("cYRIkd"), "request body missing cYRIkd");
+}
+
+#[tokio::test]
+async fn get_model_config_returns_value() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/whPPme_model_config.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.get_model_config().await;
+    assert!(result.is_ok(), "get_model_config failed: {:?}", result);
+    assert_eq!(
+        result.unwrap().value(),
+        &serde_json::json!({"models": [{"id": "pro"}]})
+    );
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let body = std::str::from_utf8(&requests[0].body).unwrap();
+    assert!(body.contains("whPPme"), "request body missing whPPme");
+}
+
+#[tokio::test]
+async fn get_locale_config_returns_value() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/Te6DCf_locale_config.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.get_locale_config().await;
+    assert!(result.is_ok(), "get_locale_config failed: {:?}", result);
+    assert_eq!(result.unwrap().value(), &serde_json::json!({"locale": "ru"}));
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let body = std::str::from_utf8(&requests[0].body).unwrap();
+    assert!(body.contains("Te6DCf"), "request body missing Te6DCf");
+}
+
+#[tokio::test]
+async fn get_tools_config_returns_value() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/ku4Jyf_tools_config.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.get_tools_config().await;
+    assert!(result.is_ok(), "get_tools_config failed: {:?}", result);
+    assert_eq!(
+        result.unwrap().value(),
+        &serde_json::json!({"enabled": [1, 3, 7, 17]})
+    );
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let body = std::str::from_utf8(&requests[0].body).unwrap();
+    assert!(body.contains("ku4Jyf"), "request body missing ku4Jyf");
+}
+
+#[tokio::test]
 async fn set_last_selected_mode_sends_l5adhe_payload() {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
