@@ -4,17 +4,17 @@ milestone: v0.2
 milestone_name: API Expansion
 current_phase: 11 — Protocol Drift & Integration
 current_plan: 01
-status: planned
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-08-10T09:37:00.000Z"
+status: complete
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-08-10T10:10:00.000Z"
 last_activity: 2026-08-10
-last_activity_desc: Completed Phase 10 Plan 1 (Settings Pages)
+last_activity_desc: Completed Phase 11 Plan 1 (Protocol Drift & Integration)
 progress:
   total_phases: 11
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 24
-  completed_plans: 23
-  percent: 91
+  completed_plans: 24
+  percent: 100
 ---
 
 # Project State
@@ -22,9 +22,9 @@ progress:
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
 **Current milestone:** v0.2 — API Expansion
-**Current phase:** 7 — Conversation Actions
-**Current Plan:** Not started
-**Total Plans in Phase:** TBD
+**Current phase:** 11 — Protocol Drift & Integration
+**Current Plan:** 01
+**Total Plans in Phase:** 1/1
 
 milestone: v0.2
 
@@ -33,7 +33,7 @@ milestone: v0.2
 See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** Phase 9 complete. Next: plan and execute Phase 10 (Settings Pages).
+**Current focus:** Phase 11 complete. Milestone v0.2 API Expansion is finished.
 
 ## Phase Status
 
@@ -50,10 +50,11 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 | 9 — Locale & Model Config | ✓ Complete | 1/1 | 100% |
 | 9 — Locale & Model Config | ✓ Complete | 1/1 | 100% |
 | 10 — Settings Pages | ✓ Complete | 1/1 | 100% |
-| 11 — Protocol Drift & Integration | Not started | 0/? | 0% |
+| 11 — Protocol Drift & Integration | ✓ Complete | 1/1 | 100% |
 
 ## Active Decisions
 
+- Phase 11: Updated `X_CLIENT_DATA` constant to `CNeOywE=` to match the latest HAR capture and added a read-only v0.2 API tour example with configurable `GEMINI_BASE_URL`.
 - Phase 10: Reused the `locale_model_config.rs` Value-wrapper pattern for settings-page RPCs to keep v0.2 surfaces consistent.
 - semver progression: 0.1 → 0.2 → 1.0
 - Cookie-based auth remains default; provider trait added for extensibility (async `CredentialsProvider` with boxed futures, no async-trait dependency).
@@ -85,6 +86,7 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
+| Phase 11-protocol-drift-integration P01 | 20 min | 3 tasks | 5 files |
 | Phase 09-locale-model-config P01 | 11 min | 4 tasks | 8 files |
 | Phase 08-user-profile-preferences P01 | 6 min | 3 tasks | 8 files |
 | Phase 01-stabilize-v0-1-core P01 | 13m 52s | 3 tasks | 9 files |
@@ -109,17 +111,17 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ## Session
 
-**Last session:** 2026-08-10T09:37:00.000Z
-**Stopped at:** Completed 10-01-PLAN.md
+**Last session:** 2026-08-10T10:10:00.000Z
+**Stopped at:** Completed 11-01-PLAN.md
 **Resume file:** None
 
 ## Current Position
 
-Phase: 11 — Protocol Drift & Integration (not started)
-Plan: —
-Status: Awaiting `/gsd-plan-phase 11`
-Last activity: 2026-08-10 — Completed Phase 10 Plan 1 (Settings Pages)
+Phase: 11 — Protocol Drift & Integration (complete)
+Plan: 01
+Status: All v0.2 API Expansion plans complete.
+Last activity: 2026-08-10 — Completed Phase 11 Plan 1 (Protocol Drift & Integration)
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 11` to plan Protocol Drift & Integration.
+- Milestone v0.2 API Expansion is complete. Proceed to milestone summary or begin v1.0 planning.
