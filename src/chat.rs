@@ -1,10 +1,14 @@
 //! High-level chat types for building requests and reading responses.
 
+use std::sync::Arc;
+
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::errors::{Error, Result};
 use crate::models::ModelCategory;
+use crate::tool::{Tool, ToolCall, ToolResult};
 
 /// Current snapshot format version for forward compatibility.
 pub(crate) const CONVERSATION_FORMAT_VERSION: u32 = 1;
@@ -194,6 +198,10 @@ pub enum ContentPart {
     Audio(AudioSource),
     /// A video attachment.
     Video(VideoSource),
+    /// A function-call request produced by the model.
+    ToolCall(ToolCall),
+    /// A function-call result returned to the model.
+    ToolResult(ToolResult),
 }
 
 /// Configuration for a generation request.
@@ -220,12 +228,33 @@ pub struct GenerationConfig {
     /// Optional system instruction prepended to the user prompt.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_instruction: Option<String>,
+    /// Optional tool declarations registered for function calling.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<Value>>,
+    /// Maximum number of tool-call turns before returning the last response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tool_turns: Option<usize>,
 }
 
 impl GenerationConfig {
     /// Sets the system instruction for this generation config.
     pub fn with_system_instruction(mut self, instruction: impl Into<String>) -> Self {
         self.system_instruction = Some(instruction.into());
+        self
+    }
+
+    /// Sets the tool declarations for this generation config.
+    ///
+    /// Each entry should be a JSON object with a `name` and `parameters` field,
+    /// typically produced by [`crate::tool::tool_declaration`].
+    pub fn with_tools(mut self, tools: Vec<Value>) -> Self {
+        self.tools = Some(tools);
+        self
+    }
+
+    /// Sets the maximum number of tool-call turns allowed.
+    pub fn with_max_tool_turns(mut self, max: usize) -> Self {
+        self.max_tool_turns = Some(max);
         self
     }
 }
@@ -309,7 +338,9 @@ pub(crate) fn extract_prompt(message: &ChatMessage) -> Result<String> {
             ContentPart::Thinking(_)
             | ContentPart::Image(_)
             | ContentPart::Audio(_)
-            | ContentPart::Video(_) => {}
+            | ContentPart::Video(_)
+            | ContentPart::ToolCall(_)
+            | ContentPart::ToolResult(_) => {}
         }
     }
     let prompt = text_parts.join("\n");
@@ -415,7 +446,7 @@ impl Conversation {
 }
 
 /// Internal type used when preparing a generation request.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[doc(hidden)]
 pub struct PreparedRequest {
     /// Flattened prompt text.
@@ -430,6 +461,25 @@ pub struct PreparedRequest {
     pub config: Option<GenerationConfig>,
     /// Selected model category.
     pub category: ModelCategory,
+    /// Registered tool declarations for function calling.
+    pub tools: Option<Vec<Arc<dyn Tool>>>,
+    /// Whether to retry once on `NotSignedIn` errors (Plan 03 wiring).
+    pub refresh_on_auth_error: bool,
+}
+
+impl std::fmt::Debug for PreparedRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PreparedRequest")
+            .field("prompt", &self.prompt)
+            .field("inline_images", &self.inline_images.len())
+            .field("inline_audio", &self.inline_audio.len())
+            .field("inline_video", &self.inline_video.len())
+            .field("config", &self.config)
+            .field("category", &self.category)
+            .field("tools", &self.tools.as_ref().map(|t| t.len()))
+            .field("refresh_on_auth_error", &self.refresh_on_auth_error)
+            .finish()
+    }
 }
 
 /// Internal helper that prepares a request from a conversation or a single turn.
@@ -471,6 +521,7 @@ pub(crate) fn prepare_request(
                 )));
             }
             ContentPart::Text(_) | ContentPart::Thinking(_) => {}
+            ContentPart::ToolCall(_) | ContentPart::ToolResult(_) => {}
         }
     }
 
@@ -481,6 +532,8 @@ pub(crate) fn prepare_request(
         inline_video,
         config,
         category: default_category,
+        tools: None,
+        refresh_on_auth_error: false,
     })
 }
 
@@ -557,5 +610,23 @@ mod tests {
             },
         );
         assert!(prepare_request(None, &video_message, None, ModelCategory::Auto).is_err());
+    }
+
+    #[test]
+    fn generation_config_with_tools_round_trips() {
+        let tools = vec![serde_json::json!({
+            "name": "doubler",
+            "parameters": { "type": "object" }
+        })];
+        let config = GenerationConfig::default().with_tools(tools.clone());
+        assert_eq!(config.tools, Some(tools));
+    }
+
+    #[test]
+    fn prepared_request_carries_default_flags() {
+        let message = ChatMessage::user("hello");
+        let prepared = prepare_request(None, &message, None, ModelCategory::Auto).unwrap();
+        assert!(prepared.tools.is_none());
+        assert!(!prepared.refresh_on_auth_error);
     }
 }

@@ -190,30 +190,31 @@ fn parse_response_parts_deduplicates_stream_chunks() {
     assert!(thinking_parts[0].starts_with("**Comparing Images**"));
 }
 
-#[test]
-fn build_inner_req_list_has_97_slots() {
-    let prepared = PreparedRequest {
+fn minimal_prepared() -> PreparedRequest {
+    PreparedRequest {
         prompt: "hello".to_string(),
         inline_images: vec![],
         inline_audio: vec![],
         inline_video: vec![],
         config: None,
         category: ModelCategory::Auto,
-    };
+        tools: None,
+        refresh_on_auth_error: false,
+    }
+}
+
+#[test]
+fn build_inner_req_list_has_97_slots() {
+    let prepared = minimal_prepared();
     let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
     assert_eq!(inner.len(), 97);
 }
 
 #[test]
 fn build_inner_req_list_with_attachments() {
-    let prepared = PreparedRequest {
-        prompt: "describe".to_string(),
-        inline_images: vec![],
-        inline_audio: vec![],
-        inline_video: vec![],
-        config: None,
-        category: ModelCategory::Fast,
-    };
+    let mut prepared = minimal_prepared();
+    prepared.prompt = "describe".to_string();
+    prepared.category = ModelCategory::Fast;
     let attachments = vec![WebAttachment {
         reference: "/contrib_service/ttl_1d/abc".to_string(),
         mime_type: "image/png".to_string(),
@@ -226,14 +227,9 @@ fn build_inner_req_list_with_attachments() {
 
 #[test]
 fn build_inner_req_list_with_conversation_state() {
-    let prepared = PreparedRequest {
-        prompt: "follow up".to_string(),
-        inline_images: vec![],
-        inline_audio: vec![],
-        inline_video: vec![],
-        config: None,
-        category: ModelCategory::Pro,
-    };
+    let mut prepared = minimal_prepared();
+    prepared.prompt = "follow up".to_string();
+    prepared.category = ModelCategory::Pro;
     let state = ConversationState {
         conversation_id: "c_abc".to_string(),
         response_id: "r_def".to_string(),
@@ -256,14 +252,8 @@ fn build_inner_req_list_slot_30_reflects_model_category() {
         (ModelCategory::FastDynamicThinking, 5),
         (ModelCategory::FlashLite, 6),
     ] {
-        let prepared = PreparedRequest {
-            prompt: "hello".to_string(),
-            inline_images: vec![],
-            inline_audio: vec![],
-            inline_video: vec![],
-            config: None,
-            category,
-        };
+        let mut prepared = minimal_prepared();
+        prepared.category = category;
         let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
         assert_eq!(inner[30], serde_json::json!([expected]), "slot 30 for {category:?}");
     }
@@ -300,14 +290,9 @@ fn image_source_from_bytes_encodes_base64() {
 
 #[test]
 fn build_inner_req_list_with_inline_images() {
-    let prepared = PreparedRequest {
-        prompt: "Look at this".to_string(),
-        inline_images: vec![("image/png".to_string(), "ZmFrZQ==".to_string())],
-        inline_audio: vec![],
-        inline_video: vec![],
-        config: None,
-        category: ModelCategory::Auto,
-    };
+    let mut prepared = minimal_prepared();
+    prepared.prompt = "Look at this".to_string();
+    prepared.inline_images = vec![("image/png".to_string(), "ZmFrZQ==".to_string())];
     let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
     // Inline images are uploaded first and become WebAttachments; without
     // uploading, the empty-attachment path still builds a valid slot 0.
@@ -319,14 +304,8 @@ fn build_inner_req_list_with_inline_images() {
 fn system_instruction_in_slot0() {
     let config = gemini_sdk::chat::GenerationConfig::default()
         .with_system_instruction("You are a Rust expert");
-    let prepared = PreparedRequest {
-        prompt: "hello".to_string(),
-        inline_images: vec![],
-        inline_audio: vec![],
-        inline_video: vec![],
-        config: Some(config),
-        category: ModelCategory::Auto,
-    };
+    let mut prepared = minimal_prepared();
+    prepared.config = Some(config);
     let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
     let prompt = inner[0][0].as_str().expect("slot 0 prompt is a string");
     assert!(prompt.starts_with("You are a Rust expert\nhello"));
@@ -334,14 +313,7 @@ fn system_instruction_in_slot0() {
 
 #[test]
 fn no_system_instruction_preserved() {
-    let prepared = PreparedRequest {
-        prompt: "hello".to_string(),
-        inline_images: vec![],
-        inline_audio: vec![],
-        inline_video: vec![],
-        config: None,
-        category: ModelCategory::Auto,
-    };
+    let prepared = minimal_prepared();
     let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
     assert_eq!(inner[0][0], serde_json::json!("hello"));
 }

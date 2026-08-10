@@ -4,6 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::chat::{ChatResponse, ContentPart};
+use crate::tool::ToolCall;
 use crate::errors::{Error, Result};
 use crate::models::ModelInfo;
 use crate::proto::indices::parser::*;
@@ -17,6 +18,7 @@ pub use parse_chat_response as parse_chat_response_fn;
 struct PartContent {
     text: String,
     thinking: String,
+    tool_calls: Vec<ToolCall>,
 }
 
 /// Extracts answer text and reasoning from one candidate part array.
@@ -47,6 +49,22 @@ fn extract_part_content(part_arr: &[Value]) -> PartContent {
                     continue;
                 }
                 content.thinking.push_str(s);
+            }
+        }
+    }
+
+    // Tool-call block shape: [[<name>, <args>], ...] observed at index 7.
+    if let Some(calls) = part_arr.get(PART_FUNCTION_CALL).and_then(|v| v.as_array()) {
+        for call in calls {
+            if let Some(call_arr) = call.as_array() {
+                if call_arr.len() < 2 {
+                    continue;
+                }
+                let name = call_arr[0].as_str().unwrap_or("").to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                content.tool_calls.push(ToolCall::new(name, call_arr[1].clone()));
             }
         }
     }
@@ -195,7 +213,11 @@ pub fn parse_chat_response(body: &str) -> Result<ChatResponse> {
         match part {
             ContentPart::Text(t) => texts.push(t),
             ContentPart::Thinking(t) => thinkings.push(t),
-            ContentPart::Image(_) | ContentPart::Audio(_) | ContentPart::Video(_) => {}
+            ContentPart::Image(_)
+            | ContentPart::Audio(_)
+            | ContentPart::Video(_)
+            | ContentPart::ToolCall(_)
+            | ContentPart::ToolResult(_) => {}
         }
     }
 
@@ -483,7 +505,7 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     .unwrap_or("")
                     .to_string();
                 let content = extract_part_content(part_arr);
-                if content.text.is_empty() && content.thinking.is_empty() {
+                if content.text.is_empty() && content.thinking.is_empty() && content.tool_calls.is_empty() {
                     continue;
                 }
 
@@ -503,6 +525,9 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                 if content.thinking.len() >= slot.1.thinking.len() && !content.thinking.is_empty() {
                     slot.1.thinking = content.thinking;
                 }
+                if !content.tool_calls.is_empty() {
+                    slot.1.tool_calls = content.tool_calls;
+                }
             }
         }
     }
@@ -514,6 +539,9 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
         }
         if !acc.thinking.is_empty() {
             all_parts.push(ContentPart::Thinking(acc.thinking));
+        }
+        for tool_call in acc.tool_calls {
+            all_parts.push(ContentPart::ToolCall(tool_call));
         }
     }
 
@@ -631,7 +659,10 @@ fn parsed_parts_content(parsed: &Value) -> Vec<PartContent> {
         for part in parts {
             if let Some(part_arr) = part.as_array() {
                 let content = extract_part_content(part_arr);
-                if !content.text.is_empty() || !content.thinking.is_empty() {
+                if !content.text.is_empty()
+                    || !content.thinking.is_empty()
+                    || !content.tool_calls.is_empty()
+                {
                     out.push(content);
                 }
             }

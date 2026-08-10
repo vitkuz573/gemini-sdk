@@ -3,7 +3,10 @@
 use base64::Engine;
 use serde_json::{json, Value};
 
+use std::sync::Arc;
+
 use crate::chat::{PreparedRequest, ThinkingLevel};
+use crate::tool::Tool;
 use crate::proto::indices::builder::*;
 
 /// Number of slots in the `StreamGenerate` inner request list.
@@ -96,6 +99,10 @@ pub fn build_inner_req_list(
     inner[91] = json!(0);
     // Slot 96 is 1 for a fresh conversation and 0 when continuing an existing one.
     inner[SLOT_CONVERSATION_TYPE] = json!(if conversation_state.is_some() { 0 } else { 1 });
+
+    if let Some(tools) = &request.tools {
+        inner[SLOT_TOOL_DECLARATIONS] = build_tool_declarations(tools);
+    }
 
     if browser_payload.is_none() {
         inner[SLOT_CONTINUATION_FLAG] = json!([1]);
@@ -204,6 +211,20 @@ pub fn derive_attachment_filename(mime_type: &str, index: usize) -> String {
     }
 }
 
+/// Builds a JSON array of tool declarations from registered tools.
+fn build_tool_declarations(tools: &[Arc<dyn Tool>]) -> Value {
+    let declarations: Vec<Value> = tools
+        .iter()
+        .map(|tool| {
+            serde_json::json!({
+                "name": tool.name(),
+                "parameters": tool.schema(),
+            })
+        })
+        .collect();
+    serde_json::json!([declarations])
+}
+
 /// Decodes base64 data tolerating common whitespace.
 pub fn base64_decode(data: &str) -> crate::Result<Vec<u8>> {
     let stripped: String = data.chars().filter(|c| !c.is_whitespace()).collect();
@@ -225,6 +246,8 @@ mod tests {
             inline_video: vec![],
             config: None,
             category: ModelCategory::Auto,
+            tools: None,
+            refresh_on_auth_error: false,
         }
     }
 
@@ -332,5 +355,49 @@ mod tests {
         assert_eq!(derive_attachment_filename("video/mp4", 1), "attachment_1.mp4");
         assert_eq!(derive_attachment_filename("video/webm", 2), "attachment_2.webm");
         assert_eq!(derive_attachment_filename("video/quicktime", 0), "attachment.mov");
+    }
+
+    #[tokio::test]
+    async fn slot_89_contains_tool_declarations() {
+        use crate::tool::Tool;
+        use serde_json::Value;
+        use std::future::Future;
+        use std::pin::Pin;
+
+        struct FakeTool;
+        impl Tool for FakeTool {
+            fn name(&self) -> &str {
+                "fake_tool"
+            }
+            fn schema(&self) -> Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn invoke(
+                &self,
+                _args: Value,
+            ) -> Pin<Box<dyn Future<Output = Result<Value, crate::tool::ToolError>> + Send + '_>>
+            {
+                Box::pin(async move { Ok(Value::Null) })
+            }
+        }
+
+        let mut req = minimal_prepared();
+        req.tools = Some(vec![std::sync::Arc::new(FakeTool)]);
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
+        let slot89 = &inner[SLOT_TOOL_DECLARATIONS];
+        assert!(slot89.is_array());
+        let arr = slot89.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        let declarations = arr[0].as_array().expect("wrapped declarations array");
+        assert_eq!(declarations.len(), 1);
+        let first = &declarations[0];
+        assert_eq!(first["name"], "fake_tool");
+    }
+
+    #[test]
+    fn no_tools_leaves_slot_89_null() {
+        let req = minimal_prepared();
+        let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
+        assert_eq!(inner[SLOT_TOOL_DECLARATIONS], Value::Null);
     }
 }

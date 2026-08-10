@@ -18,6 +18,7 @@ use crate::chat::{
     ImageSource, PreparedRequest,
 };
 use crate::errors::{Error, Result};
+use crate::tool::{Tool, ToolError, ToolResult};
 use crate::models::{ModelCategory, ModelInfo};
 use crate::proto::parser::{
     extract_conversation_state, parse_chat_response, parse_model_list, parse_response_parts,
@@ -338,6 +339,8 @@ impl GeminiClient {
             conversation: None,
             category: ModelCategory::Auto,
             config: None,
+            tools: None,
+            refresh_on_auth_error: false,
         }
     }
 
@@ -349,6 +352,8 @@ impl GeminiClient {
             conversation: Some(conversation),
             category,
             config: None,
+            tools: None,
+            refresh_on_auth_error: false,
         }
     }
 
@@ -513,6 +518,115 @@ impl GeminiClient {
         config: Option<GenerationConfig>,
     ) -> Result<ChatResponse> {
         self.generate_with_conversation(message, None, category, config).await
+    }
+
+    /// Sends a generation request with tool declarations, invokes any tool
+    /// calls returned by the model, and returns the final parsed response.
+    ///
+    /// This method performs a round-trip: it sends the prompt with tool
+    /// declarations, parses [`ContentPart::ToolCall`] parts from the response,
+    /// invokes the matching registered tools, sends a follow-up turn containing
+    /// the results, and repeats up to `max_tool_turns` (default 5).
+    #[tracing::instrument(name = "gemini.generate_with_tools", level = "info", skip_all, fields(operation = "gemini.generate_with_tools", category = ?category))]
+    pub async fn generate_with_tools(
+        &self,
+        message: &ChatMessage,
+        tools: Vec<Arc<dyn Tool>>,
+        category: ModelCategory,
+        config: Option<GenerationConfig>,
+    ) -> Result<ChatResponse> {
+        let mut config = if config.is_some() {
+            config
+        } else {
+            self.inner
+                .config
+                .read()
+                .await
+                .system_instruction
+                .clone()
+                .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
+        };
+        if let Some(ref mut cfg) = config {
+            let declarations: Vec<serde_json::Value> = tools
+                .iter()
+                .map(|tool| {
+                    serde_json::json!({
+                        "name": tool.name(),
+                        "parameters": tool.schema(),
+                    })
+                })
+                .collect();
+            cfg.tools = Some(declarations);
+        } else {
+            let declarations: Vec<serde_json::Value> = tools
+                .iter()
+                .map(|tool| {
+                    serde_json::json!({
+                        "name": tool.name(),
+                        "parameters": tool.schema(),
+                    })
+                })
+                .collect();
+            config = Some(GenerationConfig::default().with_tools(declarations));
+        }
+
+        let max_turns = config
+            .as_ref()
+            .and_then(|c| c.max_tool_turns)
+            .unwrap_or(5);
+
+        let mut current_message = message.clone();
+        let mut last_response = None;
+
+        for turn in 0..max_turns {
+            let prepared = prepare_request(None, &current_message, config.clone(), category)?;
+            self.run_request_hook(&prepared).await?;
+            let body = self.generate_raw_with_prepared(&prepared).await?;
+            let response = self.parse_response(&body)?;
+            self.run_response_hook(&response).await?;
+
+            let parsed_parts = crate::proto::parser::parse_response_parts(&body).unwrap_or_default();
+            let mut tool_calls = Vec::new();
+            for part in &parsed_parts {
+                if let ContentPart::ToolCall(call) = part {
+                    tool_calls.push(call.clone());
+                }
+            }
+
+            if tool_calls.is_empty() {
+                return Ok(response);
+            }
+
+            last_response = Some(response);
+
+            let mut tool_results = Vec::new();
+            for call in tool_calls {
+                let tool = tools
+                    .iter()
+                    .find(|t| t.name() == call.name)
+                    .ok_or_else(|| Error::Tool(ToolError::NotFound(call.name.clone())))?;
+                let result = tool.invoke(call.args).await.map_err(Error::Tool)?;
+                tool_results.push(ToolResult::new(call.name, result));
+            }
+
+            let mut parts: Vec<ContentPart> = vec![ContentPart::Text("".to_string())];
+            parts.extend(tool_results.into_iter().map(ContentPart::ToolResult));
+            current_message = ChatMessage {
+                role: "user".to_string(),
+                parts,
+            };
+
+            // Prevent re-emitting tool declarations on follow-up turns.
+            if turn == 0 {
+                if let Some(ref mut cfg) = config {
+                    cfg.tools = None;
+                }
+            }
+        }
+
+        last_response.ok_or_else(|| Error::Tool(ToolError::InvokeFailed(
+            "reached maximum tool-call turns without a final response".to_string(),
+        )))
     }
 
     /// Returns a stream of incremental `ChatResponse` chunks.
@@ -1371,7 +1485,11 @@ fn build_chat_response_from_parts(parts: &[ContentPart]) -> Result<ChatResponse>
         match part {
             ContentPart::Text(t) => texts.push(t.clone()),
             ContentPart::Thinking(t) => thinkings.push(t.clone()),
-            ContentPart::Image(_) | ContentPart::Audio(_) | ContentPart::Video(_) => {}
+            ContentPart::Image(_)
+            | ContentPart::Audio(_)
+            | ContentPart::Video(_)
+            | ContentPart::ToolCall(_)
+            | ContentPart::ToolResult(_) => {}
         }
     }
     Ok(ChatResponse::new(texts.join("")).with_thinking(thinkings.join("")))
@@ -1436,6 +1554,8 @@ pub struct ChatBuilder<'a> {
     conversation: Option<Conversation>,
     category: ModelCategory,
     config: Option<GenerationConfig>,
+    tools: Option<Vec<Arc<dyn Tool>>>,
+    refresh_on_auth_error: bool,
 }
 
 // ChatBuilder consumes `self` on send, so cloning the optional config at the
@@ -1458,6 +1578,19 @@ impl<'a> ChatBuilder<'a> {
     pub fn with_system_instruction(mut self, instruction: impl Into<String>) -> Self {
         let config = self.config.unwrap_or_default();
         self.config = Some(config.with_system_instruction(instruction));
+        self
+    }
+
+    /// Registers tools for function calling on this turn.
+    pub fn with_tools(mut self, tools: Vec<Arc<dyn Tool>>) -> Self {
+        self.tools = Some(tools);
+        self
+    }
+
+    /// Enables a single retry on `NotSignedIn` errors when a credentials
+    /// provider has been registered with the client (Plan 03 wiring).
+    pub fn with_refresh_on_auth_error(mut self, refresh: bool) -> Self {
+        self.refresh_on_auth_error = refresh;
         self
     }
 
@@ -1502,18 +1635,25 @@ impl<'a> ChatBuilder<'a> {
                 .clone()
                 .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
         };
-        let response = self
-            .client
-            .generate_raw(&message, self.conversation.as_ref(), self.category, config)
-            .await?;
-        let parsed = parse_chat_response(&response)?;
+
+        let response = if let Some(tools) = self.tools {
+            self.client
+                .generate_with_tools(&message, tools, self.category, config)
+                .await?
+        } else {
+            let body = self
+                .client
+                .generate_raw(&message, self.conversation.as_ref(), self.category, config)
+                .await?;
+            parse_chat_response(&body)?
+        };
 
         if let Some(mut conversation) = self.conversation {
             conversation.add_message(message);
-            conversation.add_model_text(parsed.text.clone());
+            conversation.add_model_text(response.text.clone());
         }
 
-        Ok(parsed)
+        Ok(response)
     }
 }
 
@@ -1641,6 +1781,8 @@ mod client_tests {
             inline_video: vec![],
             config: None,
             category: ModelCategory::Auto,
+            tools: None,
+            refresh_on_auth_error: false,
         };
 
         client.run_request_hook(&prepared).await.unwrap();
@@ -1688,6 +1830,8 @@ mod client_tests {
             inline_video: vec![],
             config: None,
             category: ModelCategory::Auto,
+            tools: None,
+            refresh_on_auth_error: false,
         };
 
         let err = client

@@ -34,6 +34,8 @@ pub mod builder {
     pub const SLOT_THINKING_LEVEL: usize = 80;
     /// Slot that distinguishes new conversations from continuations.
     pub const SLOT_CONVERSATION_TYPE: usize = 96;
+    /// Slot used for tool declarations when function calling is enabled.
+    pub const SLOT_TOOL_DECLARATIONS: usize = 89;
 }
 
 /// Indices used when parsing WIZ / batchexecute responses.
@@ -42,6 +44,8 @@ pub mod parser {
     pub const PART_TEXT: usize = 1;
     /// Index of the reasoning block within a candidate part.
     pub const PART_THINKING: usize = 37;
+    /// Index of the function-call block within a candidate part.
+    pub const PART_FUNCTION_CALL: usize = 7;
     /// Index of the candidate / response part id.
     pub const PART_ID: usize = 0;
 

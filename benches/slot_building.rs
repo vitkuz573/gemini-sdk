@@ -15,6 +15,8 @@ fn bench_build_inner_req_list(c: &mut Criterion) {
             ..Default::default()
         }),
         category: ModelCategory::Pro,
+        tools: None,
+        refresh_on_auth_error: false,
     };
 
     c.bench_function("build_inner_req_list", |b| {
