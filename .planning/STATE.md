@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: API Expansion
-current_phase: 10 — Settings Pages
+current_phase: 11 — Protocol Drift & Integration
 current_plan: 01
 status: planned
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-08-10T09:22:00.000Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-08-10T09:37:00.000Z"
 last_activity: 2026-08-10
-last_activity_desc: Completed Phase 9 Plan 1 (Locale & Model Config)
+last_activity_desc: Completed Phase 10 Plan 1 (Settings Pages)
 progress:
   total_phases: 11
-  completed_phases: 9
-  total_plans: 23
-  completed_plans: 22
-  percent: 82
+  completed_phases: 10
+  total_plans: 24
+  completed_plans: 23
+  percent: 91
 ---
 
 # Project State
@@ -49,11 +49,12 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 | 8 — User Profile & Preferences | ✓ Complete | 1/1 | 100% |
 | 9 — Locale & Model Config | ✓ Complete | 1/1 | 100% |
 | 9 — Locale & Model Config | ✓ Complete | 1/1 | 100% |
-| 10 — Settings Pages | Not started | 0/? | 0% |
+| 10 — Settings Pages | ✓ Complete | 1/1 | 100% |
 | 11 — Protocol Drift & Integration | Not started | 0/? | 0% |
 
 ## Active Decisions
 
+- Phase 10: Reused the `locale_model_config.rs` Value-wrapper pattern for settings-page RPCs to keep v0.2 surfaces consistent.
 - semver progression: 0.1 → 0.2 → 1.0
 - Cookie-based auth remains default; provider trait added for extensibility (async `CredentialsProvider` with boxed futures, no async-trait dependency).
 - Typed streaming adapter (`CHAT-02`) deferred to Phase 2; Phase 1 only stabilizes raw streaming method signature.
@@ -108,17 +109,17 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ## Session
 
-**Last session:** 2026-08-10T09:22:00.000Z
-**Stopped at:** Completed 09-01-PLAN.md
+**Last session:** 2026-08-10T09:37:00.000Z
+**Stopped at:** Completed 10-01-PLAN.md
 **Resume file:** None
 
 ## Current Position
 
-Phase: 10 — Settings Pages (not started)
+Phase: 11 — Protocol Drift & Integration (not started)
 Plan: —
-Status: Awaiting `/gsd-plan-phase 10`
-Last activity: 2026-08-10 — Completed Phase 9 Plan 1 (Locale & Model Config)
+Status: Awaiting `/gsd-plan-phase 11`
+Last activity: 2026-08-10 — Completed Phase 10 Plan 1 (Settings Pages)
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 10` to plan Settings Pages.
+- Run `/gsd-plan-phase 11` to plan Protocol Drift & Integration.

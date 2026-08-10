@@ -93,9 +93,9 @@
 
 ### Settings Pages
 
-- [ ] **SETTINGS-01**: SDK exposes `get_usage_stats()` using RPC `jSf9Qc`.
-- [ ] **SETTINGS-02**: SDK exposes `get_scheduled_prompts()` using RPC `XPSWpd`.
-- [ ] **SETTINGS-03**: Settings responses are returned as typed wrappers over `serde_json::Value`.
+- [x] **SETTINGS-01**: SDK exposes `get_usage_stats()` using RPC `jSf9Qc`.
+- [x] **SETTINGS-02**: SDK exposes `get_scheduled_prompts()` using RPC `XPSWpd`.
+- [x] **SETTINGS-03**: Settings responses are returned as typed wrappers over `serde_json::Value`.
 
 ### Protocol Drift Fixes
 
@@ -146,9 +146,9 @@
 | LOCALE-03 | Phase 9 | Complete |
 | LOCALE-04 | Phase 9 | Complete |
 | LOCALE-05 | Phase 9 | Complete |
-| SETTINGS-01 | Phase 10 | Pending |
-| SETTINGS-02 | Phase 10 | Pending |
-| SETTINGS-03 | Phase 10 | Pending |
+| SETTINGS-01 | Phase 10 | Complete |
+| SETTINGS-02 | Phase 10 | Complete |
+| SETTINGS-03 | Phase 10 | Complete |
 | DRIFT-01 | Phase 11 | Pending |
 | TOOL-06 | Phase 11 | Pending |
 | TOOL-07 | Phase 11 | Pending |
