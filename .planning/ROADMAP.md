@@ -240,7 +240,11 @@
 **Depends on:** Phase 10
 **Estimated waves:** 1
 
-**Plans:** TBD
+**Plans:**
+
+- [x] 11-01-PLAN.md — Protocol drift fix, v0.2 example, and final quality gates.
+
+1/1 plans complete
 
 ---
 

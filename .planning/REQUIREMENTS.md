@@ -99,12 +99,12 @@
 
 ### Protocol Drift Fixes
 
-- [ ] **DRIFT-01**: Default `x-client-data` header is updated from `CI7yygE=` to `CNeOywE=` to match the latest 135 MB HAR capture.
+- [x] **DRIFT-01**: Default `x-client-data` header is updated from `CI7yygE=` to `CNeOywE=` to match the latest 135 MB HAR capture.
 
 ### Tooling
 
-- [ ] **TOOL-06**: Each new RPC has a mocked fixture test using a captured or synthetic response.
-- [ ] **TOOL-07**: `cargo test`, `cargo clippy`, and `cargo doc` pass after all additions.
+- [x] **TOOL-06**: Each new RPC has a mocked fixture test using a captured or synthetic response.
+- [x] **TOOL-07**: `cargo test`, `cargo clippy`, and `cargo doc` pass after all additions.
 
 ## Future
 
@@ -149,9 +149,9 @@
 | SETTINGS-01 | Phase 10 | Complete |
 | SETTINGS-02 | Phase 10 | Complete |
 | SETTINGS-03 | Phase 10 | Complete |
-| DRIFT-01 | Phase 11 | Pending |
-| TOOL-06 | Phase 11 | Pending |
-| TOOL-07 | Phase 11 | Pending |
+| DRIFT-01 | Phase 11 | Complete |
+| TOOL-06 | Phase 11 | Complete |
+| TOOL-07 | Phase 11 | Complete |
 
 **Coverage:**
 
