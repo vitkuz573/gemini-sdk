@@ -723,7 +723,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let source_path = format!("/app/{conversation_id}");
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", PCCK7E_RPC_ID.to_string()),
@@ -747,25 +747,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(PCCK7E_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -803,7 +806,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", O30O0E_RPC_ID.to_string()),
                 ("source-path", "/".to_string()),
@@ -826,25 +829,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(O30O0E_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -878,7 +884,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", L5ADHE_RPC_ID.to_string()),
                 ("source-path", "/".to_string()),
@@ -901,25 +907,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(L5ADHE_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -957,7 +966,7 @@ impl GeminiClient {
         let mode_id = mode_id.as_ref();
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", L5ADHE_RPC_ID.to_string()),
                 ("source-path", "/".to_string()),
@@ -980,25 +989,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(L5ADHE_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1032,7 +1044,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", CYRIKD_RPC_ID.to_string()),
                 ("source-path", "/".to_string()),
@@ -1055,25 +1067,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(CYRIKD_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1107,7 +1122,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", WHPPME_RPC_ID.to_string()),
                 ("source-path", "/".to_string()),
@@ -1130,25 +1145,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(WHPPME_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1182,7 +1200,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", TE6DCF_RPC_ID.to_string()),
                 ("source-path", "/".to_string()),
@@ -1205,25 +1223,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(TE6DCF_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1257,7 +1278,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", KU4JYF_RPC_ID.to_string()),
                 ("source-path", "/".to_string()),
@@ -1280,25 +1301,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(KU4JYF_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1332,7 +1356,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", JSF9QC_RPC_ID.to_string()),
                 ("source-path", "/usage".to_string()),
@@ -1355,25 +1379,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(JSF9QC_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1407,7 +1434,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", XPSWPD_RPC_ID.to_string()),
                 ("source-path", "/scheduled".to_string()),
@@ -1430,25 +1457,28 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some(XPSWPD_RPC_ID)) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1496,7 +1526,7 @@ impl GeminiClient {
         let cookies = self.cookies().await;
         let (params, body, headers, cookie_header) = {
             let session = self.inner.session.lock().await;
-            let reqid = SessionState::generate_reqid();
+            let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
                 ("rpcids", "otAQ7b".to_string()),
                 ("source-path", "/".to_string()),
@@ -1511,28 +1541,32 @@ impl GeminiClient {
                 params.push(("f.sid", sid.to_string()));
             }
             let body = build_batchexecute_body(session.access_token.as_deref());
-            let headers = self.build_headers(None, None, None).await;
+        let waa_context = self.inner.session.lock().await.waa_context.clone();
+        let headers = self.build_headers(None, waa_context.as_deref(), None, Some("batchexecute")).await;
             let cookie_header = cookies.to_header_value();
             (params, body, headers, cookie_header)
         };
 
         let response = self
-            .send_batchexecute_with_retry(|| {
-                let client = self.inner.http.clone();
-                let url = url.clone();
-                let params = params.clone();
-                let body = body.clone();
-                let headers = headers.clone();
-                let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(body.clone());
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+            .send_batchexecute_with_retry(
+                || async { SessionState::generate_reqid(Some("otAQ7b")) },
+                || {
+                    let client = self.inner.http.clone();
+                    let url = url.clone();
+                    let params = params.clone();
+                    let body = body.clone();
+                    let headers = headers.clone();
+                    let cookie_header = cookie_header.clone();
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(body.clone());
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header("Cookie", cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                },
+            )
             .await?;
 
         if !response.status.is_success() {
@@ -1916,7 +1950,9 @@ impl GeminiClient {
             waa_context.as_deref(),
             &request_uuid,
         );
-        let headers = self.build_headers(Some(&request_uuid), Some(&waa_header), None).await;
+        let headers = self
+            .build_headers(Some(&request_uuid), Some(&waa_header), None, Some("stream_generate"))
+            .await;
 
         let response = self
             .send_with_retry(|| {
@@ -2014,7 +2050,9 @@ impl GeminiClient {
             session_for_upload.waa_context.as_deref(),
             &request_uuid,
         );
-        let headers = self.build_headers(Some(&request_uuid), Some(&waa_header), None).await;
+        let headers = self
+            .build_headers(Some(&request_uuid), Some(&waa_header), None, Some("stream_generate"))
+            .await;
         let cookie_header = cookies.to_header_value();
 
         Ok((inner_req_list, request_uuid, headers, cookie_header))
@@ -2242,7 +2280,7 @@ impl GeminiClient {
     ) -> Result<String> {
         let base_url = self.inner.config.read().await.base_url.clone();
         let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
-        let reqid = SessionState::generate_reqid();
+        let reqid = SessionState::generate_reqid(None);
         let mut params: Vec<(&str, String)> = vec![
             ("rpcids", rpcids.to_string()),
             ("source-path", source_path_override.unwrap_or("/app").to_string()),
@@ -2257,7 +2295,7 @@ impl GeminiClient {
             params.push(("f.sid", sid.to_string()));
         }
 
-        let headers = self.build_headers(None, None, None).await;
+        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
         let response = self
             .send_with_retry(|| {
                 let client = self.inner.http.clone();
@@ -2519,6 +2557,7 @@ impl GeminiClient {
         reqid: Option<&str>,
         waa_context: Option<&str>,
         authorization: Option<&str>,
+        endpoint: Option<&str>,
     ) -> Vec<(String, String)> {
         let origin = self.inner.config.read().await.base_url.clone();
         let mut headers = vec![
@@ -2551,8 +2590,12 @@ impl GeminiClient {
         if let Some(ctx) = waa_context {
             headers.push(("x-goog-ext-525001261-jspb".to_string(), ctx.to_string()));
         }
-        headers.push(("x-goog-ext-73010989-jspb".to_string(), "[0]".to_string()));
-        headers.push(("x-goog-ext-73010990-jspb".to_string(), "[0,0,0]".to_string()));
+        if endpoint == Some("batchexecute") {
+            headers.push(("x-goog-ext-73010989-jspb".to_string(), "[]".to_string()));
+        } else {
+            headers.push(("x-goog-ext-73010989-jspb".to_string(), "[0]".to_string()));
+            headers.push(("x-goog-ext-73010990-jspb".to_string(), "[0,0,0]".to_string()));
+        }
         if let Some(auth) = authorization {
             headers.push(("Authorization".to_string(), auth.to_string()));
         }
@@ -2588,21 +2631,31 @@ impl GeminiClient {
     /// Sends a batchexecute request and retries when the transient WIZ 400
     /// pattern is detected.
     ///
-    /// The closure must return a fresh request each call. The helper reads the
-    /// status and body eagerly so it can reclassify transient 400s before the
-    /// retry loop commits them as permanent. Any `Set-Cookie` headers received
-    /// on the final response are merged back into the stored credentials.
-    async fn send_batchexecute_with_retry<F, Fut>(&self, operation: F) -> Result<ResponseWithBody>
+    /// The `make_reqid` closure is called before every attempt so retries use a
+    /// fresh `_reqid`. The `operation` closure must return a fresh request each
+    /// call. The helper reads the status and body eagerly so it can reclassify
+    /// transient 400s before the retry loop commits them as permanent. Any
+    /// `Set-Cookie` headers received on the final response are merged back into
+    /// the stored credentials.
+    async fn send_batchexecute_with_retry<ReqIdFn, ReqIdFut, OpFn, OpFut>(
+        &self,
+        make_reqid: ReqIdFn,
+        operation: OpFn,
+    ) -> Result<ResponseWithBody>
     where
-        F: Fn() -> Fut,
-        Fut: std::future::Future<Output = std::result::Result<reqwest::Response, reqwest::Error>>,
+        ReqIdFn: Fn() -> ReqIdFut,
+        ReqIdFut: std::future::Future<Output = String>,
+        OpFn: Fn() -> OpFut,
+        OpFut: std::future::Future<Output = std::result::Result<reqwest::Response, reqwest::Error>>,
     {
         let transient_body = std::sync::atomic::AtomicBool::new(false);
 
         let result = crate::retry::with_backoff_generic(|| {
             let operation = &operation;
+            let make_reqid = &make_reqid;
             let transient_body = &transient_body;
             async move {
+                let _fresh_reqid = make_reqid().await;
                 match operation().await {
                     Ok(response) => {
                         let status = response.status();

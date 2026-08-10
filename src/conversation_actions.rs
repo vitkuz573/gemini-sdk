@@ -99,9 +99,11 @@ impl ConversationActionResult {
 
 /// Builds the inner payload for a regenerate action.
 ///
-/// The captured shape is `["r_{response_id}"]`.
+/// The captured shape is `["r_{response_id}"]`. The batchexecute transport
+/// already wraps this inner value inside its own array, so the builder must
+/// return a single array — not a nested one.
 pub(crate) fn build_regenerate_payload(response_id: &str) -> Value {
-    serde_json::json!([[normalize_response_id(response_id)]])
+    serde_json::json!([normalize_response_id(response_id)])
 }
 
 /// Builds the inner payload for a rating action.
@@ -110,14 +112,14 @@ pub(crate) fn build_regenerate_payload(response_id: &str) -> Value {
 /// rating value is `1` for [`TurnRating::Good`], `0` for [`TurnRating::Bad`],
 /// and `null` for [`TurnRating::Neutral`].
 pub(crate) fn build_rate_payload(response_id: &str, rating: TurnRating) -> Value {
-    serde_json::json!([[normalize_response_id(response_id), rating.to_wire_value()]])
+    serde_json::json!([normalize_response_id(response_id), rating.to_wire_value()])
 }
 
 /// Builds the inner payload for a delete action.
 ///
 /// The captured shape is `["r_{response_id}"]`.
 pub(crate) fn build_delete_payload(response_id: &str) -> Value {
-    serde_json::json!([[normalize_response_id(response_id)]])
+    serde_json::json!([normalize_response_id(response_id)])
 }
 
 /// Ensures a response id starts with the `r_` prefix used by the frontend.
@@ -150,28 +152,39 @@ pub fn parse_conversation_action_response(
         .ok_or_else(|| Error::parse("PCck7e response does not contain PCck7e entry"))?
         .clone();
 
-    let payload_str = rpc_entry
+    let payload_value = rpc_entry
         .get(PAYLOAD)
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .or_else(|| {
-            rpc_entry
-                .get(PAYLOAD_ALT)
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-        })
+        .or_else(|| rpc_entry.get(PAYLOAD_ALT))
+        .cloned()
         .ok_or_else(|| Error::parse("PCck7e response payload missing"))?;
 
-    let inner: Value = serde_json::from_str(payload_str)
-        .map_err(|e| Error::parse(format!("failed to parse PCck7e inner payload: {e}")))?;
-
-    let success = !is_error_payload(&inner);
+    // Treat null and the string forms "null", "[]", and "\"[]\"" as successful
+    // no-content responses. The server returns these when the action is accepted
+    // but carries no payload.
+    let success = if payload_value.is_null() {
+        true
+    } else if let Some(s) = payload_value.as_str() {
+        let trimmed = s.trim();
+        if trimmed.is_empty()
+            || trimmed.eq_ignore_ascii_case("null")
+            || trimmed == "[]"
+            || trimmed == "\"[]\""
+        {
+            true
+        } else {
+            let parsed: Value = serde_json::from_str(s)
+                .map_err(|e| Error::parse(format!("failed to parse PCck7e inner payload: {e}")))?;
+            !is_error_payload(&parsed)
+        }
+    } else {
+        !is_error_payload(&payload_value)
+    };
 
     Ok(ConversationActionResult {
         success,
         action,
         response_id,
-        raw: inner,
+        raw: payload_value,
     })
 }
 
@@ -235,23 +248,20 @@ mod tests {
 
     #[test]
     fn payload_builders_match_expected_shape() {
-        assert_eq!(
-            build_regenerate_payload("abc"),
-            serde_json::json!([["r_abc"]])
-        );
+        assert_eq!(build_regenerate_payload("abc"), serde_json::json!(["r_abc"]));
         assert_eq!(
             build_rate_payload("abc", TurnRating::Good),
-            serde_json::json!([["r_abc", 1]])
+            serde_json::json!(["r_abc", 1])
         );
         assert_eq!(
             build_rate_payload("abc", TurnRating::Bad),
-            serde_json::json!([["r_abc", 0]])
+            serde_json::json!(["r_abc", 0])
         );
         assert_eq!(
             build_rate_payload("abc", TurnRating::Neutral),
-            serde_json::json!([["r_abc", null]])
+            serde_json::json!(["r_abc", null])
         );
-        assert_eq!(build_delete_payload("abc"), serde_json::json!([["r_abc"]]));
+        assert_eq!(build_delete_payload("abc"), serde_json::json!(["r_abc"]));
     }
 
     #[test]
@@ -276,6 +286,38 @@ mod tests {
     fn parse_wrapped_array() {
         let body = ")] } ' \n\n[[[\"wrb.fr\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]]";
         let result = parse_conversation_action_response(body, ConversationAction::Rate(TurnRating::Good), "r_abc".into())
+            .unwrap();
+        assert!(result.success());
+    }
+
+    #[test]
+    fn parse_null_payload_as_success() {
+        let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",null,null,null,null,\"generic\"]]";
+        let result = parse_conversation_action_response(body, ConversationAction::Regenerate, "r_abc".into())
+            .unwrap();
+        assert!(result.success());
+    }
+
+    #[test]
+    fn parse_empty_array_payload_as_success() {
+        let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"[]\",null,null,null,\"generic\"]]";
+        let result = parse_conversation_action_response(body, ConversationAction::Delete, "r_abc".into())
+            .unwrap();
+        assert!(result.success());
+    }
+
+    #[test]
+    fn parse_quoted_empty_array_payload_as_success() {
+        let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"\\\"[]\\\"\",null,null,null,\"generic\"]]";
+        let result = parse_conversation_action_response(body, ConversationAction::Rate(TurnRating::Neutral), "r_abc".into())
+            .unwrap();
+        assert!(result.success());
+    }
+
+    #[test]
+    fn parse_string_null_payload_as_success() {
+        let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"null\",null,null,null,\"generic\"]]";
+        let result = parse_conversation_action_response(body, ConversationAction::Regenerate, "r_abc".into())
             .unwrap();
         assert!(result.success());
     }

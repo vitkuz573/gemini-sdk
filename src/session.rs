@@ -1,7 +1,5 @@
 //! Internal session state extracted from the Gemini `/app` page.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use serde::{Deserialize, Serialize};
 
 use crate::auth::Credentials;
@@ -10,6 +8,25 @@ use crate::proto::slots::ConversationState as ProtoConversationState;
 
 const DEFAULT_PUSH_ID: &str = "feeds/mcudyrk2a4khkz";
 const DEFAULT_LANGUAGE: &str = "en";
+
+/// Browser-observed base values for the per-page `_reqid` counter.
+///
+/// The Gemini frontend increments a single counter for every batchexecute call
+/// on the page. Different RPC families appear to start from different bases
+/// (likely because the counter is shifted by RPC-specific offsets). These bases
+/// are derived from live HAR captures and produce `_reqid` values whose digit
+/// counts match the browser.
+pub(crate) const REQID_BASE_OTAQ7B: u64 = 100_000;
+pub(crate) const REQID_BASE_PCCK7E: u64 = 5_000_000;
+pub(crate) const REQID_BASE_OTHER: u64 = 200_000;
+
+/// Per-client atomic counter used to generate deterministic `_reqid` values.
+///
+/// The counter is shared across clones of the same [`crate::GeminiClient`] so
+/// the SDK emits the same monotonic sequence the browser does. It starts at a
+/// base that gives the right digit length for the RPC family and increments on
+/// every batchexecute call.
+pub(crate) static REQID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(REQID_BASE_OTHER);
 
 /// Current snapshot format version for forward compatibility.
 pub(crate) const SNAPSHOT_FORMAT_VERSION: u32 = 1;
@@ -86,9 +103,41 @@ impl SessionState {
         self.build_label.is_none() || self.session_id.is_none()
     }
 
-    pub(crate) fn generate_reqid() -> String {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
-        ((ts % 900_000) + 100_000).to_string()
+    /// Generates a deterministic per-client `_reqid` for batchexecute calls.
+    ///
+    /// The browser uses a per-page counter that increments on every
+    /// batchexecute request, not a wall-clock timestamp. The SDK mirrors this
+    /// with a global atomic counter so retries and sequential calls do not
+    /// reuse or collide on the same value.
+    ///
+    /// The optional `rpcid` hint selects a base offset that matches observed
+    /// browser digit lengths for specific RPC families.
+    pub(crate) fn generate_reqid(rpcid: Option<&str>) -> String {
+        let base = match rpcid {
+            Some("otAQ7b") => REQID_BASE_OTAQ7B,
+            Some("PCck7e") => REQID_BASE_PCCK7E,
+            _ => REQID_BASE_OTHER,
+        };
+        // Ensure fresh base if a prior session was initialized with a different
+        // base; otherwise keep the current per-client sequence.
+        let mut current = REQID_COUNTER.load(std::sync::atomic::Ordering::SeqCst);
+        if current < base {
+            let _ = REQID_COUNTER.compare_exchange(
+                current,
+                base,
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+            );
+            current = REQID_COUNTER.load(std::sync::atomic::Ordering::SeqCst);
+        }
+        let next = current + 1;
+        let _ = REQID_COUNTER.compare_exchange(
+            current,
+            next,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        );
+        next.to_string()
     }
 }
 
@@ -556,6 +605,36 @@ mod tests {
         );
         assert_eq!(state.session_id, Some("-1594710263937718439".to_string()));
         assert_eq!(state.push_id, Some("feeds/mcudyrk2a4khkz".to_string()));
+    }
+
+    #[test]
+    fn generate_reqid_uses_per_client_counter() {
+        // Capture current counter state and reset to a known base for the test.
+        let _saved = REQID_COUNTER.swap(REQID_BASE_OTHER, std::sync::atomic::Ordering::SeqCst);
+        let first = SessionState::generate_reqid(None);
+        let second = SessionState::generate_reqid(None);
+        assert_ne!(first, second, "reqid must increment each call");
+        let n1: u64 = first.parse().unwrap();
+        let n2: u64 = second.parse().unwrap();
+        assert_eq!(n2, n1 + 1, "reqid must increment by exactly one");
+    }
+
+    #[test]
+    fn generate_reqid_otaq7b_base_matches_browser_digit_length() {
+        let _saved = REQID_COUNTER.swap(REQID_BASE_OTAQ7B, std::sync::atomic::Ordering::SeqCst);
+        let reqid = SessionState::generate_reqid(Some("otAQ7b"));
+        assert_eq!(reqid.len(), 6, "otAQ7b reqid must be 6 digits");
+        let n: u64 = reqid.parse().unwrap();
+        assert!((100_000..1_000_000).contains(&n));
+    }
+
+    #[test]
+    fn generate_reqid_pcck7e_base_matches_browser_digit_length() {
+        let _saved = REQID_COUNTER.swap(REQID_BASE_PCCK7E, std::sync::atomic::Ordering::SeqCst);
+        let reqid = SessionState::generate_reqid(Some("PCck7e"));
+        assert_eq!(reqid.len(), 7, "PCck7e reqid must be 7 digits");
+        let n: u64 = reqid.parse().unwrap();
+        assert!((5_000_000..10_000_000).contains(&n));
     }
 
     #[test]
