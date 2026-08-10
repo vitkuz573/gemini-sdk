@@ -825,6 +825,94 @@ async fn get_tools_config_returns_value() {
 }
 
 #[tokio::test]
+async fn get_usage_stats_returns_value() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/jSf9Qc_usage_stats.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.get_usage_stats().await;
+    assert!(result.is_ok(), "get_usage_stats failed: {:?}", result);
+    assert_eq!(
+        result.unwrap().value(),
+        &serde_json::json!({"requests_today": 12, "requests_total": 345})
+    );
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let body = std::str::from_utf8(&requests[0].body).unwrap();
+    assert!(body.contains("jSf9Qc"), "request body missing jSf9Qc");
+}
+
+#[tokio::test]
+async fn get_scheduled_prompts_returns_value() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/XPSWpd_scheduled_prompts.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.get_scheduled_prompts().await;
+    assert!(result.is_ok(), "get_scheduled_prompts failed: {:?}", result);
+    assert_eq!(
+        result.unwrap().value(),
+        &serde_json::json!({"prompts": [{"id": "sp_1", "text": "Morning summary"}]})
+    );
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let body = std::str::from_utf8(&requests[0].body).unwrap();
+    assert!(body.contains("XPSWpd"), "request body missing XPSWpd");
+}
+
+#[tokio::test]
 async fn set_last_selected_mode_sends_l5adhe_payload() {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};

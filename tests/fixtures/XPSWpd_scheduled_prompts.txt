@@ -1,0 +1,3 @@
+)] } '
+
+[["wrb.fr","XPSWpd","{\"prompts\":[{\"id\":\"sp_1\",\"text\":\"Morning summary\"}]}",null,null,null,"generic"]]
