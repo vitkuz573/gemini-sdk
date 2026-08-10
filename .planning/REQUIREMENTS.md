@@ -85,11 +85,11 @@
 
 ### Locale & Model Configuration
 
-- [ ] **LOCALE-01**: SDK exposes `get_locale_tools()` using RPC `cYRIkd`.
-- [ ] **LOCALE-02**: SDK exposes `get_model_config()` using RPC `whPPme`.
-- [ ] **LOCALE-03**: SDK exposes `get_locale_config()` using RPC `Te6DCf`.
-- [ ] **LOCALE-04**: SDK exposes `get_tools_config()` using RPC `ku4Jyf`.
-- [ ] **LOCALE-05**: All locale/model config responses are returned as raw `serde_json::Value` to avoid brittle structs for undocumented shapes.
+- [x] **LOCALE-01**: SDK exposes `get_locale_tools()` using RPC `cYRIkd`.
+- [x] **LOCALE-02**: SDK exposes `get_model_config()` using RPC `whPPme`.
+- [x] **LOCALE-03**: SDK exposes `get_locale_config()` using RPC `Te6DCf`.
+- [x] **LOCALE-04**: SDK exposes `get_tools_config()` using RPC `ku4Jyf`.
+- [x] **LOCALE-05**: All locale/model config responses are returned as raw `serde_json::Value` to avoid brittle structs for undocumented shapes.
 
 ### Settings Pages
 
@@ -141,11 +141,11 @@
 | PREFS-01 | Phase 8 | Complete |
 | PREFS-02 | Phase 8 | Complete |
 | PREFS-03 | Phase 8 | Complete |
-| LOCALE-01 | Phase 9 | Pending |
-| LOCALE-02 | Phase 9 | Pending |
-| LOCALE-03 | Phase 9 | Pending |
-| LOCALE-04 | Phase 9 | Pending |
-| LOCALE-05 | Phase 9 | Pending |
+| LOCALE-01 | Phase 9 | Complete |
+| LOCALE-02 | Phase 9 | Complete |
+| LOCALE-03 | Phase 9 | Complete |
+| LOCALE-04 | Phase 9 | Complete |
+| LOCALE-05 | Phase 9 | Complete |
 | SETTINGS-01 | Phase 10 | Pending |
 | SETTINGS-02 | Phase 10 | Pending |
 | SETTINGS-03 | Phase 10 | Pending |

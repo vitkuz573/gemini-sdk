@@ -195,7 +195,9 @@
 
 **Plans:**
 
-- [ ] 09-01-PLAN.md — Locale & Model Config RPC wrappers and wiremock tests.
+- [x] 09-01-PLAN.md
+
+1/1 plans complete
 
 ---
 
