@@ -494,3 +494,202 @@ async fn parser_extracts_tool_call_from_wiz_frame() {
     assert_eq!(call.unwrap().name, "doubler");
     assert_eq!(call.unwrap().args, serde_json::json!({ "n": 3 }));
 }
+
+#[tokio::test]
+async fn get_user_info_parses_full_profile() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/o30O0e_user_info.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let info = client.get_user_info().await;
+    assert!(info.is_ok(), "get_user_info failed: {:?}", info);
+    let info = info.unwrap();
+    assert_eq!(info.name(), Some("Jane Doe"));
+    assert_eq!(info.photo_url(), Some("https://example.com/photo.jpg"));
+    assert_eq!(info.email(), Some("jane@example.com"));
+}
+
+#[tokio::test]
+async fn get_user_info_tolerates_missing_and_null_fields() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/o30O0e_user_info_partial.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let info = client.get_user_info().await.expect("get_user_info failed");
+    assert_eq!(info.name(), Some("Jane Doe"));
+    assert_eq!(info.photo_url(), None);
+    assert_eq!(info.email(), None);
+}
+
+#[tokio::test]
+async fn get_last_selected_mode_returns_mode_id() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/L5adhe_last_mode.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let mode = client
+        .get_last_selected_mode()
+        .await
+        .expect("get_last_selected_mode failed");
+    assert_eq!(mode.mode_id(), Some("cf41b0e0dd7d53e5"));
+}
+
+#[tokio::test]
+async fn get_last_selected_mode_returns_none_for_null() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/L5adhe_null_mode.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let mode = client
+        .get_last_selected_mode()
+        .await
+        .expect("get_last_selected_mode failed");
+    assert_eq!(mode.mode_id(), None);
+}
+
+#[tokio::test]
+async fn set_last_selected_mode_sends_l5adhe_payload() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(""))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.set_last_selected_mode("cf41b0e0dd7d53e5").await;
+    assert!(result.is_ok(), "set_last_selected_mode failed: {:?}", result);
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let body = std::str::from_utf8(&requests[0].body).unwrap();
+    assert!(body.contains("L5adhe"), "request body missing L5adhe");
+    assert!(body.contains("cf41b0e0dd7d53e5"), "request body missing mode id");
+    assert!(
+        body.contains("last_selected_mode_id_on_web"),
+        "request body missing preference key"
+    );
+}

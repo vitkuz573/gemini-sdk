@@ -74,6 +74,7 @@ pub mod proto;
 pub mod conversation_actions;
 pub mod tool;
 pub mod upload;
+pub mod user_profile;
 
 #[cfg(feature = "browser-attestation")]
 pub mod attestation;
@@ -97,6 +98,7 @@ pub use client::{GeminiClient, HttpHook};
 pub use chat::PreparedRequest;
 pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};
+pub use user_profile::{LastSelectedMode, UserInfo};
 // Re-export parsing helpers so consumers can convert streaming responses.
 pub use proto::{
     extract_bard_error_code, extract_text_from_parsed_response,

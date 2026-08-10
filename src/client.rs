@@ -22,6 +22,11 @@ use crate::conversation_actions::{
     parse_conversation_action_response, ConversationAction, ConversationActionResult,
     TurnRating, PCCK7E_RPC_ID,
 };
+use crate::user_profile::{
+    build_get_last_selected_mode_payload, build_get_user_info_payload,
+    build_set_last_selected_mode_payload, parse_last_selected_mode_response,
+    parse_user_info_response, LastSelectedMode, UserInfo, L5ADHE_RPC_ID, O30O0E_RPC_ID,
+};
 use crate::errors::{Error, Result};
 use crate::tool::{Tool, ToolError, ToolResult};
 use crate::models::{ModelCategory, ModelInfo};
@@ -695,6 +700,230 @@ impl GeminiClient {
         }
 
         parse_conversation_action_response(&text, action, response_id.to_string())
+    }
+
+    /// Returns the signed-in user's profile information.
+    ///
+    /// Sends the `o30O0e` batchexecute RPC to `/` and parses the response into
+    /// a [`UserInfo`] struct. Missing or null fields are returned as `None`.
+    ///
+    /// # Security
+    ///
+    /// The returned values contain PII. Callers must not log them at info level
+    /// or expose them in telemetry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_user_info", level = "info", skip_all, fields(operation = "gemini.get_user_info"))]
+    pub async fn get_user_info(&self) -> Result<UserInfo> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", O30O0E_RPC_ID.to_string()),
+                ("source-path", "/".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_user_info_payload();
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                O30O0E_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_user_info_response(&text)
+    }
+
+    /// Returns the user's last-selected Gemini mode preference.
+    ///
+    /// Sends the `L5adhe` batchexecute RPC to `/` and parses the response into
+    /// a [`LastSelectedMode`] struct. If no mode has been selected, the
+    /// returned `mode_id` is `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_last_selected_mode", level = "info", skip_all, fields(operation = "gemini.get_last_selected_mode"))]
+    pub async fn get_last_selected_mode(&self) -> Result<LastSelectedMode> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", L5ADHE_RPC_ID.to_string()),
+                ("source-path", "/".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_last_selected_mode_payload(None);
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                L5ADHE_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_last_selected_mode_response(&text)
+    }
+
+    /// Sets the user's last-selected Gemini mode preference.
+    ///
+    /// Sends the `L5adhe` batchexecute RPC to `/` with the provided `mode_id`
+    /// and returns `Ok(())` on HTTP success. The response body is not parsed.
+    ///
+    /// # Security
+    ///
+    /// `mode_id` is treated as an opaque string and passed through JSON
+    /// serialization. It is never interpreted as a path or logged at info level.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized or the request fails.
+    #[tracing::instrument(name = "gemini.set_last_selected_mode", level = "info", skip_all, fields(operation = "gemini.set_last_selected_mode"))]
+    pub async fn set_last_selected_mode(&self, mode_id: impl AsRef<str>) -> Result<()> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let mode_id = mode_id.as_ref();
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", L5ADHE_RPC_ID.to_string()),
+                ("source-path", "/".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_set_last_selected_mode_payload(mode_id);
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                L5ADHE_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(Error::api(status, text));
+        }
+
+        Ok(())
     }
 
     /// Refreshes credentials from a provider and re-initializes the session.
