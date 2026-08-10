@@ -2,17 +2,17 @@
 gsd_state_version: 1.0
 milestone: v0.1
 milestone_name: Core
-current_phase: 5 — Tools & Auto-Refresh
+current_phase: 6 — v1.0 Release
 current_plan: Complete
 status: Complete
-stopped_at: Phase 5 complete, all plans executed and verified
-last_updated: "2026-08-10T03:00:00Z"
+stopped_at: Phase 6 complete, all plans executed and verified
+last_updated: "2026-08-10T04:00:00Z"
 progress:
   total_phases: 6
-  completed_phases: 5
-  total_plans: 17
-  completed_plans: 17
-  percent: 83
+  completed_phases: 6
+  total_plans: 19
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -20,9 +20,9 @@ progress:
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
 **Current milestone:** v0.1
-**Current phase:** 5 — Tools & Auto-Refresh
+**Current phase:** 6 — v1.0 Release
 **Current Plan:** Complete
-**Total Plans in Phase:** 3
+**Total Plans in Phase:** 2
 
 milestone: v0.1
 
@@ -31,7 +31,7 @@ milestone: v0.1
 See: `.planning/PROJECT.md` (updated 2026-08-08)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** Phase 5 complete. Moving to Phase 6: v1.0 Release.
+**Current focus:** All v0.1 Core phases complete. Milestone ready for audit.
 
 ## Phase Status
 
@@ -42,7 +42,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-08)
 | 3 — Observability & Configurability | ✓ Complete | 5/5 | 100% |
 | 4 — Advanced Media & Sessions | ✓ Complete | 2/2 | 100% |
 | 5 — Tools & Auto-Refresh | ✓ Complete | 3/3 | 100% |
-| 6 — v1.0 Release | ○ Pending | 0/2 | 0% |
+| 6 — v1.0 Release | ✓ Complete | 2/2 | 100% |
 
 ## Active Decisions
 
@@ -65,7 +65,7 @@ Codebase map available in `.planning/codebase/`.
 Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SKILL.md`.
 
 ---
-*Last updated: 2026-08-10 after Phase 5 execution*
+*Last updated: 2026-08-10 after Phase 6 execution*
 
 ## Performance Metrics
 
