@@ -216,7 +216,11 @@
 **Depends on:** Phase 9
 **Estimated waves:** 2
 
-**Plans:** TBD
+**Plans:**
+
+- [x] 10-01-PLAN.md — Settings-page APIs: usage stats and scheduled prompts.
+
+1/1 plans complete
 
 ---
 
