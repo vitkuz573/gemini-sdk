@@ -22,6 +22,14 @@ use crate::conversation_actions::{
     parse_conversation_action_response, ConversationAction, ConversationActionResult,
     TurnRating, PCCK7E_RPC_ID,
 };
+use crate::locale_model_config::{
+    build_get_locale_config_payload, build_get_locale_tools_payload,
+    build_get_model_config_payload, build_get_tools_config_payload,
+    parse_locale_config_response, parse_locale_tools_response,
+    parse_model_config_response, parse_tools_config_response,
+    LocaleConfig, LocaleTools, ModelConfig, ToolsConfig,
+    CYRIKD_RPC_ID, KU4JYF_RPC_ID, TE6DCF_RPC_ID, WHPPME_RPC_ID,
+};
 use crate::user_profile::{
     build_get_last_selected_mode_payload, build_get_user_info_payload,
     build_set_last_selected_mode_payload, parse_last_selected_mode_response,
@@ -924,6 +932,294 @@ impl GeminiClient {
         }
 
         Ok(())
+    }
+
+    /// Returns the locale tools configuration.
+    ///
+    /// Sends the `cYRIkd` batchexecute RPC to `/` and parses the response into
+    /// a [`LocaleTools`] wrapper. The inner value is an opaque
+    /// [`serde_json::Value`] to tolerate undocumented shape drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_locale_tools", level = "info", skip_all, fields(operation = "gemini.get_locale_tools"))]
+    pub async fn get_locale_tools(&self) -> Result<LocaleTools> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", CYRIKD_RPC_ID.to_string()),
+                ("source-path", "/".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_locale_tools_payload(&session.language);
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                CYRIKD_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_locale_tools_response(&text)
+    }
+
+    /// Returns the model configuration.
+    ///
+    /// Sends the `whPPme` batchexecute RPC to `/` and parses the response into
+    /// a [`ModelConfig`] wrapper. The inner value is an opaque
+    /// [`serde_json::Value`] to tolerate undocumented shape drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_model_config", level = "info", skip_all, fields(operation = "gemini.get_model_config"))]
+    pub async fn get_model_config(&self) -> Result<ModelConfig> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", WHPPME_RPC_ID.to_string()),
+                ("source-path", "/".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_model_config_payload(&session.language);
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                WHPPME_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_model_config_response(&text)
+    }
+
+    /// Returns the locale configuration.
+    ///
+    /// Sends the `Te6DCf` batchexecute RPC to `/` and parses the response into
+    /// a [`LocaleConfig`] wrapper. The inner value is an opaque
+    /// [`serde_json::Value`] to tolerate undocumented shape drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_locale_config", level = "info", skip_all, fields(operation = "gemini.get_locale_config"))]
+    pub async fn get_locale_config(&self) -> Result<LocaleConfig> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", TE6DCF_RPC_ID.to_string()),
+                ("source-path", "/".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_locale_config_payload(&session.language);
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                TE6DCF_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_locale_config_response(&text)
+    }
+
+    /// Returns the tools configuration.
+    ///
+    /// Sends the `ku4Jyf` batchexecute RPC to `/` and parses the response into
+    /// a [`ToolsConfig`] wrapper. The inner value is an opaque
+    /// [`serde_json::Value`] to tolerate undocumented shape drift.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.get_tools_config", level = "info", skip_all, fields(operation = "gemini.get_tools_config"))]
+    pub async fn get_tools_config(&self) -> Result<ToolsConfig> {
+        self.ensure_session().await?;
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", KU4JYF_RPC_ID.to_string()),
+                ("source-path", "/".to_string()),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_get_tools_config_payload(&session.language);
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                KU4JYF_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_tools_config_response(&text)
     }
 
     /// Refreshes credentials from a provider and re-initializes the session.

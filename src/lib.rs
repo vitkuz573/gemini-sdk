@@ -72,6 +72,7 @@ pub mod metrics;
 pub mod models;
 pub mod proto;
 pub mod conversation_actions;
+pub mod locale_model_config;
 pub mod tool;
 pub mod upload;
 pub mod user_profile;
@@ -98,6 +99,7 @@ pub use client::{GeminiClient, HttpHook};
 pub use chat::PreparedRequest;
 pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};
+pub use locale_model_config::{LocaleConfig, LocaleTools, ModelConfig, ToolsConfig};
 pub use user_profile::{LastSelectedMode, UserInfo};
 // Re-export parsing helpers so consumers can convert streaming responses.
 pub use proto::{
