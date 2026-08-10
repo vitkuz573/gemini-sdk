@@ -80,3 +80,29 @@ async fn client_from_provider_builds_from_boxed_provider() {
     let builder = client.chat();
     let _ = builder;
 }
+
+#[tokio::test]
+async fn refresh_credentials_replaces_cookies_and_clears_session() {
+    use gemini_sdk::auth::{PAPISID, PSIDTS};
+
+    let header = format!("{PSID}=old; {PSIDCC}=old");
+    let provider = CookieHeaderProvider::new(&header).unwrap();
+    let client = GeminiClient::from_provider(provider).await.unwrap();
+
+    let refreshed_header = format!(
+        "{PSID}=new; {PSIDCC}=new; {PAPISID}=papi; {PSIDTS}=ts; SID=s; HSID=h; SSID=s"
+    );
+    let refreshed_provider = CookieHeaderProvider::new(&refreshed_header).unwrap();
+
+    // The public refresh path replaces cookies. Since it calls init_session
+    // which fetches /app, this test exercises the wiring rather than a live
+    // round-trip.
+    let result = client.refresh_credentials(refreshed_provider).await;
+    assert!(result.is_err());
+
+    // Verify the snapshot was updated by save/restore, which reflects the new
+    // cookies stored in the client.
+    let snapshot = client.save_session().await.unwrap();
+    assert!(snapshot.contains("new"));
+    assert!(!snapshot.contains("old"));
+}

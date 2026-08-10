@@ -69,6 +69,7 @@ pub mod auth;
 pub mod chat;
 pub mod client;
 pub mod errors;
+pub mod metrics;
 pub mod models;
 pub mod proto;
 pub mod tool;
@@ -86,6 +87,9 @@ pub use chat::{
     AudioSource, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, ThinkingLevel, VideoSource,
 };
+pub use metrics::{MetricsRecorder, NoOpMetricsRecorder};
+#[cfg(feature = "metrics")]
+pub use metrics::OpenTelemetryRecorder;
 pub use session::Snapshot;
 // PreparedRequest is intentionally public for benchmarks and advanced use.
 pub use client::{GeminiClient, HttpHook};

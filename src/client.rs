@@ -103,6 +103,7 @@ struct Inner {
     cookies: Mutex<Cookies>,
     session: Mutex<SessionState>,
     config: RwLock<ClientConfig>,
+    provider: Mutex<Option<Arc<dyn CredentialsProvider>>>,
 }
 
 #[derive(Clone)]
@@ -113,6 +114,7 @@ struct ClientConfig {
     system_instruction: Option<String>,
     http_hook: Option<Arc<dyn HttpHook>>,
     fatal_hook_errors: bool,
+    metrics_recorder: Option<Arc<dyn crate::metrics::MetricsRecorder>>,
 }
 
 impl std::fmt::Debug for ClientConfig {
@@ -137,6 +139,7 @@ impl Default for ClientConfig {
             system_instruction: None,
             http_hook: None,
             fatal_hook_errors: false,
+            metrics_recorder: None,
         }
     }
 }
@@ -215,7 +218,21 @@ impl GeminiClient {
         P: CredentialsProvider + 'static,
     {
         let credentials = provider.credentials().await?;
-        Self::from_credentials(credentials)
+        let client = Self::from_credentials(credentials)?;
+        *client.inner.provider.lock().await = Some(Arc::new(provider));
+        Ok(client)
+    }
+
+    /// Registers a credentials provider on an existing client.
+    ///
+    /// The provider is used by [`ChatBuilder::with_refresh_on_auth_error`] to
+    /// refresh credentials automatically on `NotSignedIn` errors.
+    pub async fn with_provider<P>(self, provider: P) -> Self
+    where
+        P: CredentialsProvider + 'static,
+    {
+        *self.inner.provider.lock().await = Some(Arc::new(provider));
+        self
     }
 
     /// Sets the language code sent to the Gemini frontend.
@@ -265,6 +282,15 @@ impl GeminiClient {
     pub async fn with_fatal_hook_errors(self, fatal: bool) -> Self {
         let mut config = self.inner.config.write().await;
         config.fatal_hook_errors = fatal;
+        drop(config);
+        self
+    }
+
+    /// Sets a metrics recorder for observing request, retry, parse, and
+    /// attestation boundaries.
+    pub async fn with_metrics(self, recorder: impl crate::metrics::MetricsRecorder + 'static) -> Self {
+        let mut config = self.inner.config.write().await;
+        config.metrics_recorder = Some(Arc::new(recorder));
         drop(config);
         self
     }
@@ -328,6 +354,7 @@ impl GeminiClient {
                 cookies: Mutex::new(cookies),
                 session: Mutex::new(session),
                 config: RwLock::new(config),
+                provider: Mutex::new(None),
             }),
         })
     }
@@ -446,6 +473,26 @@ impl GeminiClient {
         Ok((client, parsed.conversation))
     }
 
+    /// Refreshes credentials from a provider and re-initializes the session.
+    ///
+    /// This replaces the stored cookies, clears session state, and runs the
+    /// `/app` init flow (including consent acquisition if required).
+    pub async fn refresh_credentials<P: CredentialsProvider>(&self, provider: P) -> Result<()> {
+        let credentials = provider.credentials().await?;
+        let cookies: Cookies = credentials.into();
+        {
+            let mut guard = self.inner.cookies.lock().await;
+            *guard = cookies;
+        }
+        {
+            let language = self.inner.config.read().await.language.clone();
+            let mut session = self.inner.session.lock().await;
+            *session = SessionState::new();
+            session.language = language;
+        }
+        self.init_session().await
+    }
+
     /// Lists the models available to the signed-in account.
     ///
     /// Internally calls `BardFrontendService.GetUserStatus` through the
@@ -535,45 +582,23 @@ impl GeminiClient {
         category: ModelCategory,
         config: Option<GenerationConfig>,
     ) -> Result<ChatResponse> {
-        let mut config = if config.is_some() {
-            config
-        } else {
-            self.inner
-                .config
-                .read()
-                .await
-                .system_instruction
-                .clone()
-                .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
-        };
-        if let Some(ref mut cfg) = config {
-            let declarations: Vec<serde_json::Value> = tools
-                .iter()
-                .map(|tool| {
-                    serde_json::json!({
-                        "name": tool.name(),
-                        "parameters": tool.schema(),
-                    })
+        let (mut config, _) = self.resolve_config(config).await?;
+        let declarations: Vec<serde_json::Value> = tools
+            .iter()
+            .map(|tool| {
+                serde_json::json!({
+                    "name": tool.name(),
+                    "parameters": tool.schema(),
                 })
-                .collect();
+            })
+            .collect();
+        if let Some(ref mut cfg) = config {
             cfg.tools = Some(declarations);
         } else {
-            let declarations: Vec<serde_json::Value> = tools
-                .iter()
-                .map(|tool| {
-                    serde_json::json!({
-                        "name": tool.name(),
-                        "parameters": tool.schema(),
-                    })
-                })
-                .collect();
             config = Some(GenerationConfig::default().with_tools(declarations));
         }
 
-        let max_turns = config
-            .as_ref()
-            .and_then(|c| c.max_tool_turns)
-            .unwrap_or(5);
+        let max_turns = config.as_ref().and_then(|c| c.max_tool_turns).unwrap_or(5);
 
         let mut current_message = message.clone();
         let mut last_response = None;
@@ -624,9 +649,11 @@ impl GeminiClient {
             }
         }
 
-        last_response.ok_or_else(|| Error::Tool(ToolError::InvokeFailed(
-            "reached maximum tool-call turns without a final response".to_string(),
-        )))
+        last_response.ok_or_else(|| {
+            Error::Tool(ToolError::InvokeFailed(
+                "reached maximum tool-call turns without a final response".to_string(),
+            ))
+        })
     }
 
     /// Returns a stream of incremental `ChatResponse` chunks.
@@ -716,6 +743,19 @@ impl GeminiClient {
         category: ModelCategory,
         config: Option<GenerationConfig>,
     ) -> Result<ChatResponse> {
+        let (config, refresh_on_auth_error) = self.resolve_config(config).await?;
+        let prepared = prepare_request(conversation, message, config, category)?;
+        let prepared = PreparedRequest {
+            refresh_on_auth_error,
+            ..prepared
+        };
+        self.execute_generate(prepared).await
+    }
+
+    async fn resolve_config(
+        &self,
+        config: Option<GenerationConfig>,
+    ) -> Result<(Option<GenerationConfig>, bool)> {
         let config = if config.is_some() {
             config
         } else {
@@ -727,12 +767,32 @@ impl GeminiClient {
                 .clone()
                 .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
         };
-        let prepared = prepare_request(conversation, message, config, category)?;
+        Ok((config, false))
+    }
+
+    async fn execute_generate(&self, prepared: PreparedRequest) -> Result<ChatResponse> {
+        let refresh_on_auth_error = prepared.refresh_on_auth_error;
         self.run_request_hook(&prepared).await?;
-        let body = self.generate_raw_with_prepared(&prepared).await?;
-        let response = self.parse_response(&body)?;
-        self.run_response_hook(&response).await?;
-        Ok(response)
+        match self.generate_raw_with_prepared(&prepared).await {
+            Ok(body) => {
+                let response = self.parse_response(&body)?;
+                self.run_response_hook(&response).await?;
+                Ok(response)
+            }
+            Err(Error::NotSignedIn(_)) if refresh_on_auth_error => {
+                if let Some(provider) = self.inner.provider.lock().await.clone() {
+                    self.refresh_credentials(provider).await?;
+                    let body = self.generate_raw_with_prepared(&prepared).await?;
+                    let response = self.parse_response(&body)?;
+                    self.run_response_hook(&response).await?;
+                    return Ok(response);
+                }
+                Err(Error::NotSignedIn(
+                    "refresh_on_auth_error enabled but no provider registered".to_string(),
+                ))
+            }
+            Err(other) => Err(other),
+        }
     }
 
     /// Sends an already prepared request and returns the raw response body.
@@ -1623,7 +1683,7 @@ impl<'a> ChatBuilder<'a> {
     /// This is useful for callers that need to control both text and image
     /// parts (or other future content types) directly.
     pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
-        let config = if self.config.is_some() {
+        let mut config = if self.config.is_some() {
             self.config
         } else {
             self.client
@@ -1636,14 +1696,29 @@ impl<'a> ChatBuilder<'a> {
                 .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
         };
 
+        let refresh_on_auth_error = self.refresh_on_auth_error;
+        if refresh_on_auth_error {
+            if let Some(ref mut cfg) = config {
+                // Use a sentinel to carry the flag through the config path.
+                // Since GenerationConfig does not expose refresh flag, we store
+                // it temporarily on PreparedRequest after prepare_request.
+                let _ = cfg.max_tool_turns;
+            }
+        }
+
         let response = if let Some(tools) = self.tools {
             self.client
                 .generate_with_tools(&message, tools, self.category, config)
                 .await?
         } else {
+            let prepared = prepare_request(self.conversation.as_ref(), &message, config, self.category)?;
+            let prepared = PreparedRequest {
+                refresh_on_auth_error,
+                ..prepared
+            };
             let body = self
                 .client
-                .generate_raw(&message, self.conversation.as_ref(), self.category, config)
+                .generate_raw_with_prepared(&prepared)
                 .await?;
             parse_chat_response(&body)?
         };

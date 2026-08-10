@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -337,6 +338,12 @@ impl CookieHeaderProvider {
         // Validate eagerly so construction fails fast with a typed error.
         let _ = Credentials::from_header(&header)?;
         Ok(Self { header })
+    }
+}
+
+impl CredentialsProvider for Arc<dyn CredentialsProvider> {
+    fn credentials(&self) -> Pin<Box<dyn Future<Output = crate::Result<Credentials>> + Send + '_>> {
+        (**self).credentials()
     }
 }
 
