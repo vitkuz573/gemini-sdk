@@ -172,7 +172,9 @@
 **Depends on:** Phase 7
 **Estimated waves:** 2
 
-**Plans:** TBD
+**Plans:** 1/1 plans complete
+
+- [ ] 08-PLAN.md
 
 ---
 

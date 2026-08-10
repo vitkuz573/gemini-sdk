@@ -2,15 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: API Expansion
+current_phase: 9 — Locale & Model Config
+current_plan: Not started
 status: planning
-last_updated: "2026-08-10T08:00:00.000Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-08-10T09:03:12.898Z"
 last_activity: 2026-08-10
+last_activity_desc: Completed Phase 8 Plan 1 (User Profile & Preferences)
 progress:
-  total_phases: 5
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 11
+  completed_phases: 8
+  total_plans: 21
+  completed_plans: 21
+  percent: 73
 ---
 
 # Project State
@@ -29,7 +33,7 @@ milestone: v0.2
 See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** v0.2 roadmap created (phases 7-11). Next: plan and execute Phase 7 (Conversation Actions via `PCck7e`).
+**Current focus:** Phase 8 complete. Next: plan and execute Phase 9 (Locale & Model Config).
 
 ## Phase Status
 
@@ -42,7 +46,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 | 5 — Tools & Auto-Refresh | ✓ Complete | 3/3 | 100% |
 | 6 — v1.0 Release | ✓ Complete | 2/2 | 100% |
 | 7 — Conversation Actions | ✓ Complete | 1/1 | 100% |
-| 8 — User Profile & Preferences | Not started | 0/? | 0% |
+| 8 — User Profile & Preferences | ✓ Complete | 1/1 | 100% |
+| 9 — Locale & Model Config | Not started | 0/? | 0% |
 | 9 — Locale & Model Config | Not started | 0/? | 0% |
 | 10 — Settings Pages | Not started | 0/? | 0% |
 | 11 — Protocol Drift & Integration | Not started | 0/? | 0% |
@@ -79,6 +84,7 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
+| Phase 08-user-profile-preferences P01 | 6 min | 3 tasks | 8 files |
 | Phase 01-stabilize-v0-1-core P01 | 13m 52s | 3 tasks | 9 files |
 | Phase 01-stabilize-v0-1-core P02 | 19min | 3 tasks | 5 files |
 | Phase 01-stabilize-v0-1-core P03 | 6 min | 3 tasks | 6 files |
@@ -95,20 +101,22 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 - [Phase ?]: Phase 1 Plan 4: Extended Error::is_transient to inspect reqwest::Error::status() so transport-level 429/5xx errors are retried.
 - [Roadmap v0.2]: Mapped USER-01/02 to Phase 8 (alongside PREFS-*) per the milestone grouping of `o30O0e` + `L5adhe`; previous draft had them in Phase 7 with `PCck7e`.
 - [Roadmap v0.2]: Mapped TOOL-06 (mocked fixture tests per RPC) to Phase 11 as the final verification gate; each phase's plan is expected to ship fixture tests alongside its RPC methods.
+- [Phase 8]: UserInfo fields exposed as Option<String> to tolerate missing/null entries.
+- [Phase 8]: mode_id treated as opaque string; no path interpretation or logging at info level.
 
 ## Session
 
-**Last session:** 2026-08-10T08:00:00.000Z
-**Stopped at:** v0.2 roadmap created
+**Last session:** 2026-08-10T09:02:40Z
+**Stopped at:** Completed 08-01-PLAN.md
 **Resume file:** None
 
 ## Current Position
 
-Phase: 7 — Conversation Actions (not started)
+Phase: 9 — Locale & Model Config (not started)
 Plan: —
-Status: Awaiting `/gsd-plan-phase 7`
-Last activity: 2026-08-10 — v0.2 roadmap written (phases 7-11, 20 requirements mapped)
+Status: Awaiting `/gsd-plan-phase 9`
+Last activity: 2026-08-10 — Completed Phase 8 Plan 1 (User Profile & Preferences)
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 7` to plan Conversation Actions (PCck7e).
+- Run `/gsd-plan-phase 9` to plan Locale & Model Config.

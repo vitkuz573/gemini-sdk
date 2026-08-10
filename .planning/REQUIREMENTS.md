@@ -74,14 +74,14 @@
 
 ### User Profile
 
-- [ ] **USER-01**: SDK exposes `get_user_info()` using RPC `o30O0e` and returns name, photo URL, and email.
-- [ ] **USER-02**: User profile fields are optional and tolerant of missing or null payload entries.
+- [x] **USER-01**: SDK exposes `get_user_info()` using RPC `o30O0e` and returns name, photo URL, and email.
+- [x] **USER-02**: User profile fields are optional and tolerant of missing or null payload entries.
 
 ### User Preferences
 
-- [ ] **PREFS-01**: SDK exposes `get_last_selected_mode()` using RPC `L5adhe`.
-- [ ] **PREFS-02**: SDK exposes `set_last_selected_mode(mode_id)` using RPC `L5adhe`.
-- [ ] **PREFS-03**: Preference payloads use the exact shape captured in spike 009.
+- [x] **PREFS-01**: SDK exposes `get_last_selected_mode()` using RPC `L5adhe`.
+- [x] **PREFS-02**: SDK exposes `set_last_selected_mode(mode_id)` using RPC `L5adhe`.
+- [x] **PREFS-03**: Preference payloads use the exact shape captured in spike 009.
 
 ### Locale & Model Configuration
 
@@ -136,11 +136,11 @@
 | CONVACT-02 | Phase 7 | Complete |
 | CONVACT-03 | Phase 7 | Complete |
 | CONVACT-04 | Phase 7 | Complete |
-| USER-01 | Phase 8 | Pending |
-| USER-02 | Phase 8 | Pending |
-| PREFS-01 | Phase 8 | Pending |
-| PREFS-02 | Phase 8 | Pending |
-| PREFS-03 | Phase 8 | Pending |
+| USER-01 | Phase 8 | Complete |
+| USER-02 | Phase 8 | Complete |
+| PREFS-01 | Phase 8 | Complete |
+| PREFS-02 | Phase 8 | Complete |
+| PREFS-03 | Phase 8 | Complete |
 | LOCALE-01 | Phase 9 | Pending |
 | LOCALE-02 | Phase 9 | Pending |
 | LOCALE-03 | Phase 9 | Pending |
