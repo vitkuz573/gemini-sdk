@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: API Expansion
-current_phase: 11 — Protocol Drift & Integration
+current_phase: 12 — Live Testing & Backend Resilience
 current_plan: 01
-status: Awaiting next milestone
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-08-10T11:08:06.697Z"
+status: Complete
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-08-10T12:00:00.000Z"
 last_activity: 2026-08-10
-last_activity_desc: Milestone v0.2 completed and archived
+last_activity_desc: Phase 12 complete — live probe, HAR capture, transient retry, real-cookie tests
 progress:
   total_phases: 12
   completed_phases: 12
@@ -22,7 +22,7 @@ progress:
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
 **Current milestone:** v0.2 — API Expansion
-**Current phase:** 11 — Protocol Drift & Integration
+**Current phase:** 12 — Live Testing & Backend Resilience
 **Current Plan:** 01
 **Total Plans in Phase:** 1/1
 
@@ -33,7 +33,7 @@ milestone: v0.2
 See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** Phase 11 complete. Milestone v0.2 API Expansion is finished.
+**Current focus:** Phase 12 complete. Milestone v0.2 API Expansion is finished.
 
 ## Phase Status
 
@@ -54,6 +54,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 ## Active Decisions
 
+- Phase 12: Conservative WIZ transient 400 detection requires all three markers (er, di, af.httprm) on HTTP 400; HAR capture is opt-in and redacts cookies, Authorization, x-goog-ext-* headers, and cookie-like POST substrings.
 - Phase 11: Updated `X_CLIENT_DATA` constant to `CNeOywE=` to match the latest HAR capture and added a read-only v0.2 API tour example with configurable `GEMINI_BASE_URL`.
 - Phase 10: Reused the `locale_model_config.rs` Value-wrapper pattern for settings-page RPCs to keep v0.2 surfaces consistent.
 - semver progression: 0.1 → 0.2 → 1.0
@@ -86,6 +87,7 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 | Phase | Plan | Duration | Notes |
 |-------|------|----------|-------|
+| Phase 12-live-testing-resilience P01 | 45 min | 5 tasks | 11 files |
 | Phase 11-protocol-drift-integration P01 | 20 min | 3 tasks | 5 files |
 | Phase 09-locale-model-config P01 | 11 min | 4 tasks | 8 files |
 | Phase 08-user-profile-preferences P01 | 6 min | 3 tasks | 8 files |
@@ -111,8 +113,8 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ## Session
 
-**Last session:** 2026-08-10T11:08:06.678Z
-**Stopped at:** Completed 11-01-PLAN.md
+**Last session:** 2026-08-10T12:00:00.000Z
+**Stopped at:** Completed 12-01-PLAN.md
 **Resume file:** None
 
 ## Current Position
