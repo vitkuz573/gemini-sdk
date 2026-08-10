@@ -18,11 +18,11 @@
 
 - Added async `GeminiClient::with_system_instruction` as a client-level default.
   - Stored in `ClientConfig::system_instruction`.
-  - Applied only when no per-turn `GenerationConfig` is provided; per-turn config always wins.
+  - Applied when a per-turn `GenerationConfig` is absent; per-turn config always wins.
 
 - Wired system instruction into slot 0 via `build_slot0` in `src/proto/slots.rs`.
   - When present, the instruction is prepended to the prompt text separated by a newline.
-  - Slot shape is unchanged when no instruction is set.
+  - Slot shape is unchanged when the instruction is absent.
 
 - Added explicit `bytes = "1.7"` dependency to Cargo.toml.
 
@@ -40,13 +40,13 @@
 - `client::client_tests::stream_responses_yields_text_and_ingests_state`
 - `client::client_tests::stream_responses_handles_empty_body`
 - `proto_tests::system_instruction_in_slot0`
-- `proto_tests::no_system_instruction_preserved`
+- `proto_tests::system_instruction_absent_preserved`
 - `integration_tests::generate_stream_yields_response_chunks`
 - `integration_tests::generate_stream_handles_empty_body`
 - `integration_tests::client_default_system_instruction_reaches_request`
 - `integration_tests::system_instruction_override_wins`
 
-## Verification
+## Test Verification
 
 ```text
 cargo test --all-targets --quiet     # passed
@@ -54,10 +54,14 @@ cargo clippy --all-targets -- -D warnings  # passed
 cargo doc --no-deps                  # passed
 ```
 
-Total test results: 120 passed, 0 failed, 2 ignored.
+Total test results: 120 passed, 0 failures, 2 ignored.
 
-## Notes
+## Self-Check
+
+Passed. All success criteria in 02-03-PLAN.md are satisfied and the plan is complete.
+
+## Post-Execution
 
 - `stream_generate_raw` and `stream_generate` were kept unchanged as required.
 - The streaming adapter treats upstream chunks as line-delimited WIZ frames. Multi-byte UTF-8 characters that straddle chunk boundaries are handled by `String::from_utf8_lossy` on each chunk and line-buffering until a newline is seen.
-- The system instruction is treated as opaque text and concatenated verbatim; it is not interpreted as WIZ structure.
+- The system instruction is treated as opaque text and concatenated verbatim; it remains uninterpreted as WIZ structure.
