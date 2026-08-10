@@ -99,5 +99,22 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
+## Current Milestone: v0.2 API Expansion
+
+**Goal:** Expose the remaining undocumented Gemini web-frontend `batchexecute` RPCs documented in spike 009 as typed, tested public APIs, so the SDK covers the complete user-facing surface beyond core chat.
+
+**Target features:**
+- Conversation actions (regenerate, rate, delete turn) via `PCck7e`
+- User profile retrieval via `o30O0e`
+- Last-selected mode / user preferences via `L5adhe`
+- Locale and model configuration RPCs: `cYRIkd`, `whPPme`, `Te6DCf`, `ku4Jyf`
+- Settings-page data: usage stats (`jSf9Qc`) and scheduled prompts (`XPSWpd`)
+- Fix known protocol drift: update `x-client-data` constant to match latest HAR
+
+**Key constraints:**
+- Telemetry/reporting RPCs and `signaler-pa`/`myactivity.google.com` remain out of scope.
+- Each RPC is a thin typed facade over the existing `batchexecute_rpc` generic helper.
+- Backward-compatible additions only; public API changes must not break v0.1 consumers.
+
 ---
-*Last updated: 2026-08-08 after initialization*
+*Last updated: 2026-08-10 — milestone v0.2 initialized*
