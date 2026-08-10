@@ -191,9 +191,11 @@
 
 **Mode:** standard
 **Depends on:** Phase 8
-**Estimated waves:** 2
+**Estimated waves:** 1
 
-**Plans:** TBD
+**Plans:**
+
+- [ ] 09-01-PLAN.md — Locale & Model Config RPC wrappers and wiremock tests.
 
 ---
 
