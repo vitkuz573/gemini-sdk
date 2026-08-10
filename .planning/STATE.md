@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.2
 milestone_name: API Expansion
 status: planning
-last_updated: "2026-08-10T07:44:56.029Z"
+last_updated: "2026-08-10T08:00:00.000Z"
 last_activity: 2026-08-10
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,19 @@ progress:
 
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
-**Current milestone:** v0.1
-**Current phase:** 6 — v1.0 Release
-**Current Plan:** Complete
-**Total Plans in Phase:** 2
+**Current milestone:** v0.2 — API Expansion
+**Current phase:** 7 — Conversation Actions
+**Current Plan:** Not started
+**Total Plans in Phase:** TBD
 
-milestone: v0.1
+milestone: v0.2
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-08)
+See: `.planning/PROJECT.md` (updated 2026-08-10)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** All v0.1 Core phases complete. Milestone ready for audit.
+**Current focus:** v0.2 roadmap created (phases 7-11). Next: plan and execute Phase 7 (Conversation Actions via `PCck7e`).
 
 ## Phase Status
 
@@ -41,6 +41,11 @@ See: `.planning/PROJECT.md` (updated 2026-08-08)
 | 4 — Advanced Media & Sessions | ✓ Complete | 2/2 | 100% |
 | 5 — Tools & Auto-Refresh | ✓ Complete | 3/3 | 100% |
 | 6 — v1.0 Release | ✓ Complete | 2/2 | 100% |
+| 7 — Conversation Actions | Not started | 0/? | 0% |
+| 8 — User Profile & Preferences | Not started | 0/? | 0% |
+| 9 — Locale & Model Config | Not started | 0/? | 0% |
+| 10 — Settings Pages | Not started | 0/? | 0% |
+| 11 — Protocol Drift & Integration | Not started | 0/? | 0% |
 
 ## Active Decisions
 
@@ -50,20 +55,25 @@ See: `.planning/PROJECT.md` (updated 2026-08-08)
 - Web frontend protocol remains the target; official REST/Vertex AI out of scope.
 - Used runtime API stability tests instead of trybuild to keep the dev-dependency footprint minimal.
 - Privatized `ChatResponse` and `ModelInfo` fields and added accessors to strengthen forward compatibility beyond `#[non_exhaustive]`.
+- v0.2 new APIs are thin typed facades over the existing `batchexecute_rpc` helper; no new transport code.
+- v0.2 settings/locale responses are exposed as `serde_json::Value` wrappers to avoid brittle structs for undocumented shapes.
+- Telemetry / reporting RPCs and `signaler-pa` / `myactivity.google.com` endpoints remain out of scope (no library SDK should emit analytics traffic).
 
 ## Open Risks
 
 - Google may change the undocumented WIZ protocol without notice.
 - Browser attestation depends on Chrome CDP and live frontend selectors.
 - Live-cookie integration tests cannot run in CI.
+- Undocumented RPC shapes may shift; `serde_json::Value` wrappers mitigate but do not eliminate brittleness.
 
 ## Context
 
 Codebase map available in `.planning/codebase/`.
 Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SKILL.md`.
+v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ---
-*Last updated: 2026-08-10 after Phase 6 execution*
+*Last updated: 2026-08-10 after v0.2 roadmap creation*
 
 ## Performance Metrics
 
@@ -83,20 +93,22 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 - [Phase ?]: Added Conversation::model_category() and ChatBuilder::category() accessors — Enables external integration tests to verify category preservation without exposing mutable internal fields, preserving #[non_exhaustive] forward-compatibility.
 - [Phase ?]: Kept prepare_request pub(crate) for inline-image coverage — Inline-image encoding is verified via PreparedRequest construction in proto tests and ImageSource::from_bytes unit tests; no need to widen visibility.
 - [Phase ?]: Phase 1 Plan 4: Extended Error::is_transient to inspect reqwest::Error::status() so transport-level 429/5xx errors are retried.
+- [Roadmap v0.2]: Mapped USER-01/02 to Phase 8 (alongside PREFS-*) per the milestone grouping of `o30O0e` + `L5adhe`; previous draft had them in Phase 7 with `PCck7e`.
+- [Roadmap v0.2]: Mapped TOOL-06 (mocked fixture tests per RPC) to Phase 11 as the final verification gate; each phase's plan is expected to ship fixture tests alongside its RPC methods.
 
 ## Session
 
-**Last session:** 2026-08-09T14:05:07.821Z
-**Stopped at:** None
+**Last session:** 2026-08-10T08:00:00.000Z
+**Stopped at:** v0.2 roadmap created
 **Resume file:** None
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 7 — Conversation Actions (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-08-10 — Milestone v0.2 started
+Status: Awaiting `/gsd-plan-phase 7`
+Last activity: 2026-08-10 — v0.2 roadmap written (phases 7-11, 20 requirements mapped)
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Run `/gsd-plan-phase 7` to plan Conversation Actions (PCck7e).

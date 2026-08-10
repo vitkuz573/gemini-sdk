@@ -136,8 +136,8 @@
 | CONVACT-02 | Phase 7 | Pending |
 | CONVACT-03 | Phase 7 | Pending |
 | CONVACT-04 | Phase 7 | Pending |
-| USER-01 | Phase 7 | Pending |
-| USER-02 | Phase 7 | Pending |
+| USER-01 | Phase 8 | Pending |
+| USER-02 | Phase 8 | Pending |
 | PREFS-01 | Phase 8 | Pending |
 | PREFS-02 | Phase 8 | Pending |
 | PREFS-03 | Phase 8 | Pending |
@@ -150,7 +150,7 @@
 | SETTINGS-02 | Phase 10 | Pending |
 | SETTINGS-03 | Phase 10 | Pending |
 | DRIFT-01 | Phase 11 | Pending |
-| TOOL-06 | Phase 7-11 | Pending |
+| TOOL-06 | Phase 11 | Pending |
 | TOOL-07 | Phase 11 | Pending |
 
 **Coverage:**

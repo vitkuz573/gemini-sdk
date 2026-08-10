@@ -135,14 +135,113 @@
 
 ---
 
+## Phase 7: Conversation Actions
+
+**Goal:** Expose conversation turn actions (regenerate, rate, delete) over RPC `PCck7e` as typed, tested public APIs.
+
+**Requirements:** CONVACT-01, CONVACT-02, CONVACT-03, CONVACT-04
+
+**Key outcomes:**
+
+- New public methods on `GeminiClient`: `regenerate_turn`, `rate_turn`, `delete_turn`.
+- All three actions return a typed `ConversationActionResult` with success/failure status.
+- Each action invokes RPC `PCck7e` via the existing `batchexecute_rpc` helper.
+- Mocked fixture tests cover request payload shape and response parsing.
+
+**Mode:** standard
+**Depends on:** Phase 6
+**Estimated waves:** 2
+
+**Plans:** TBD
+
+---
+
+## Phase 8: User Profile & Preferences
+
+**Goal:** Expose user info (`o30O0e`) and last-selected mode (`L5adhe`) as typed, tested public APIs.
+
+**Requirements:** USER-01, USER-02, PREFS-01, PREFS-02, PREFS-03
+
+**Key outcomes:**
+
+- New public methods on `GeminiClient`: `get_user_info`, `get_last_selected_mode`, `set_last_selected_mode`.
+- User profile fields tolerate missing or null payload entries.
+- Preference payloads follow the exact shape captured in spike 009.
+
+**Mode:** standard
+**Depends on:** Phase 7
+**Estimated waves:** 2
+
+**Plans:** TBD
+
+---
+
+## Phase 9: Locale & Model Config
+
+**Goal:** Expose locale and model configuration RPCs (`cYRIkd`, `whPPme`, `Te6DCf`, `ku4Jyf`) as thin typed facades.
+
+**Requirements:** LOCALE-01, LOCALE-02, LOCALE-03, LOCALE-04, LOCALE-05
+
+**Key outcomes:**
+
+- New public methods on `GeminiClient`: `get_locale_tools`, `get_model_config`, `get_locale_config`, `get_tools_config`.
+- All four responses returned as `serde_json::Value` wrappers to tolerate undocumented shape drift.
+
+**Mode:** standard
+**Depends on:** Phase 8
+**Estimated waves:** 2
+
+**Plans:** TBD
+
+---
+
+## Phase 10: Settings Pages
+
+**Goal:** Expose usage-stats (`jSf9Qc`) and scheduled-prompts (`XPSWpd`) RPCs as typed public APIs.
+
+**Requirements:** SETTINGS-01, SETTINGS-02, SETTINGS-03
+
+**Key outcomes:**
+
+- New public methods on `GeminiClient`: `get_usage_stats`, `get_scheduled_prompts`.
+- Typed wrappers over `serde_json::Value` with structured accessors.
+
+**Mode:** standard
+**Depends on:** Phase 9
+**Estimated waves:** 2
+
+**Plans:** TBD
+
+---
+
+## Phase 11: Protocol Drift & Integration
+
+**Goal:** Update the drifted `x-client-data` constant, add usage examples for the new RPCs, and run the final quality gate.
+
+**Requirements:** DRIFT-01, TOOL-06, TOOL-07
+
+**Key outcomes:**
+
+- Default `x-client-data` constant updated from `CI7yygE=` to `CNeOywE=` to match the latest HAR capture.
+- At least one runnable example binary demonstrating the new APIs.
+- Final clippy / test / doc gates pass; all new RPCs have mocked fixture tests.
+
+**Mode:** standard
+**Depends on:** Phase 10
+**Estimated waves:** 1
+
+**Plans:** TBD
+
+---
+
 ## Milestones
 
 | Milestone | Phases | Target | Definition of Done |
 |-----------|--------|--------|--------------------|
-| v0.1 | 1 | TBD | `cargo test`, `cargo clippy`, `cargo doc` pass; API stable enough for external users; crate published. |
-| v0.2 | 2-3 | TBD | Auth and protocol fragility fixed; hooks, tracing, and upload progress available. |
-| v1.0 | 4-6 | TBD | Advanced features shipped; semver-stable API published. |
+| v0.1 Core | 1-6 | Shipped 2026-08-10 | `cargo test`, `cargo clippy`, `cargo doc` pass; API stable enough for external users; crate published. |
+| v0.2 API Expansion | 7-11 | In progress | All 9 undocumented `batchexecute` RPCs exposed as typed public APIs; `x-client-data` drift fixed; quality gates green. |
+| v1.0 | TBD | TBD | Semver-stable API published. |
 
 ---
 
-*Last updated: 2026-08-08 after initialization*
+*Last updated: 2026-08-10 after v0.2 roadmap created*
