@@ -54,7 +54,6 @@
     clippy::doc_markdown,
     clippy::unused_async,
     clippy::unused_self,
-    clippy::too_many_lines,
     clippy::manual_let_else,
     clippy::needless_continue,
     clippy::redundant_closure_for_method_calls,

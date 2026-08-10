@@ -57,6 +57,8 @@ impl ConversationState {
 ///
 /// When `browser_payload` is provided it is used as the base and only prompt,
 /// category, and UUID slots are overridden.
+// REASON: this function intentionally mirrors the 97-slot frontend layout;
+// grouping all parameters in one builder avoids partial-construction errors.
 #[allow(clippy::too_many_arguments)]
 pub fn build_inner_req_list(
     request: &PreparedRequest,

@@ -1168,6 +1168,8 @@ impl GeminiClient {
         Ok(())
     }
 
+    // REASON: internal batchexecute RPC helper mirrors the Google endpoint's
+    // many query parameters; no sensible grouping exists.
     #[allow(clippy::too_many_arguments)]
     async fn batchexecute_rpc(
         &self,

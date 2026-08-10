@@ -446,6 +446,10 @@ impl Conversation {
 }
 
 /// Internal type used when preparing a generation request.
+///
+/// This type is exposed for benchmarks, hooks, and advanced use. Fields are
+/// public but not covered by the semver stability guarantees of the primary
+/// public API.
 #[derive(Clone)]
 #[doc(hidden)]
 pub struct PreparedRequest {
