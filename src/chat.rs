@@ -6,8 +6,11 @@ use serde::{Deserialize, Serialize};
 use crate::errors::{Error, Result};
 use crate::models::ModelCategory;
 
+/// Current snapshot format version for forward compatibility.
+pub(crate) const CONVERSATION_FORMAT_VERSION: u32 = 1;
+
 /// A single message in a conversation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ChatMessage {
     /// Role of the message author: `user` or `model`.
@@ -71,7 +74,7 @@ impl ChatMessage {
 }
 
 /// A source for image content.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ImageSource {
     /// Base64-encoded inline image data together with its MIME type.
     InlineData {
@@ -88,7 +91,7 @@ pub enum ImageSource {
 }
 
 /// A source for audio content.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AudioSource {
     /// Base64-encoded inline audio data together with its MIME type.
     InlineData {
@@ -124,7 +127,7 @@ impl AudioSource {
 }
 
 /// A source for video content.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum VideoSource {
     /// Base64-encoded inline image data together with its MIME type.
     InlineData {
@@ -179,7 +182,7 @@ impl VideoSource {
 }
 
 /// A part of a chat message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ContentPart {
     /// Plain text.
     Text(String),
@@ -229,6 +232,7 @@ impl GenerationConfig {
 
 /// Thinking level requested for a generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum ThinkingLevel {
     /// No explicit thinking level.
@@ -315,13 +319,21 @@ pub(crate) fn extract_prompt(message: &ChatMessage) -> Result<String> {
     Ok(prompt)
 }
 
+/// Serializable representation of a [`Conversation`] for snapshots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ConversationSnapshot {
+    format_version: u32,
+    messages: Vec<ChatMessage>,
+    model_category: Option<ModelCategory>,
+}
+
 /// An in-progress conversation that carries multi-turn state.
 ///
 /// `messages` is public as a low-level escape hatch, but callers that mutate it
 /// directly are responsible for keeping roles and part types valid. Malformed
 /// conversations will fail at send time when `extract_prompt` validates the
 /// outgoing message.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Conversation {
     pub(crate) messages: Vec<ChatMessage>,
@@ -368,6 +380,37 @@ impl Conversation {
     #[must_use]
     pub fn model_category(&self) -> Option<ModelCategory> {
         self.model_category
+    }
+
+    /// Serialises this conversation to a JSON snapshot.
+    ///
+    /// The snapshot includes the message history and model category. It does not
+    /// contain credentials or other client state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the conversation cannot be serialised to JSON.
+    pub fn save(&self) -> Result<String> {
+        let snapshot = ConversationSnapshot {
+            format_version: CONVERSATION_FORMAT_VERSION,
+            messages: self.messages.clone(),
+            model_category: self.model_category,
+        };
+        serde_json::to_string(&snapshot).map_err(Error::Json)
+    }
+
+    /// Restores a conversation from a JSON snapshot created by [`save`][Self::save].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot is not valid JSON or does not match the
+    /// expected conversation shape.
+    pub fn restore(snapshot: &str) -> Result<Self> {
+        let parsed: ConversationSnapshot = serde_json::from_str(snapshot).map_err(Error::Json)?;
+        Ok(Self {
+            messages: parsed.messages,
+            model_category: parsed.model_category,
+        })
     }
 }
 

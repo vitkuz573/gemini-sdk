@@ -17,7 +17,6 @@ use crate::chat::{
     prepare_request, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, PreparedRequest,
 };
-
 use crate::errors::{Error, Result};
 use crate::models::{ModelCategory, ModelInfo};
 use crate::proto::parser::{
@@ -351,6 +350,95 @@ impl GeminiClient {
             category,
             config: None,
         }
+    }
+
+    /// Serialises this client's credentials and session state into a JSON snapshot.
+    ///
+    /// The snapshot includes the current credentials (with secrets) and session
+    /// state. It does **not** include the current conversation; use
+    /// [`save_session_with_conversation`][Self::save_session_with_conversation]
+    /// to include one.
+    ///
+    /// # Security
+    ///
+    /// The returned string contains recoverable credentials. Store it securely
+    /// and never log it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot cannot be serialised to JSON.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # async fn run() -> gemini_sdk::Result<()> {
+    /// # let client = gemini_sdk::GeminiClient::from_cookie_header("__Secure-1PSID=a; __Secure-1PSIDCC=b").unwrap();
+    /// let snapshot = client.save_session().await?;
+    /// let (restored, conversation) = gemini_sdk::GeminiClient::restore_session(&snapshot).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn save_session(&self) -> Result<String> {
+        self.save_session_with_conversation_inner(None).await
+    }
+
+    /// Serialises this client's credentials, session state, and a conversation
+    /// into a JSON snapshot.
+    ///
+    /// # Security
+    ///
+    /// The returned string contains recoverable credentials. Store it securely
+    /// and never log it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot cannot be serialised to JSON.
+    pub async fn save_session_with_conversation(&self, conversation: &Conversation) -> Result<String> {
+        self.save_session_with_conversation_inner(Some(conversation.clone())).await
+    }
+
+    async fn save_session_with_conversation_inner(
+        &self,
+        conversation: Option<Conversation>,
+    ) -> Result<String> {
+        let credentials = {
+            let cookies = self.inner.cookies.lock().await;
+            cookies.to_credentials().map_err(|e| Error::Config(e.to_string()))?
+        };
+        let session = self.inner.session.lock().await.clone();
+        let snapshot = crate::session::Snapshot {
+            format_version: crate::session::SNAPSHOT_FORMAT_VERSION,
+            credentials,
+            session,
+            conversation,
+        };
+        serde_json::to_string(&snapshot).map_err(Error::Json)
+    }
+
+    /// Restores a client and optional conversation from a JSON snapshot.
+    ///
+    /// The restored client uses a fresh [`reqwest::Client`] with default SDK
+    /// configuration.
+    ///
+    /// # Security
+    ///
+    /// The snapshot string contains recoverable credentials. Only pass snapshots
+    /// from trusted storage.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot is invalid, missing required cookies, or
+    /// the HTTP client cannot be built.
+    pub async fn restore_session(snapshot: &str) -> Result<(Self, Option<Conversation>)> {
+        let parsed: crate::session::Snapshot =
+            serde_json::from_str(snapshot).map_err(Error::Json)?;
+        let cookies: Cookies = parsed.credentials.into();
+        let client = Self::from_cookies(cookies)?;
+        {
+            let mut session = client.inner.session.lock().await;
+            *session = parsed.session;
+        }
+        Ok((client, parsed.conversation))
     }
 
     /// Lists the models available to the signed-in account.

@@ -2,43 +2,68 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
+use crate::chat::Conversation;
 use crate::proto::slots::ConversationState as ProtoConversationState;
+use crate::auth::Credentials;
 
 const DEFAULT_PUSH_ID: &str = "feeds/mcudyrk2a4khkz";
 const DEFAULT_LANGUAGE: &str = "en";
 
+/// Current snapshot format version for forward compatibility.
+pub(crate) const SNAPSHOT_FORMAT_VERSION: u32 = 1;
+
 /// Extracted session values from `window.WIZ_global_data` and the consent flow.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct SessionState {
-    pub(crate) access_token: Option<String>,
-    pub(crate) build_label: Option<String>,
-    pub(crate) session_id: Option<String>,
-    pub(crate) language: String,
-    pub(crate) push_id: Option<String>,
-    pub(crate) conversation_state: Option<ConversationState>,
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SessionState {
+    pub access_token: Option<String>,
+    pub build_label: Option<String>,
+    pub session_id: Option<String>,
+    pub language: String,
+    pub push_id: Option<String>,
+    pub conversation_state: Option<ConversationState>,
     /// WAA token for slot 3 (may be absent if WAA acquisition fails).
-    pub(crate) waa_token: Option<String>,
+    pub waa_token: Option<String>,
     /// Serialized value for the `x-goog-ext-525001261-jspb` header.
-    pub(crate) waa_context: Option<String>,
+    pub waa_context: Option<String>,
     /// Model/mode fingerprint used inside the WAA context header.
-    pub(crate) waa_fingerprint: Option<String>,
+    pub waa_fingerprint: Option<String>,
     /// Per-session nonce used for slot 4.
-    pub(crate) nonce: Option<String>,
+    pub nonce: Option<String>,
 }
 
 /// Multi-turn conversation state stored in the SDK session.
-#[derive(Debug, Clone)]
-pub(crate) struct ConversationState {
-    pub(crate) conversation_id: String,
-    pub(crate) response_id: String,
-    pub(crate) response_part_id: String,
-    pub(crate) continuation_token: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationState {
+    pub conversation_id: String,
+    pub response_id: String,
+    pub response_part_id: String,
+    pub continuation_token: String,
+}
+
+/// A serialisable snapshot of a client session.
+///
+/// # Security
+///
+/// This snapshot contains credentials in recoverable form. Callers are
+/// responsible for storing snapshot strings securely; the SDK never writes
+/// snapshots to disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snapshot {
+    /// Format version for forward compatibility.
+    pub format_version: u32,
+    /// Credentials (with secrets).
+    pub credentials: Credentials,
+    /// Extracted session state.
+    pub session: SessionState,
+    /// Optional conversation history.
+    pub conversation: Option<Conversation>,
 }
 
 impl SessionState {
-    pub(crate) fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             language: DEFAULT_LANGUAGE.to_string(),
             ..Default::default()

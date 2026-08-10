@@ -85,6 +85,7 @@ pub use chat::{
     AudioSource, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, ThinkingLevel, VideoSource,
 };
+pub use session::Snapshot;
 // PreparedRequest is intentionally public for benchmarks and advanced use.
 pub use client::{GeminiClient, HttpHook};
 pub use chat::PreparedRequest;

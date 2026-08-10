@@ -9,6 +9,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::{Deserialize, Serialize};
+
 /// Name of the primary session cookie.
 pub const PSID: &str = "__Secure-1PSID";
 /// Name of the secondary signed-in cookie.
@@ -49,7 +51,13 @@ impl std::error::Error for CredentialsError {}
 ///
 /// `Credentials` stores cookies by their semantic role rather than as an opaque
 /// header string. Secrets are redacted from [`Debug`] output.
-#[derive(Clone, Default)]
+///
+/// # Security
+///
+/// `Credentials` implements `Serialize` and `Deserialize` so it can be stored
+/// in session snapshots. The serialized form contains recoverable secrets;
+/// callers must store snapshots securely and never expose them in logs.
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Credentials {
     /// Primary session ID.
     pub psid: String,
@@ -195,6 +203,10 @@ impl Credentials {
 
     /// Serialises the credentials into a `Cookie` header value.
     #[must_use]
+    pub fn to_cookie_header(&self) -> String {
+        self.to_header_value()
+    }
+
     pub(crate) fn to_header_value(&self) -> String {
         let mut pairs: Vec<(&str, &str)> = Vec::new();
         pairs.push((PSID, self.psid.as_str()));
