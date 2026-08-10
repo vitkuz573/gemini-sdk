@@ -118,6 +118,11 @@ impl Error {
     pub(crate) fn transient(message: impl fmt::Display) -> Self {
         Self::Transient(message.to_string())
     }
+
+    /// Creates a `NotSignedIn` error.
+    pub(crate) fn not_signed_in(message: impl fmt::Display) -> Self {
+        Self::NotSignedIn(message.to_string())
+    }
 }
 
 #[cfg(test)]

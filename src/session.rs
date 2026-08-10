@@ -102,27 +102,63 @@ pub(crate) struct BardInitialData {
 }
 
 /// Extract session parameters from the `/app` HTML body.
-pub(crate) fn extract_from_app_html(body: &str) -> SessionState {
-    let mut state = SessionState::new();
-
-    if let Some(token) = extract_snlim0e(body) {
-        state.access_token = Some(token);
+/// Returns `true` when the `/app` HTML body contains the signed-in markers.
+///
+/// This is the single authoritative check used by the client to decide whether
+/// the supplied cookies have been accepted by Gemini as an authenticated
+/// session.
+pub(crate) fn looks_like_signed_in_html(body: &str) -> bool {
+    // Use the same extraction logic the client uses, but defined locally so
+    // this module does not depend on the client module.
+    let block = extract_wiz_global_data_block_safe(body);
+    let s06grb = block
+        .and_then(|b| extract_quoted_value(b, "S06Grb"))
+        .unwrap_or_default();
+    if s06grb.is_empty() || !s06grb.chars().all(|c| c.is_ascii_digit()) {
+        return false;
     }
-    if let Some(label) = extract_build_label(body) {
-        state.build_label = Some(label);
-    }
-    if let Some(sid) = extract_session_id(body) {
-        state.session_id = Some(sid);
-    }
-    if let Some(push_id) = extract_push_id(body) {
-        state.push_id = Some(push_id);
-    }
-    if let Some(fp) = extract_waa_fingerprint(body) {
-        state.waa_fingerprint = Some(fp);
-    }
-
-    state
+    let Some(opep7c) = block.and_then(|b| extract_quoted_value(b, "oPEP7c")) else {
+        return false;
+    };
+    looks_like_email(&opep7c)
 }
+
+fn looks_like_email(value: &str) -> bool {
+    let mut parts = value.splitn(2, '@');
+    let local = parts.next().unwrap_or("");
+    let domain = parts.next().unwrap_or("");
+    !local.is_empty()
+        && !domain.is_empty()
+        && domain.contains('.')
+        && !local.starts_with('\'')
+        && !domain.starts_with('\'')
+}
+
+    pub(crate) fn extract_from_app_html(body: &str) -> SessionState {
+        let mut state = SessionState::new();
+
+        // If the WIZ_global_data block is missing or malformed, still try the
+        // fallback extractions rather than bailing out entirely.
+        let _block = extract_wiz_global_data_block_safe(body);
+
+        if let Some(token) = extract_snlim0e(body) {
+            state.access_token = Some(token);
+        }
+        if let Some(label) = extract_build_label(body) {
+            state.build_label = Some(label);
+        }
+        if let Some(sid) = extract_session_id(body) {
+            state.session_id = Some(sid);
+        }
+        if let Some(push_id) = extract_push_id(body) {
+            state.push_id = Some(push_id);
+        }
+        if let Some(fp) = extract_waa_fingerprint(body) {
+            state.waa_fingerprint = Some(fp);
+        }
+
+        state
+    }
 
 fn extract_waa_fingerprint(body: &str) -> Option<String> {
     // The WAA context header contains a stable model/mode fingerprint. In the
@@ -260,6 +296,30 @@ pub(crate) fn extract_wiz_global_data_block(body: &str) -> Option<&str> {
     let brace_idx = rest.find('{')?;
     let inner = &rest[brace_idx..];
     Some(take_balanced_braces(inner))
+}
+
+/// Returns the contents of the `window.WIZ_global_data` block without the
+/// leading prefix, or `None` if the block is missing or malformed.
+///
+/// This is a defensive variant used when callers only need the raw block and
+/// want to avoid panic on malformed braces.
+pub(crate) fn extract_wiz_global_data_block_safe(body: &str) -> Option<&str> {
+    let start_marker = "window.WIZ_global_data";
+    let idx = body.find(start_marker)?;
+    let after_marker = &body[idx + start_marker.len()..];
+    let eq_idx = after_marker.find('=')?;
+    let block_start_in_after = eq_idx + 1;
+    let rest = &after_marker[block_start_in_after..];
+    let brace_idx = rest.find('{')?;
+    let inner = &rest[brace_idx..];
+    // If braces are malformed, take_balanced_braces returns the whole slice;
+    // that is still safe, but here we prefer to return None so callers fall
+    // back to the full-body search.
+    let taken = take_balanced_braces(inner);
+    if taken.len() < 2 || !taken.starts_with('{') {
+        return None;
+    }
+    Some(taken)
 }
 
 /// Returns the substring that starts at the first `{` and ends at the matching

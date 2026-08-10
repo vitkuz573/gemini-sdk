@@ -68,6 +68,7 @@ pub mod auth;
 pub mod chat;
 pub mod client;
 pub mod errors;
+pub mod har;
 pub mod metrics;
 pub mod models;
 pub mod proto;
@@ -84,6 +85,7 @@ pub mod attestation;
 // Internal helpers kept private.
 mod retry;
 mod session;
+mod transient_400;
 
 pub use auth::{Cookies, CookieHeaderProvider, Credentials, CredentialsError, CredentialsProvider};
 pub use chat::{

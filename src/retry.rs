@@ -26,6 +26,23 @@ where
     F: Fn() -> Fut,
     Fut: Future<Output = std::result::Result<T, reqwest::Error>>,
 {
+    with_backoff_generic(|| async {
+        operation().await.map_err(crate::errors::Error::Request)
+    })
+    .await
+}
+
+/// Generic retry helper that accepts any error type convertible to
+/// [`crate::Error`] and uses [`Error::is_transient`] for classification.
+///
+/// This is used internally by the batchexecute helper, which sometimes needs
+/// to surface a pre-constructed [`crate::Error::Transient`] rather than a raw
+/// `reqwest::Error`.
+pub(crate) async fn with_backoff_generic<F, Fut, T>(operation: F) -> crate::Result<T>
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = crate::Result<T>>,
+{
     let backoff = ExponentialBackoff {
         initial_interval: INITIAL_INTERVAL,
         max_interval: MAX_INTERVAL,
@@ -37,11 +54,10 @@ where
         match operation().await {
             Ok(value) => Ok(value),
             Err(err) => {
-                let sdk_err = crate::errors::Error::Request(err);
-                if sdk_err.is_transient() {
-                    Err(backoff::Error::transient(sdk_err))
+                if err.is_transient() {
+                    Err(backoff::Error::transient(err))
                 } else {
-                    Err(backoff::Error::permanent(sdk_err))
+                    Err(backoff::Error::permanent(err))
                 }
             }
         }
@@ -129,5 +145,33 @@ mod tests {
             matches!(err, Error::Request(ref e) if e.status() == Some(StatusCode::BAD_REQUEST))
         );
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn with_backoff_retries_synthetic_400_transient() {
+        // Verifies that the generic retry helper treats Error::Transient as
+        // retriable. This is the same classification path used by
+        // send_batchexecute_with_retry when it converts a WIZ transient 400
+        // into Error::Transient.
+        let attempts = Arc::new(AtomicUsize::new(0));
+
+        let operation = {
+            let attempts = Arc::clone(&attempts);
+            move || -> futures::future::Ready<crate::Result<&'static str>> {
+                let attempts = Arc::clone(&attempts);
+                let current = attempts.fetch_add(1, Ordering::SeqCst);
+                if current == 0 {
+                    futures::future::ready(Err(crate::Error::Transient(
+                        "synthetic WIZ 400".to_string(),
+                    )))
+                } else {
+                    futures::future::ready(Ok("success"))
+                }
+            }
+        };
+
+        let result = crate::retry::with_backoff_generic(operation).await;
+        assert_eq!(result.unwrap(), "success");
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
     }
 }

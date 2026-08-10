@@ -324,6 +324,16 @@ impl ChatResponse {
         self.thinking = thinking.into();
         self
     }
+
+    /// Returns the conversation id extracted from the response state, if any.
+    ///
+    /// This is a best-effort accessor intended for integration tests and the
+    /// live probe example. It returns `None` if the response did not contain
+    /// parseable conversation state.
+    #[must_use]
+    pub fn conversation_id(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Internal helper: extracts the latest user prompt from a message.

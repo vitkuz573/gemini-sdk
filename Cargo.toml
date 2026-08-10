@@ -42,6 +42,7 @@ async-stream = "0.3"
 bytes = "1.7"
 backoff = { version = "0.4", features = ["tokio"] }
 regex = { version = "1.11", optional = true }
+humantime = "2.1"
 
 # Optional browser attestation dependencies
 tokio-tungstenite = { version = "0.24", optional = true }
@@ -63,6 +64,7 @@ sha1 = "0.10"
 futures = "0.3"
 static_assertions = "1.1.0"
 http = "1.5"
+tempfile = "3.14"
 
 [features]
 default = []
@@ -99,6 +101,10 @@ required-features = ["browser-attestation"]
 [[example]]
 name = "v0_2_api_tour"
 path = "examples/v0_2_api_tour.rs"
+
+[[example]]
+name = "live_probe"
+path = "examples/live_probe.rs"
 
 [[bench]]
 name = "slot_building"

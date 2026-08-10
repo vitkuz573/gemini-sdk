@@ -7,7 +7,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::Stream;
-use reqwest::Client;
+use reqwest::header::HeaderMap;
+use reqwest::{Client, StatusCode};
 use serde_json::Value;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, warn};
@@ -55,6 +56,8 @@ use crate::session::{
     extract_consent_save_url, extract_from_app_html, extract_quoted_value, SessionState,
 };
 use crate::upload::{self, UploadEvent};
+use crate::har::HarWriter;
+use crate::transient_400::is_wiz_transient_400;
 
 /// Async hook that observes prepared requests and parsed responses.
 ///
@@ -127,6 +130,7 @@ struct Inner {
     session: Mutex<SessionState>,
     config: RwLock<ClientConfig>,
     provider: Mutex<Option<Arc<dyn CredentialsProvider>>>,
+    har_writer: Mutex<Option<HarWriter>>,
 }
 
 /// Configuration values shared by every request made by a [`GeminiClient`].
@@ -140,6 +144,7 @@ pub struct ClientConfig {
     fatal_hook_errors: bool,
     metrics_recorder: Option<Arc<dyn crate::metrics::MetricsRecorder>>,
     base_url: String,
+    har_path: Option<String>,
 }
 
 impl std::fmt::Debug for ClientConfig {
@@ -152,6 +157,7 @@ impl std::fmt::Debug for ClientConfig {
             .field("http_hook", &self.http_hook.is_some())
             .field("fatal_hook_errors", &self.fatal_hook_errors)
             .field("base_url", &self.base_url)
+            .field("har_path", &self.har_path)
             .finish()
     }
 }
@@ -167,6 +173,7 @@ impl Default for ClientConfig {
             fatal_hook_errors: false,
             metrics_recorder: None,
             base_url: WEB_BASE_URL.to_string(),
+            har_path: None,
         }
     }
 }
@@ -361,6 +368,42 @@ impl GeminiClient {
         self
     }
 
+    /// Enables optional W3C HAR 1.2 capture for every HTTP transaction.
+    ///
+    /// The file at `path` is created or truncated. Cookies, authorization
+    /// headers, and `x-goog-ext-*` values are redacted before writing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be opened for writing.
+    pub async fn with_har_capture(self, path: impl Into<String>) -> Result<Self> {
+        let path = path.into();
+        let writer = HarWriter::new(&path).await?;
+        {
+            let mut config = self.inner.config.write().await;
+            config.har_path = Some(path);
+            drop(config);
+        }
+        *self.inner.har_writer.lock().await = Some(writer);
+        Ok(self)
+    }
+
+    /// Returns the response id of the most recently ingested turn, if any.
+    ///
+    /// This is a best-effort accessor intended for integration tests and the
+    /// live probe example. It returns `None` if no turn has been generated yet
+    /// or if the conversation state has been cleared.
+    #[must_use]
+    pub async fn last_response_id(&self) -> Option<String> {
+        self.inner
+            .session
+            .lock()
+            .await
+            .conversation_state
+            .as_ref()
+            .map(|s| s.response_id.clone())
+    }
+
     /// Returns a clone of the cookies used by this client.
     async fn cookies(&self) -> Cookies {
         self.inner.cookies.lock().await.clone()
@@ -428,6 +471,7 @@ impl GeminiClient {
                 session: Mutex::new(session),
                 config: RwLock::new(config),
                 provider: Mutex::new(None),
+                har_writer: Mutex::new(None),
             }),
         })
     }
@@ -688,7 +732,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -696,7 +740,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -706,13 +750,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_conversation_action_response(&text, action, response_id.to_string())
+        parse_conversation_action_response(&response.body, action, response_id.to_string())
     }
 
     /// Returns the signed-in user's profile information.
@@ -764,7 +806,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -772,7 +814,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -782,13 +824,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_user_info_response(&text)
+        parse_user_info_response(&response.body)
     }
 
     /// Returns the user's last-selected Gemini mode preference.
@@ -836,7 +876,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -844,7 +884,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -854,13 +894,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_last_selected_mode_response(&text)
+        parse_last_selected_mode_response(&response.body)
     }
 
     /// Sets the user's last-selected Gemini mode preference.
@@ -912,7 +950,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -920,7 +958,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -930,10 +968,8 @@ impl GeminiClient {
             })
             .await?;
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
         Ok(())
@@ -984,7 +1020,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -992,7 +1028,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -1002,13 +1038,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_locale_tools_response(&text)
+        parse_locale_tools_response(&response.body)
     }
 
     /// Returns the model configuration.
@@ -1056,7 +1090,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -1064,7 +1098,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -1074,13 +1108,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_model_config_response(&text)
+        parse_model_config_response(&response.body)
     }
 
     /// Returns the locale configuration.
@@ -1128,7 +1160,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -1136,7 +1168,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -1146,13 +1178,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_locale_config_response(&text)
+        parse_locale_config_response(&response.body)
     }
 
     /// Returns the tools configuration.
@@ -1200,7 +1230,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -1208,7 +1238,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -1218,13 +1248,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_tools_config_response(&text)
+        parse_tools_config_response(&response.body)
     }
 
     /// Returns usage statistics for the signed-in account.
@@ -1272,7 +1300,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -1280,7 +1308,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -1290,13 +1318,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_usage_stats_response(&text)
+        parse_usage_stats_response(&response.body)
     }
 
     /// Returns the user's scheduled prompts.
@@ -1344,7 +1370,7 @@ impl GeminiClient {
         let headers = self.build_headers(None, None, None).await;
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -1352,7 +1378,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -1362,13 +1388,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_scheduled_prompts_response(&text)
+        parse_scheduled_prompts_response(&response.body)
     }
 
     /// Refreshes credentials from a provider and re-initializes the session.
@@ -1425,7 +1449,7 @@ impl GeminiClient {
         };
 
         let response = self
-            .send_with_retry(|| {
+            .send_batchexecute_with_retry(|| {
                 let client = self.inner.http.clone();
                 let url = url.clone();
                 let params = params.clone();
@@ -1433,7 +1457,7 @@ impl GeminiClient {
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
                 async move {
-                    let mut req = client.post(&url).query(&params).body(body);
+                    let mut req = client.post(&url).query(&params).body(body.clone());
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
@@ -1443,13 +1467,11 @@ impl GeminiClient {
             })
             .await?;
 
-        let status = response.status();
-        let text = response.text().await.map_err(Error::Request)?;
-        if !status.is_success() {
-            return Err(Error::api(status, text));
+        if !response.status.is_success() {
+            return Err(Error::api(response.status, response.body));
         }
 
-        parse_model_list(&text)
+        parse_model_list(&response.body)
     }
 
     /// Sends a generation request and returns the parsed response.
@@ -1953,8 +1975,8 @@ impl GeminiClient {
         let body = self.fetch_app_page().await?;
 
         if extract_signed_in_state(&body).is_none() {
-            return Err(Error::NotSignedIn(
-                "cookies are not valid for a signed-in Gemini session; try refreshing your browser cookies".to_string(),
+            return Err(Error::not_signed_in(
+                "cookies rejected by Gemini /app; page did not contain signed-in markers",
             ));
         }
 
@@ -2143,15 +2165,27 @@ impl GeminiClient {
             .header("Cookie", cookie_header)
             .header("User-Agent", USER_AGENT)
             .header("Referer", format!("{base_url}/"))
-            .header("Origin", base_url)
+            .header("Origin", base_url.clone())
             .header("x-client-data", X_CLIENT_DATA)
-            .body(body)
+            .body(body.clone())
             .send()
             .await
             .map_err(|e| Error::Transient(format!("WAA Create request failed: {e}")))?;
 
         let status = response.status();
+        let response_headers = response.headers().clone();
         let text = response.text().await.map_err(Error::Request)?;
+        self.maybe_record_har(
+            "POST",
+            &url,
+            &HeaderMap::new(),
+            body.as_bytes(),
+            status.as_u16(),
+            &response_headers,
+            text.as_bytes(),
+            Duration::from_secs(0),
+        )
+        .await?;
         if !status.is_success() {
             return Err(Error::api(status, text));
         }
@@ -2190,19 +2224,32 @@ impl GeminiClient {
             .header("Cookie", cookie_header)
             .header("User-Agent", USER_AGENT)
             .header("Referer", format!("{base_url}/"))
-            .header("Origin", base_url)
+            .header("Origin", base_url.clone())
             .header("x-client-data", X_CLIENT_DATA);
-        if let Some(auth) = auth {
+        if let Some(auth) = auth.clone() {
             req = req.header("Authorization", auth);
         }
+        let started = std::time::Instant::now();
         let response = req
-            .body(body)
+            .body(body.clone())
             .send()
             .await
             .map_err(|e| Error::Transient(format!("ogads GetAsyncData request failed: {e}")))?;
 
         let status = response.status();
+        let response_headers = response.headers().clone();
         let text = response.text().await.map_err(Error::Request)?;
+        self.maybe_record_har(
+            "POST",
+            &url,
+            &HeaderMap::new(),
+            body.as_bytes(),
+            status.as_u16(),
+            &response_headers,
+            text.as_bytes(),
+            started.elapsed(),
+        )
+        .await?;
         if !status.is_success() {
             return Err(Error::api(status, text));
         }
@@ -2219,6 +2266,7 @@ impl GeminiClient {
         };
 
         let url = format!("{base_url}/app?hl={language}");
+        let started = std::time::Instant::now();
         let response = self
             .inner
             .http
@@ -2231,11 +2279,50 @@ impl GeminiClient {
             .map_err(|e| Error::Transient(format!("failed to fetch Gemini /app: {e}")))?;
 
         let status = response.status();
+        let response_headers = response.headers().clone();
         let text = response.text().await.map_err(Error::Request)?;
+
+        self.maybe_record_har(
+            "GET",
+            &url,
+            &HeaderMap::new(),
+            &[],
+            status.as_u16(),
+            &response_headers,
+            text.as_bytes(),
+            started.elapsed(),
+        )
+        .await?;
+
         if !status.is_success() {
+            if status == StatusCode::BAD_REQUEST && !crate::session::looks_like_signed_in_html(&text)
+            {
+                return Err(Error::not_signed_in(
+                    "cookies rejected by Gemini /app; page did not contain signed-in markers",
+                ));
+            }
             return Err(Error::api(status, text));
         }
+
+        if !crate::session::looks_like_signed_in_html(&text) {
+            return Err(Error::not_signed_in(
+                "cookies rejected by Gemini /app; page did not contain signed-in markers",
+            ));
+        }
+
         Ok(text)
+    }
+
+    fn build_request_header_map(headers: &[(String, String)]) -> HeaderMap {
+        let mut map = HeaderMap::new();
+        for (key, value) in headers {
+            if let Ok(name) = reqwest::header::HeaderName::from_bytes(key.as_bytes()) {
+                if let Ok(v) = reqwest::header::HeaderValue::from_str(value) {
+                    map.insert(name, v);
+                }
+            }
+        }
+        map
     }
 
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
@@ -2326,10 +2413,102 @@ impl GeminiClient {
         crate::retry::with_backoff(operation).await
     }
 
+    /// Sends a batchexecute request and retries when the transient WIZ 400
+    /// pattern is detected.
+    ///
+    /// The closure must return a fresh request each call. The helper reads the
+    /// status and body eagerly so it can reclassify transient 400s before the
+    /// retry loop commits them as permanent.
+    async fn send_batchexecute_with_retry<F, Fut>(&self, operation: F) -> Result<ResponseWithBody>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<reqwest::Response, reqwest::Error>>,
+    {
+        let transient_body = std::sync::atomic::AtomicBool::new(false);
+
+        let result = crate::retry::with_backoff_generic(|| {
+            let operation = &operation;
+            let transient_body = &transient_body;
+            async move {
+                match operation().await {
+                    Ok(response) => {
+                        let status = response.status();
+                        let headers = response.headers().clone();
+                        let body = response.text().await.unwrap_or_default();
+                        if status == StatusCode::BAD_REQUEST
+                            && is_wiz_transient_400(status, &body)
+                        {
+                            transient_body.store(true, std::sync::atomic::Ordering::SeqCst);
+                            Err(crate::Error::transient(
+                                "Google rejected batchexecute with WIZ error frames",
+                            ))
+                        } else {
+                            Ok(ResponseWithBody {
+                                status,
+                                headers,
+                                body,
+                            })
+                        }
+                    }
+                    Err(err) => Err(crate::Error::Request(err)),
+                }
+            }
+        })
+        .await;
+
+        if transient_body.load(std::sync::atomic::Ordering::SeqCst) {
+            if let Some(recorder) = self.inner.config.read().await.metrics_recorder.clone() {
+                recorder.increment_counter("gemini_sdk.retries", &[("operation", "batchexecute")]);
+            }
+        }
+
+        result
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn maybe_record_har(
+        &self,
+        method: &str,
+        url: &str,
+        request_headers: &HeaderMap,
+        request_body: &[u8],
+        status: u16,
+        response_headers: &HeaderMap,
+        response_body: &[u8],
+        duration: Duration,
+    ) -> Result<()> {
+        let mut guard = self.inner.har_writer.lock().await;
+        if let Some(writer) = guard.as_mut() {
+            writer
+                .record(
+                    method,
+                    url,
+                    request_headers,
+                    request_body,
+                    status,
+                    response_headers,
+                    response_body,
+                    duration,
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
     async fn clear_conversation_state(&self) {
         let mut session = self.inner.session.lock().await;
         session.conversation_state = None;
     }
+}
+
+/// A response whose body has already been read.
+///
+/// Used by the batchexecute retry helper so transient 400 classification can
+/// inspect the body before deciding whether to retry.
+struct ResponseWithBody {
+    status: reqwest::StatusCode,
+    headers: reqwest::header::HeaderMap,
+    body: String,
 }
 
 fn build_default_waa_context() -> String {
