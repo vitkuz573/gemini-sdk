@@ -36,7 +36,11 @@ Google Gemini / Bard web frontend (`gemini.google.com`).
 
 - Rust 1.80 or newer.
 - `tokio` runtime.
-- Valid signed-in Google cookies (`__Secure-1PSID` and `__Secure-1PSIDCC`).
+- Valid signed-in Google cookies. The SDK requires `__Secure-1PSID` and
+  `__Secure-1PSIDCC` to build a client, but live calls to `/app` and the
+  backend RPCs need the full browser cookie set:
+  `SID`, `HSID`, `SSID`, `APISID`, `SAPISID`, `SIDCC`, `__Secure-ENID`, `NID`,
+  `__Secure-1PSIDTS`, `__Secure-1PAPISID` (or `__Secure-3PAPISID`), and `SOCS`.
 
 ## Installation
 
@@ -81,7 +85,8 @@ async fn main() -> gemini_sdk::Result<()> {
 Run examples with live cookies:
 
 ```bash
-export GEMINI_COOKIES="__Secure-1PSID=...; __Secure-1PSIDCC=..."
+# Copy the full Cookie header from a signed-in browser request to gemini.google.com.
+export GEMINI_COOKIES="__Secure-1PSID=...; __Secure-1PSIDCC=...; SID=...; HSID=...; SSID=...; APISID=...; SAPISID=...; SIDCC=...; __Secure-ENID=...; NID=...; __Secure-1PSIDTS=...; __Secure-1PAPISID=...; SOCS=..."
 
 cargo run --example text_chat -- "What is Rust?"
 cargo run --example image_chat -- /path/to/image.png "Describe this image."

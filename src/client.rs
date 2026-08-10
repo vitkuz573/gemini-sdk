@@ -20,29 +20,18 @@ use crate::chat::{
 };
 use crate::conversation_actions::{
     build_delete_payload, build_rate_payload, build_regenerate_payload,
-    parse_conversation_action_response, ConversationAction, ConversationActionResult,
-    TurnRating, PCCK7E_RPC_ID,
-};
-use crate::locale_model_config::{
-    build_get_locale_config_payload, build_get_locale_tools_payload,
-    build_get_model_config_payload, build_get_tools_config_payload,
-    parse_locale_config_response, parse_locale_tools_response,
-    parse_model_config_response, parse_tools_config_response,
-    LocaleConfig, LocaleTools, ModelConfig, ToolsConfig,
-    CYRIKD_RPC_ID, KU4JYF_RPC_ID, TE6DCF_RPC_ID, WHPPME_RPC_ID,
-};
-use crate::settings::{
-    build_get_scheduled_prompts_payload, build_get_usage_stats_payload,
-    parse_scheduled_prompts_response, parse_usage_stats_response,
-    ScheduledPrompts, UsageStats, JSF9QC_RPC_ID, XPSWPD_RPC_ID,
-};
-use crate::user_profile::{
-    build_get_last_selected_mode_payload, build_get_user_info_payload,
-    build_set_last_selected_mode_payload, parse_last_selected_mode_response,
-    parse_user_info_response, LastSelectedMode, UserInfo, L5ADHE_RPC_ID, O30O0E_RPC_ID,
+    parse_conversation_action_response, ConversationAction, ConversationActionResult, TurnRating,
+    PCCK7E_RPC_ID,
 };
 use crate::errors::{Error, Result};
-use crate::tool::{Tool, ToolError, ToolResult};
+use crate::har::HarWriter;
+use crate::locale_model_config::{
+    build_get_locale_config_payload, build_get_locale_tools_payload,
+    build_get_model_config_payload, build_get_tools_config_payload, parse_locale_config_response,
+    parse_locale_tools_response, parse_model_config_response, parse_tools_config_response,
+    LocaleConfig, LocaleTools, ModelConfig, ToolsConfig, CYRIKD_RPC_ID, KU4JYF_RPC_ID,
+    TE6DCF_RPC_ID, WHPPME_RPC_ID,
+};
 use crate::models::{ModelCategory, ModelInfo};
 use crate::proto::parser::{
     extract_conversation_state, parse_chat_response, parse_model_list, parse_response_parts,
@@ -52,12 +41,20 @@ use crate::proto::{
     build_batchexecute_body, build_esy5d_body, build_ogads_body, build_sjbwce_body,
     build_stream_generate_body, build_waa_create_body, fresh_request_uuid,
 };
-use crate::session::{
-    extract_consent_save_url, extract_from_app_html, extract_quoted_value, SessionState,
+use crate::session::{extract_consent_save_url, extract_from_app_html, SessionState};
+use crate::settings::{
+    build_get_scheduled_prompts_payload, build_get_usage_stats_payload,
+    parse_scheduled_prompts_response, parse_usage_stats_response, ScheduledPrompts, UsageStats,
+    JSF9QC_RPC_ID, XPSWPD_RPC_ID,
 };
-use crate::upload::{self, UploadEvent};
-use crate::har::HarWriter;
+use crate::tool::{Tool, ToolError, ToolResult};
 use crate::transient_400::is_wiz_transient_400;
+use crate::upload::{self, UploadEvent};
+use crate::user_profile::{
+    build_get_last_selected_mode_payload, build_get_user_info_payload,
+    build_set_last_selected_mode_payload, parse_last_selected_mode_response,
+    parse_user_info_response, LastSelectedMode, UserInfo, L5ADHE_RPC_ID, O30O0E_RPC_ID,
+};
 
 /// Async hook that observes prepared requests and parsed responses.
 ///
@@ -83,6 +80,21 @@ pub trait HttpHook: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
 }
 
+/// Diagnostic result returned by [`GeminiClient::diagnose_signed_in`].
+#[derive(Debug, Clone)]
+pub struct AppDiagnostics {
+    /// Whether `/app` contained the signed-in markers.
+    pub signed_in: bool,
+    /// The `S06Grb` Gaia id, if the page was signed in.
+    pub gaia_id: Option<String>,
+    /// The `oPEP7c` email address, if the page was signed in.
+    pub email: Option<String>,
+    /// Why the `/app` HTML was rejected as unsigned, if it was rejected.
+    pub failure_reason: Option<String>,
+    /// Legacy/account cookies that were missing from the supplied header.
+    pub missing_legacy_cookies: Vec<&'static str>,
+}
+
 impl HttpHook for Arc<dyn HttpHook> {
     fn on_request<'a>(
         &'a self,
@@ -98,8 +110,6 @@ impl HttpHook for Arc<dyn HttpHook> {
         (**self).on_response(response)
     }
 }
-
-
 
 const WEB_BASE_URL: &str = "https://gemini.google.com";
 const WAA_BASE_URL: &str = "https://waa-pa.clients6.google.com";
@@ -227,7 +237,10 @@ impl GeminiClient {
     /// # Errors
     ///
     /// Returns an error if the credentials are missing required cookies.
-    pub fn from_http_client(client: reqwest::Client, credentials: impl Into<Cookies>) -> Result<Self> {
+    pub fn from_http_client(
+        client: reqwest::Client,
+        credentials: impl Into<Cookies>,
+    ) -> Result<Self> {
         Self::from_http_client_with_config(client, credentials, ClientConfig::default())
     }
 
@@ -248,9 +261,7 @@ impl GeminiClient {
         config: ClientConfig,
     ) -> Result<Self> {
         let cookies: Cookies = credentials.into();
-        cookies
-            .to_credentials()
-            .map_err(|e| Error::Config(e.to_string()))?;
+        cookies.to_credentials().map_err(|e| Error::Config(e.to_string()))?;
         Self::with_http_client(cookies, config, client)
     }
 
@@ -361,7 +372,10 @@ impl GeminiClient {
 
     /// Sets a metrics recorder for observing request, retry, parse, and
     /// attestation boundaries.
-    pub async fn with_metrics(self, recorder: impl crate::metrics::MetricsRecorder + 'static) -> Self {
+    pub async fn with_metrics(
+        self,
+        recorder: impl crate::metrics::MetricsRecorder + 'static,
+    ) -> Self {
         let mut config = self.inner.config.write().await;
         config.metrics_recorder = Some(Arc::new(recorder));
         drop(config);
@@ -553,7 +567,10 @@ impl GeminiClient {
     /// # Errors
     ///
     /// Returns an error if the snapshot cannot be serialised to JSON.
-    pub async fn save_session_with_conversation(&self, conversation: &Conversation) -> Result<String> {
+    pub async fn save_session_with_conversation(
+        &self,
+        conversation: &Conversation,
+    ) -> Result<String> {
         self.save_session_with_conversation_inner(Some(conversation.clone())).await
     }
 
@@ -771,7 +788,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_user_info", level = "info", skip_all, fields(operation = "gemini.get_user_info"))]
+    #[tracing::instrument(
+        name = "gemini.get_user_info",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_user_info")
+    )]
     pub async fn get_user_info(&self) -> Result<UserInfo> {
         self.ensure_session().await?;
 
@@ -841,7 +863,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_last_selected_mode", level = "info", skip_all, fields(operation = "gemini.get_last_selected_mode"))]
+    #[tracing::instrument(
+        name = "gemini.get_last_selected_mode",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_last_selected_mode")
+    )]
     pub async fn get_last_selected_mode(&self) -> Result<LastSelectedMode> {
         self.ensure_session().await?;
 
@@ -914,7 +941,12 @@ impl GeminiClient {
     /// # Errors
     ///
     /// Returns an error if the session is not initialized or the request fails.
-    #[tracing::instrument(name = "gemini.set_last_selected_mode", level = "info", skip_all, fields(operation = "gemini.set_last_selected_mode"))]
+    #[tracing::instrument(
+        name = "gemini.set_last_selected_mode",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.set_last_selected_mode")
+    )]
     pub async fn set_last_selected_mode(&self, mode_id: impl AsRef<str>) -> Result<()> {
         self.ensure_session().await?;
 
@@ -985,7 +1017,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_locale_tools", level = "info", skip_all, fields(operation = "gemini.get_locale_tools"))]
+    #[tracing::instrument(
+        name = "gemini.get_locale_tools",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_locale_tools")
+    )]
     pub async fn get_locale_tools(&self) -> Result<LocaleTools> {
         self.ensure_session().await?;
 
@@ -1055,7 +1092,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_model_config", level = "info", skip_all, fields(operation = "gemini.get_model_config"))]
+    #[tracing::instrument(
+        name = "gemini.get_model_config",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_model_config")
+    )]
     pub async fn get_model_config(&self) -> Result<ModelConfig> {
         self.ensure_session().await?;
 
@@ -1125,7 +1167,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_locale_config", level = "info", skip_all, fields(operation = "gemini.get_locale_config"))]
+    #[tracing::instrument(
+        name = "gemini.get_locale_config",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_locale_config")
+    )]
     pub async fn get_locale_config(&self) -> Result<LocaleConfig> {
         self.ensure_session().await?;
 
@@ -1195,7 +1242,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_tools_config", level = "info", skip_all, fields(operation = "gemini.get_tools_config"))]
+    #[tracing::instrument(
+        name = "gemini.get_tools_config",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_tools_config")
+    )]
     pub async fn get_tools_config(&self) -> Result<ToolsConfig> {
         self.ensure_session().await?;
 
@@ -1265,7 +1317,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_usage_stats", level = "info", skip_all, fields(operation = "gemini.get_usage_stats"))]
+    #[tracing::instrument(
+        name = "gemini.get_usage_stats",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_usage_stats")
+    )]
     pub async fn get_usage_stats(&self) -> Result<UsageStats> {
         self.ensure_session().await?;
 
@@ -1335,7 +1392,12 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.get_scheduled_prompts", level = "info", skip_all, fields(operation = "gemini.get_scheduled_prompts"))]
+    #[tracing::instrument(
+        name = "gemini.get_scheduled_prompts",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.get_scheduled_prompts")
+    )]
     pub async fn get_scheduled_prompts(&self) -> Result<ScheduledPrompts> {
         self.ensure_session().await?;
 
@@ -1419,7 +1481,12 @@ impl GeminiClient {
     ///
     /// Internally calls `BardFrontendService.GetUserStatus` through the
     /// batchexecute transport using the `otAQ7b` RPC id.
-    #[tracing::instrument(name = "gemini.list_models", level = "info", skip_all, fields(operation = "gemini.list_models"))]
+    #[tracing::instrument(
+        name = "gemini.list_models",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.list_models")
+    )]
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>> {
         self.ensure_session().await?;
 
@@ -1531,7 +1598,8 @@ impl GeminiClient {
             let response = self.parse_response(&body)?;
             self.run_response_hook(&response).await?;
 
-            let parsed_parts = crate::proto::parser::parse_response_parts(&body).unwrap_or_default();
+            let parsed_parts =
+                crate::proto::parser::parse_response_parts(&body).unwrap_or_default();
             let mut tool_calls = Vec::new();
             for part in &parsed_parts {
                 if let ContentPart::ToolCall(call) = part {
@@ -1601,7 +1669,10 @@ impl GeminiClient {
         client: GeminiClient,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatResponse>> + Send>>
     where
-        S: Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>> + Send + Unpin + 'static,
+        S: Stream<Item = std::result::Result<bytes::Bytes, reqwest::Error>>
+            + Send
+            + Unpin
+            + 'static,
     {
         use async_stream::try_stream;
         use futures::StreamExt;
@@ -1677,17 +1748,14 @@ impl GeminiClient {
         &self,
         config: Option<GenerationConfig>,
     ) -> Result<(Option<GenerationConfig>, bool)> {
-        let config = if config.is_some() {
-            config
-        } else {
-            self.inner
-                .config
-                .read()
-                .await
-                .system_instruction
-                .clone()
-                .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
-        };
+        let config =
+            if config.is_some() {
+                config
+            } else {
+                self.inner.config.read().await.system_instruction.clone().map(|instruction| {
+                    GenerationConfig::default().with_system_instruction(instruction)
+                })
+            };
         Ok((config, false))
     }
 
@@ -1717,10 +1785,7 @@ impl GeminiClient {
     }
 
     /// Sends an already prepared request and returns the raw response body.
-    async fn generate_raw_with_prepared(
-        &self,
-        prepared: &PreparedRequest,
-    ) -> Result<String> {
+    async fn generate_raw_with_prepared(&self, prepared: &PreparedRequest) -> Result<String> {
         let mut response = self.stream_generate_raw_with_prepared(prepared).await?;
 
         let mut body_bytes = Vec::new();
@@ -1922,9 +1987,14 @@ impl GeminiClient {
         };
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let attachments =
-            upload::upload_attachments(&self.inner.http, &cookies, &session_for_upload, prepared, &base_url)
-                .await?;
+        let attachments = upload::upload_attachments(
+            &self.inner.http,
+            &cookies,
+            &session_for_upload,
+            prepared,
+            &base_url,
+        )
+        .await?;
 
         let proto_state = conversation_state.as_ref().map(map_proto_state);
         let inner_req_list = build_inner_req_list(
@@ -1965,19 +2035,83 @@ impl GeminiClient {
     /// inspects the returned HTML. Returns `true` only if the page is not a
     /// sign-in redirect and contains `window.WIZ_global_data` with a non-empty
     /// numeric `S06Grb` Gaia id and a present `oPEP7c` email address.
-    #[tracing::instrument(name = "gemini.verify_signed_in", level = "info", skip_all, fields(operation = "gemini.verify_signed_in"))]
+    #[tracing::instrument(
+        name = "gemini.verify_signed_in",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.verify_signed_in")
+    )]
     pub async fn verify_signed_in(&self) -> Result<bool> {
         let body = self.fetch_app_page().await?;
         Ok(extract_signed_in_state(&body).is_some())
+    }
+
+    /// Fetches `/app` and returns a diagnostic result describing whether the
+    /// cookies were accepted as a signed-in session.
+    ///
+    /// On success the returned [`AppDiagnostics`] includes the extracted
+    /// `S06Grb` Gaia id and `oPEP7c` email address. On failure it includes the
+    /// reason the HTML was rejected and the list of legacy cookies that were
+    /// absent from the supplied header. This is useful for the live probe and
+    /// integration tests when debugging cookie issues.
+    #[tracing::instrument(
+        name = "gemini.diagnose_signed_in",
+        level = "info",
+        skip_all,
+        fields(operation = "gemini.diagnose_signed_in")
+    )]
+    pub async fn diagnose_signed_in(&self) -> Result<AppDiagnostics> {
+        let body = self.fetch_app_page().await?;
+        let (gaia_id, email) = match extract_signed_in_state(&body) {
+            Some(state) => state,
+            None => {
+                let reason = diagnose_signed_in_state(&body)
+                    .err()
+                    .map(|f| f.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                let missing_legacy = {
+                    let cookies = self.cookies().await;
+                    cookies.to_credentials().map(|c| c.missing_legacy_cookies()).unwrap_or_default()
+                };
+                return Ok(AppDiagnostics {
+                    signed_in: false,
+                    gaia_id: None,
+                    email: None,
+                    failure_reason: Some(reason),
+                    missing_legacy_cookies: missing_legacy,
+                });
+            }
+        };
+        Ok(AppDiagnostics {
+            signed_in: true,
+            gaia_id: Some(gaia_id),
+            email: Some(email),
+            failure_reason: None,
+            missing_legacy_cookies: Vec::new(),
+        })
     }
 
     async fn init_session(&self) -> Result<()> {
         let body = self.fetch_app_page().await?;
 
         if extract_signed_in_state(&body).is_none() {
-            return Err(Error::not_signed_in(
-                "cookies rejected by Gemini /app; page did not contain signed-in markers",
-            ));
+            let reason = diagnose_signed_in_state(&body)
+                .err()
+                .map(|f| f.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let missing_legacy = {
+                let cookies = self.cookies().await;
+                cookies.to_credentials().map(|c| c.missing_legacy_cookies()).unwrap_or_default()
+            };
+            let mut message = format!(
+                "cookies rejected by Gemini /app ({reason}); page did not contain signed-in markers"
+            );
+            if !missing_legacy.is_empty() {
+                message.push_str(". Likely missing legacy cookies: ");
+                message.push_str(&missing_legacy.join(", "));
+                message.push_str(". Copy the full signed-in cookie header from the browser, including SID, HSID, SSID, APISID, SAPISID, SIDCC, __Secure-ENID, and NID.");
+            }
+            return Err(Error::not_signed_in(message));
         }
 
         let final_body = if let Some(save_url) = extract_consent_save_url(&body) {
@@ -2056,11 +2190,10 @@ impl GeminiClient {
             .await?;
 
         // 3. WAA Create.
-        let waa_token = self.waa_create(&cookie_header).await.map_err(|e| {
-            Error::AttestationFailed {
+        let waa_token =
+            self.waa_create(&cookie_header).await.map_err(|e| Error::AttestationFailed {
                 reason: format!("WAA Create failed: {e}"),
-            }
-        })?;
+            })?;
 
         // 4. ogads GetAsyncData.
         let waa_context = self
@@ -2295,22 +2428,39 @@ impl GeminiClient {
         .await?;
 
         if !status.is_success() {
-            if status == StatusCode::BAD_REQUEST && !crate::session::looks_like_signed_in_html(&text)
+            if status == StatusCode::BAD_REQUEST
+                && !crate::session::looks_like_signed_in_html(&text)
             {
-                return Err(Error::not_signed_in(
-                    "cookies rejected by Gemini /app; page did not contain signed-in markers",
-                ));
+                return Err(self.build_not_signed_in_error(&text).await);
             }
             return Err(Error::api(status, text));
         }
 
         if !crate::session::looks_like_signed_in_html(&text) {
-            return Err(Error::not_signed_in(
-                "cookies rejected by Gemini /app; page did not contain signed-in markers",
-            ));
+            return Err(self.build_not_signed_in_error(&text).await);
         }
 
         Ok(text)
+    }
+
+    async fn build_not_signed_in_error(&self, body: &str) -> Error {
+        let reason = diagnose_signed_in_state(body)
+            .err()
+            .map(|f| f.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        let missing_legacy = {
+            let cookies = self.cookies().await;
+            cookies.to_credentials().map(|c| c.missing_legacy_cookies()).unwrap_or_default()
+        };
+        let mut message = format!(
+            "cookies rejected by Gemini /app ({reason}); page did not contain signed-in markers"
+        );
+        if !missing_legacy.is_empty() {
+            message.push_str(". Likely missing legacy cookies: ");
+            message.push_str(&missing_legacy.join(", "));
+            message.push_str(". Copy the full signed-in cookie header from the browser, including SID, HSID, SSID, APISID, SAPISID, SIDCC, __Secure-ENID, and NID.");
+        }
+        Error::not_signed_in(message)
     }
 
     fn build_request_header_map(headers: &[(String, String)]) -> HeaderMap {
@@ -2435,19 +2585,14 @@ impl GeminiClient {
                         let status = response.status();
                         let headers = response.headers().clone();
                         let body = response.text().await.unwrap_or_default();
-                        if status == StatusCode::BAD_REQUEST
-                            && is_wiz_transient_400(status, &body)
+                        if status == StatusCode::BAD_REQUEST && is_wiz_transient_400(status, &body)
                         {
                             transient_body.store(true, std::sync::atomic::Ordering::SeqCst);
                             Err(crate::Error::transient(
                                 "Google rejected batchexecute with WIZ error frames",
                             ))
                         } else {
-                            Ok(ResponseWithBody {
-                                status,
-                                headers,
-                                body,
-                            })
+                            Ok(ResponseWithBody { status, headers, body })
                         }
                     }
                     Err(err) => Err(crate::Error::Request(err)),
@@ -2663,19 +2808,18 @@ fn map_state(state: ProtoConversationState) -> crate::session::ConversationState
 /// Specifically, `S06Grb` must be a non-empty numeric string and `oPEP7c` must
 /// be present and look like an email address.
 pub(crate) fn extract_signed_in_state(body: &str) -> Option<(String, String)> {
-    let block = crate::session::extract_wiz_global_data_block(body)?;
+    crate::session::diagnose_signed_in_html(body).ok()
+}
 
-    let s06grb = extract_quoted_value(block, "S06Grb").unwrap_or_default();
-    if s06grb.is_empty() || !s06grb.chars().all(|c| c.is_ascii_digit()) {
-        return None;
-    }
-
-    let opep7c = extract_quoted_value(block, "oPEP7c")?;
-    if !looks_like_email(&opep7c) {
-        return None;
-    }
-
-    Some((s06grb, opep7c))
+/// Diagnoses why the `/app` HTML does not look like a signed-in session.
+///
+/// This mirrors `extract_signed_in_state` but returns the reason instead of
+/// `None`. Used by the live probe and `fetch_app_page` for richer error
+/// messages.
+pub(crate) fn diagnose_signed_in_state(
+    body: &str,
+) -> std::result::Result<(String, String), crate::session::SignedInFailure> {
+    crate::session::diagnose_signed_in_html(body)
 }
 
 fn looks_like_email(value: &str) -> bool {
@@ -2759,9 +2903,9 @@ impl<'a> ChatBuilder<'a> {
         text: impl Into<String>,
         images: Vec<ImageSource>,
     ) -> Result<ChatResponse> {
-        let message = images.into_iter().fold(ChatMessage::user(text), |m, image| {
-            m.with_part(ContentPart::Image(image))
-        });
+        let message = images
+            .into_iter()
+            .fold(ChatMessage::user(text), |m, image| m.with_part(ContentPart::Image(image)));
         self.send_message_with_content(message).await
     }
 
@@ -2776,18 +2920,14 @@ impl<'a> ChatBuilder<'a> {
     /// This is useful for callers that need to control both text and image
     /// parts (or other future content types) directly.
     pub async fn send_message_with_content(self, message: ChatMessage) -> Result<ChatResponse> {
-        let mut config = if self.config.is_some() {
-            self.config
-        } else {
-            self.client
-                .inner
-                .config
-                .read()
-                .await
-                .system_instruction
-                .clone()
-                .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
-        };
+        let mut config =
+            if self.config.is_some() {
+                self.config
+            } else {
+                self.client.inner.config.read().await.system_instruction.clone().map(
+                    |instruction| GenerationConfig::default().with_system_instruction(instruction),
+                )
+            };
 
         let refresh_on_auth_error = self.refresh_on_auth_error;
         if refresh_on_auth_error {
@@ -2800,19 +2940,15 @@ impl<'a> ChatBuilder<'a> {
         }
 
         let response = if let Some(tools) = self.tools {
-            self.client
-                .generate_with_tools(&message, tools, self.category, config)
-                .await?
+            self.client.generate_with_tools(&message, tools, self.category, config).await?
         } else {
-            let prepared = prepare_request(self.conversation.as_ref(), &message, config, self.category)?;
+            let prepared =
+                prepare_request(self.conversation.as_ref(), &message, config, self.category)?;
             let prepared = PreparedRequest {
                 refresh_on_auth_error,
                 ..prepared
             };
-            let body = self
-                .client
-                .generate_raw_with_prepared(&prepared)
-                .await?;
+            let body = self.client.generate_raw_with_prepared(&prepared).await?;
             parse_chat_response(&body)?
         };
 
@@ -2956,15 +3092,13 @@ mod client_tests {
         client.run_request_hook(&prepared).await.unwrap();
 
         assert_eq!(concrete.requests.load(Ordering::SeqCst), 1);
-        assert_eq!(
-            concrete.request_prompt.lock().await.as_deref(),
-            Some("What is Rust?")
-        );
+        assert_eq!(concrete.request_prompt.lock().await.as_deref(), Some("What is Rust?"));
     }
 
     #[tokio::test]
     async fn response_hook_is_non_fatal() {
-        let hook: std::sync::Arc<dyn HttpHook> = std::sync::Arc::new(ErrorHook { on_request: false });
+        let hook: std::sync::Arc<dyn HttpHook> =
+            std::sync::Arc::new(ErrorHook { on_request: false });
         let client = GeminiClient::from_cookie_header(
             "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
         )
@@ -2981,7 +3115,8 @@ mod client_tests {
 
     #[tokio::test]
     async fn fatal_request_hook_errors_abort() {
-        let hook: std::sync::Arc<dyn HttpHook> = std::sync::Arc::new(ErrorHook { on_request: true });
+        let hook: std::sync::Arc<dyn HttpHook> =
+            std::sync::Arc::new(ErrorHook { on_request: true });
         let client = GeminiClient::from_cookie_header(
             "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
         )
@@ -3033,10 +3168,8 @@ mod client_tests {
     async fn stream_responses_yields_text_and_ingests_state() {
         let body = include_str!("../tests/fixtures/conversation_state.json");
         let bytes_stream = futures::stream::iter(vec![Ok(bytes::Bytes::from(body))]);
-        let client = GeminiClient::from_cookie_header(
-            "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
-        )
-        .unwrap();
+        let client =
+            GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def").unwrap();
 
         let mut stream = GeminiClient::stream_responses(bytes_stream, client.clone());
         let mut chunks = Vec::new();
@@ -3054,11 +3187,10 @@ mod client_tests {
 
     #[tokio::test]
     async fn stream_responses_handles_empty_body() {
-        let bytes_stream = futures::stream::iter(Vec::<std::result::Result<bytes::Bytes, reqwest::Error>>::new());
-        let client = GeminiClient::from_cookie_header(
-            "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
-        )
-        .unwrap();
+        let bytes_stream =
+            futures::stream::iter(Vec::<std::result::Result<bytes::Bytes, reqwest::Error>>::new());
+        let client =
+            GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def").unwrap();
 
         let mut stream = GeminiClient::stream_responses(bytes_stream, client);
         let first = stream.next().await;

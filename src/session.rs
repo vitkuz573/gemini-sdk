@@ -4,9 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::auth::Credentials;
 use crate::chat::Conversation;
 use crate::proto::slots::ConversationState as ProtoConversationState;
-use crate::auth::Credentials;
 
 const DEFAULT_PUSH_ID: &str = "feeds/mcudyrk2a4khkz";
 const DEFAULT_LANGUAGE: &str = "en";
@@ -101,6 +101,30 @@ pub(crate) struct BardInitialData {
     pub(crate) accept_save_url: Option<String>,
 }
 
+/// Reasons why `/app` HTML does not look like a signed-in session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum SignedInFailure {
+    /// The `window.WIZ_global_data` block is missing or malformed.
+    MissingWizGlobalData,
+    /// `S06Grb` is empty or contains non-digit characters.
+    EmptyS06Grb,
+    /// `oPEP7c` is absent from the WIZ data block.
+    MissingOpep7c,
+    /// `oPEP7c` is present but does not look like an email address.
+    InvalidEmailShape,
+}
+
+impl std::fmt::Display for SignedInFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingWizGlobalData => write!(f, "WIZ_global_data block missing or malformed"),
+            Self::EmptyS06Grb => write!(f, "S06Grb empty or non-numeric"),
+            Self::MissingOpep7c => write!(f, "oPEP7c missing"),
+            Self::InvalidEmailShape => write!(f, "oPEP7c not email-shaped"),
+        }
+    }
+}
+
 /// Extract session parameters from the `/app` HTML body.
 /// Returns `true` when the `/app` HTML body contains the signed-in markers.
 ///
@@ -108,19 +132,30 @@ pub(crate) struct BardInitialData {
 /// the supplied cookies have been accepted by Gemini as an authenticated
 /// session.
 pub(crate) fn looks_like_signed_in_html(body: &str) -> bool {
-    // Use the same extraction logic the client uses, but defined locally so
-    // this module does not depend on the client module.
-    let block = extract_wiz_global_data_block_safe(body);
-    let s06grb = block
-        .and_then(|b| extract_quoted_value(b, "S06Grb"))
-        .unwrap_or_default();
+    diagnose_signed_in_html(body).is_ok()
+}
+
+/// Diagnoses why the `/app` HTML body does not contain signed-in markers.
+///
+/// Returns `Ok((S06Grb, oPEP7c))` when the markers are present and valid, or
+/// `Err(SignedInFailure)` with the first failing condition. This is used for
+/// logging and telemetry so callers can distinguish "cookies rejected" from
+/// "HTML shape changed".
+pub(crate) fn diagnose_signed_in_html(body: &str) -> Result<(String, String), SignedInFailure> {
+    let block =
+        extract_wiz_global_data_block_safe(body).ok_or(SignedInFailure::MissingWizGlobalData)?;
+
+    let s06grb = extract_quoted_value(block, "S06Grb").unwrap_or_default();
     if s06grb.is_empty() || !s06grb.chars().all(|c| c.is_ascii_digit()) {
-        return false;
+        return Err(SignedInFailure::EmptyS06Grb);
     }
-    let Some(opep7c) = block.and_then(|b| extract_quoted_value(b, "oPEP7c")) else {
-        return false;
-    };
-    looks_like_email(&opep7c)
+
+    let opep7c = extract_quoted_value(block, "oPEP7c").ok_or(SignedInFailure::MissingOpep7c)?;
+    if !looks_like_email(&opep7c) {
+        return Err(SignedInFailure::InvalidEmailShape);
+    }
+
+    Ok((s06grb, opep7c))
 }
 
 fn looks_like_email(value: &str) -> bool {
@@ -134,31 +169,31 @@ fn looks_like_email(value: &str) -> bool {
         && !domain.starts_with('\'')
 }
 
-    pub(crate) fn extract_from_app_html(body: &str) -> SessionState {
-        let mut state = SessionState::new();
+pub(crate) fn extract_from_app_html(body: &str) -> SessionState {
+    let mut state = SessionState::new();
 
-        // If the WIZ_global_data block is missing or malformed, still try the
-        // fallback extractions rather than bailing out entirely.
-        let _block = extract_wiz_global_data_block_safe(body);
+    // If the WIZ_global_data block is missing or malformed, still try the
+    // fallback extractions rather than bailing out entirely.
+    let _block = extract_wiz_global_data_block_safe(body);
 
-        if let Some(token) = extract_snlim0e(body) {
-            state.access_token = Some(token);
-        }
-        if let Some(label) = extract_build_label(body) {
-            state.build_label = Some(label);
-        }
-        if let Some(sid) = extract_session_id(body) {
-            state.session_id = Some(sid);
-        }
-        if let Some(push_id) = extract_push_id(body) {
-            state.push_id = Some(push_id);
-        }
-        if let Some(fp) = extract_waa_fingerprint(body) {
-            state.waa_fingerprint = Some(fp);
-        }
-
-        state
+    if let Some(token) = extract_snlim0e(body) {
+        state.access_token = Some(token);
     }
+    if let Some(label) = extract_build_label(body) {
+        state.build_label = Some(label);
+    }
+    if let Some(sid) = extract_session_id(body) {
+        state.session_id = Some(sid);
+    }
+    if let Some(push_id) = extract_push_id(body) {
+        state.push_id = Some(push_id);
+    }
+    if let Some(fp) = extract_waa_fingerprint(body) {
+        state.waa_fingerprint = Some(fp);
+    }
+
+    state
+}
 
 fn extract_waa_fingerprint(body: &str) -> Option<String> {
     // The WAA context header contains a stable model/mode fingerprint. In the
@@ -367,7 +402,8 @@ pub(crate) fn extract_quoted_value(block: &str, key: &str) -> Option<String> {
 
 /// True if the consent save URL belongs to a trusted Google origin.
 pub(crate) fn is_trusted_consent_origin(url: &str) -> bool {
-    url.starts_with("https://consent.google.com/") || url.starts_with("https://accounts.google.com/")
+    url.starts_with("https://consent.google.com/")
+        || url.starts_with("https://accounts.google.com/")
 }
 
 /// Extracts the consent save URL from `/app` HTML when a consent banner is required.
@@ -389,11 +425,7 @@ pub(crate) fn extract_consent_save_url(body: &str) -> Option<String> {
     value
         .reject_save_url
         .filter(|s| !s.is_empty() && is_trusted_consent_origin(s))
-        .or_else(|| {
-            value
-                .accept_save_url
-                .filter(|s| !s.is_empty() && is_trusted_consent_origin(s))
-        })
+        .or_else(|| value.accept_save_url.filter(|s| !s.is_empty() && is_trusted_consent_origin(s)))
 }
 
 impl From<ConversationState> for ProtoConversationState {
@@ -447,10 +479,7 @@ mod tests {
     #[test]
     fn extract_session_id_falls_back_to_session_id_key() {
         let body = r#"window.WIZ_global_data = {"session_id":"1234567890123456789"};"#;
-        assert_eq!(
-            extract_session_id(body),
-            Some("1234567890123456789".to_string())
-        );
+        assert_eq!(extract_session_id(body), Some("1234567890123456789".to_string()));
     }
 
     #[test]
@@ -482,13 +511,15 @@ mod tests {
 
     #[test]
     fn extract_snlim0e_falls_back_to_case_variants() {
-        let body = r#"window.WIZ_global_data = {"SnlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132"};"#;
+        let body =
+            r#"window.WIZ_global_data = {"SnlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132"};"#;
         assert_eq!(
             extract_snlim0e(body),
             Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
         );
 
-        let body2 = r#"window.WIZ_global_data = {"snlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132"};"#;
+        let body2 =
+            r#"window.WIZ_global_data = {"snlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132"};"#;
         assert_eq!(
             extract_snlim0e(body2),
             Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
@@ -575,5 +606,33 @@ mod tests {
     fn extract_signed_in_state_rejects_empty_gaia() {
         let body = include_str!("../tests/fixtures/app_not_signed_in.txt");
         assert!(crate::client::extract_signed_in_state(body).is_none());
+    }
+
+    #[test]
+    fn diagnose_signed_in_html_reports_empty_s06grb() {
+        let body = r#"window.WIZ_global_data = {"S06Grb":"","oPEP7c":"user@example.com"};"#;
+        let result = diagnose_signed_in_html(body);
+        assert_eq!(result.unwrap_err(), SignedInFailure::EmptyS06Grb);
+    }
+
+    #[test]
+    fn diagnose_signed_in_html_reports_missing_opep7c() {
+        let body = r#"window.WIZ_global_data = {"S06Grb":"123456"};"#;
+        let result = diagnose_signed_in_html(body);
+        assert_eq!(result.unwrap_err(), SignedInFailure::MissingOpep7c);
+    }
+
+    #[test]
+    fn diagnose_signed_in_html_reports_invalid_email() {
+        let body = r#"window.WIZ_global_data = {"S06Grb":"123456","oPEP7c":"not-an-email"};"#;
+        let result = diagnose_signed_in_html(body);
+        assert_eq!(result.unwrap_err(), SignedInFailure::InvalidEmailShape);
+    }
+
+    #[test]
+    fn diagnose_signed_in_html_reports_missing_wiz_block() {
+        let body = r#"<html></html>"#;
+        let result = diagnose_signed_in_html(body);
+        assert_eq!(result.unwrap_err(), SignedInFailure::MissingWizGlobalData);
     }
 }

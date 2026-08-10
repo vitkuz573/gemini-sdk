@@ -46,6 +46,17 @@ struct ProbeCall {
     retry_count: usize,
     http_status: Option<u16>,
     transient_400_detected: bool,
+    /// `/app` diagnostics populated when sign-in verification fails.
+    app_diagnostics: Option<AppDiagnosticsReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppDiagnosticsReport {
+    signed_in: bool,
+    gaia_id: Option<String>,
+    email: Option<String>,
+    failure_reason: Option<String>,
+    missing_legacy_cookies: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -81,6 +92,7 @@ struct ProbeResult {
     error: String,
     http_status: Option<u16>,
     transient_400_detected: bool,
+    app_diagnostics: Option<AppDiagnosticsReport>,
 }
 
 impl ProbeResult {
@@ -90,10 +102,18 @@ impl ProbeResult {
             error: String::new(),
             http_status: Some(200),
             transient_400_detected: false,
+            app_diagnostics: None,
         }
     }
 
     fn err<E: std::fmt::Display>(err: E) -> Self {
+        Self::err_with_diagnostics(err, None)
+    }
+
+    fn err_with_diagnostics<E: std::fmt::Display>(
+        err: E,
+        diagnostics: Option<AppDiagnosticsReport>,
+    ) -> Self {
         let message = err.to_string();
         let transient_400_detected = message.contains("WIZ error frames");
         let http_status = if message.contains("(HTTP 400)") {
@@ -106,6 +126,7 @@ impl ProbeResult {
             error: message,
             http_status,
             transient_400_detected,
+            app_diagnostics: diagnostics,
         }
     }
 }
@@ -149,30 +170,42 @@ async fn main() {
 
     // Independent calls.
     run_named_call(&client, &state, "verify_signed_in", || async {
-        match client.verify_signed_in().await {
-            Ok(true) => ProbeResult::ok(),
-            Ok(false) => ProbeResult::err("not signed in"),
+        match client.diagnose_signed_in().await {
+            Ok(diag) if diag.signed_in => ProbeResult::ok(),
+            Ok(diag) => {
+                let report = AppDiagnosticsReport {
+                    signed_in: diag.signed_in,
+                    gaia_id: diag.gaia_id,
+                    email: diag.email,
+                    failure_reason: diag.failure_reason,
+                    missing_legacy_cookies: diag
+                        .missing_legacy_cookies
+                        .into_iter()
+                        .map(std::string::ToString::to_string)
+                        .collect(),
+                };
+                ProbeResult::err_with_diagnostics("not signed in", Some(report))
+            }
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "list_models", || async {
         match client.list_models().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "chat_send_message", || async {
-        match client
-            .chat()
-            .send_message("Say a one-sentence hello in English.")
-            .await
-        {
+        match client.chat().send_message("Say a one-sentence hello in English.").await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "generate_stream_first_chunk", || async {
         let message = ChatMessage::user("Say a one-sentence hello in English.");
@@ -193,21 +226,24 @@ async fn main() {
             }
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_user_info", || async {
         match client.get_user_info().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_last_selected_mode", || async {
         match client.get_last_selected_mode().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     // set_last_selected_mode round-trip
     run_named_call(&client, &state, "set_last_selected_mode_round_trip", || async {
@@ -221,60 +257,64 @@ async fn main() {
             }
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_locale_tools", || async {
         match client.get_locale_tools().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_model_config", || async {
         match client.get_model_config().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_locale_config", || async {
         match client.get_locale_config().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_tools_config", || async {
         match client.get_tools_config().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_usage_stats", || async {
         match client.get_usage_stats().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     run_named_call(&client, &state, "get_scheduled_prompts", || async {
         match client.get_scheduled_prompts().await {
             Ok(_) => ProbeResult::ok(),
             Err(e) => ProbeResult::err(e),
         }
-    }).await;
+    })
+    .await;
 
     // Conversation actions: create a turn, then regenerate, rate, delete.
     run_named_call(&client, &state, "conversation_actions", || async {
-        let response = match client
-            .chat()
-            .send_message("Say a one-sentence hello in English.")
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => return ProbeResult::err(e),
-        };
+        let response =
+            match client.chat().send_message("Say a one-sentence hello in English.").await {
+                Ok(r) => r,
+                Err(e) => return ProbeResult::err(e),
+            };
         let conversation_id = match response.conversation_id() {
             Some(id) => id.to_string(),
             None => return ProbeResult::err("missing conversation_id in chat response"),
@@ -287,17 +327,15 @@ async fn main() {
         if let Err(e) = client.regenerate_turn(&conversation_id, &response_id).await {
             return ProbeResult::err(e);
         }
-        if let Err(e) = client
-            .rate_turn(&conversation_id, &response_id, TurnRating::Good)
-            .await
-        {
+        if let Err(e) = client.rate_turn(&conversation_id, &response_id, TurnRating::Good).await {
             return ProbeResult::err(e);
         }
         if let Err(e) = client.delete_turn(&conversation_id, &response_id).await {
             return ProbeResult::err(e);
         }
         ProbeResult::ok()
-    }).await;
+    })
+    .await;
 
     let finished_at = humantime::format_rfc3339(std::time::SystemTime::now()).to_string();
     let calls = Arc::try_unwrap(state)
@@ -342,13 +380,16 @@ async fn main() {
 
     println!(
         "live_probe complete: {}/{} calls passed; report written to {report_path}",
-        report.summary.passed,
-        report.summary.total
+        report.summary.passed, report.summary.total
     );
 }
 
-async fn run_named_call<F, Fut>(_client: &GeminiClient, state: &Arc<ProbeState>, name: &str, operation: F)
-where
+async fn run_named_call<F, Fut>(
+    _client: &GeminiClient,
+    state: &Arc<ProbeState>,
+    name: &str,
+    operation: F,
+) where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = ProbeResult> + Send,
 {
@@ -372,6 +413,7 @@ where
         retry_count: state.take_retry_count(),
         http_status: result.http_status,
         transient_400_detected: result.transient_400_detected,
+        app_diagnostics: result.app_diagnostics,
     }
 }
 

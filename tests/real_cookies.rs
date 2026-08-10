@@ -2,6 +2,26 @@
 //!
 //! These tests require real cookies in `/tmp/opencode/gemini_cookies.env`.
 //! They skip gracefully when credentials are missing.
+//!
+//! # Required cookies
+//!
+//! The live Gemini frontend requires the full signed-in cookie set, not just
+//! the minimal `__Secure-1PSID`/`__Secure-1PSIDCC` pair. Copy the entire
+//! `Cookie` header from a signed-in browser request to `gemini.google.com`:
+//!
+//! - `__Secure-1PSID` (required)
+//! - `__Secure-1PSIDCC` (required)
+//! - `__Secure-1PSIDTS`
+//! - `__Secure-1PAPISID` or `__Secure-3PAPISID`
+//! - `SID`
+//! - `HSID`
+//! - `SSID`
+//! - `APISID`
+//! - `SAPISID`
+//! - `SIDCC`
+//! - `__Secure-ENID`
+//! - `NID`
+//! - `SOCS`
 
 use std::path::PathBuf;
 
@@ -33,6 +53,12 @@ async fn list_models_works() {
     };
 
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let diag = client.diagnose_signed_in().await.expect("diagnose_signed_in should succeed");
+    assert!(
+        diag.signed_in,
+        "not signed in: {diag:?}; missing legacy cookies may include {:?}",
+        diag.missing_legacy_cookies
+    );
     let models = client.list_models().await.expect("list_models should succeed");
     assert!(!models.is_empty(), "expected at least one model");
     for model in &models {
@@ -115,10 +141,7 @@ async fn get_user_info_works() {
     };
 
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
-    let info = client
-        .get_user_info()
-        .await
-        .expect("get_user_info should succeed");
+    let info = client.get_user_info().await.expect("get_user_info should succeed");
     // At least one profile field should be present in a signed-in session.
     assert!(
         info.name().is_some() || info.email().is_some() || info.photo_url().is_some(),
@@ -167,10 +190,7 @@ async fn get_locale_tools_works() {
     };
 
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
-    let result = client
-        .get_locale_tools()
-        .await
-        .expect("get_locale_tools should succeed");
+    let result = client.get_locale_tools().await.expect("get_locale_tools should succeed");
     assert!(!result.value().is_null());
 }
 
@@ -182,10 +202,7 @@ async fn get_model_config_works() {
     };
 
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
-    let result = client
-        .get_model_config()
-        .await
-        .expect("get_model_config should succeed");
+    let result = client.get_model_config().await.expect("get_model_config should succeed");
     assert!(!result.value().is_null());
 }
 
@@ -197,10 +214,7 @@ async fn get_locale_config_works() {
     };
 
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
-    let result = client
-        .get_locale_config()
-        .await
-        .expect("get_locale_config should succeed");
+    let result = client.get_locale_config().await.expect("get_locale_config should succeed");
     assert!(!result.value().is_null());
 }
 
@@ -212,10 +226,7 @@ async fn get_tools_config_works() {
     };
 
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
-    let result = client
-        .get_tools_config()
-        .await
-        .expect("get_tools_config should succeed");
+    let result = client.get_tools_config().await.expect("get_tools_config should succeed");
     assert!(!result.value().is_null());
 }
 
@@ -227,10 +238,7 @@ async fn get_usage_stats_works() {
     };
 
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
-    let result = client
-        .get_usage_stats()
-        .await
-        .expect("get_usage_stats should succeed");
+    let result = client.get_usage_stats().await.expect("get_usage_stats should succeed");
     assert!(!result.value().is_null());
 }
 
@@ -266,10 +274,7 @@ async fn conversation_actions_works() {
         .conversation_id()
         .expect("conversation_id should be present")
         .to_string();
-    let response_id = client
-        .last_response_id()
-        .await
-        .expect("response_id should be present");
+    let response_id = client.last_response_id().await.expect("response_id should be present");
 
     client
         .regenerate_turn(&conversation_id, &response_id)

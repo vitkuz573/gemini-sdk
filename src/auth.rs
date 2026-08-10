@@ -20,10 +20,24 @@ pub const PSIDCC: &str = "__Secure-1PSIDCC";
 pub const PSIDTS: &str = "__Secure-1PSIDTS";
 /// Name of the signed-in PAPISID cookie used for SAPISIDHASH.
 pub const PAPISID: &str = "__Secure-1PAPISID";
+/// Name of the 3P signed-in PAPISID cookie used for SAPISIDHASH on some RPCs.
+pub const P3PAPISID: &str = "__Secure-3PAPISID";
 /// Name of the legacy `APISID` cookie.
 pub const APISID: &str = "APISID";
 /// Name of the legacy `SAPISID` cookie.
 pub const SAPISID: &str = "SAPISID";
+/// Name of the legacy `SID` account cookie.
+pub const SID: &str = "SID";
+/// Name of the legacy `HSID` account cookie.
+pub const HSID: &str = "HSID";
+/// Name of the legacy `SSID` account cookie.
+pub const SSID: &str = "SSID";
+/// Name of the legacy `SIDCC` account cookie.
+pub const SIDCC: &str = "SIDCC";
+/// Name of the `__Secure-ENID` consent/identity cookie.
+pub const SECURE_ENID: &str = "__Secure-ENID";
+/// Name of the `NID` consent/identity cookie.
+pub const NID: &str = "NID";
 /// Consent-state cookie.
 pub const SOCS: &str = "SOCS";
 
@@ -68,13 +82,21 @@ pub struct Credentials {
     pub psidts: Option<String>,
     /// Optional signed-in PAPISID value.
     pub papisid: Option<String>,
+    /// Optional 3P signed-in PAPISID value.
+    pub p3papisid: Option<String>,
     /// Optional legacy SAPISID value.
     pub sapisid: Option<String>,
     /// Optional legacy APISID value.
     pub apisid: Option<String>,
     /// Optional consent-state cookie.
     pub socs: Option<String>,
-    /// Any additional cookies that were provided (e.g. `HSID`, `SSID`, `NID`).
+    /// Optional legacy `SIDCC` account cookie.
+    pub sidcc: Option<String>,
+    /// Optional `__Secure-ENID` consent/identity cookie.
+    pub secure_enid: Option<String>,
+    /// Optional `NID` consent/identity cookie.
+    pub nid: Option<String>,
+    /// Any additional cookies that were provided (e.g. `HSID`, `SSID`).
     pub extra: HashMap<String, String>,
 }
 
@@ -112,9 +134,13 @@ impl Credentials {
                 PSIDCC => creds.psidcc = value,
                 PSIDTS => creds.psidts = Some(value),
                 PAPISID => creds.papisid = Some(value),
+                P3PAPISID => creds.p3papisid = Some(value),
                 SAPISID => creds.sapisid = Some(value),
                 APISID => creds.apisid = Some(value),
                 SOCS => creds.socs = Some(value),
+                SIDCC => creds.sidcc = Some(value),
+                SECURE_ENID => creds.secure_enid = Some(value),
+                NID => creds.nid = Some(value),
                 _ => {
                     creds.extra.insert(name.to_string(), value);
                 }
@@ -150,7 +176,45 @@ impl Credentials {
     /// Returns true if the legacy `SID`, `HSID`, and `SSID` cookies are present.
     #[must_use]
     pub fn has_legacy_auth_cookies(&self) -> bool {
-        ["SID", "HSID", "SSID"].iter().all(|name| self.extra.contains_key(*name))
+        [SID, HSID, SSID].iter().all(|name| self.extra.contains_key(*name))
+    }
+
+    /// Returns a list of the named legacy/account cookies that are missing from
+    /// this credential set.
+    ///
+    /// These cookies are observed on live signed-in Gemini sessions in addition
+    /// to the required `__Secure-1PSID`/`__Secure-1PSIDCC` pair. Their absence
+    /// commonly causes Gemini to serve the unsigned landing page even when the
+    /// primary session cookies are present.
+    #[must_use]
+    pub fn missing_legacy_cookies(&self) -> Vec<&'static str> {
+        let mut missing = Vec::new();
+        for name in [SID, HSID, SSID, APISID, SAPISID, SIDCC, SECURE_ENID] {
+            if !self.has_cookie(name) {
+                missing.push(name);
+            }
+        }
+        missing
+    }
+
+    /// Returns true if the credential set contains a cookie with the given name
+    /// either as a typed field or in the `extra` map.
+    #[must_use]
+    pub fn has_cookie(&self, name: &str) -> bool {
+        match name {
+            PSID => !self.psid.is_empty(),
+            PSIDCC => !self.psidcc.is_empty(),
+            PSIDTS => self.psidts.as_ref().is_some_and(|v| !v.is_empty()),
+            PAPISID => self.papisid.as_ref().is_some_and(|v| !v.is_empty()),
+            P3PAPISID => self.p3papisid.as_ref().is_some_and(|v| !v.is_empty()),
+            SAPISID => self.sapisid.as_ref().is_some_and(|v| !v.is_empty()),
+            APISID => self.apisid.as_ref().is_some_and(|v| !v.is_empty()),
+            SOCS => self.socs.as_ref().is_some_and(|v| !v.is_empty()),
+            SIDCC => self.sidcc.as_ref().is_some_and(|v| !v.is_empty()),
+            SECURE_ENID => self.secure_enid.as_ref().is_some_and(|v| !v.is_empty()),
+            NID => self.nid.as_ref().is_some_and(|v| !v.is_empty()),
+            _ => self.extra.get(name).is_some_and(|v| !v.is_empty()),
+        }
     }
 
     /// Returns true if the credentials include the timestamp cookie that some
@@ -174,12 +238,13 @@ impl Credentials {
     /// Returns the SAPISID value used for `Authorization: SAPISIDHASH`.
     ///
     /// Prefers the signed-in `__Secure-1PAPISID` cookie, then falls back to
-    /// `SAPISID` / `APISID`.
+    /// `__Secure-3PAPISID`, `SAPISID`, or `APISID`.
     #[must_use]
     pub fn sapisid_value(&self) -> Option<&str> {
         self.papisid
             .as_deref()
             .filter(|s| !s.is_empty())
+            .or_else(|| self.p3papisid.as_deref().filter(|s| !s.is_empty()))
             .or_else(|| self.sapisid.as_deref().filter(|s| !s.is_empty()))
             .or_else(|| self.apisid.as_deref().filter(|s| !s.is_empty()))
     }
@@ -218,6 +283,9 @@ impl Credentials {
         if let Some(v) = self.papisid.as_deref() {
             pairs.push((PAPISID, v));
         }
+        if let Some(v) = self.p3papisid.as_deref() {
+            pairs.push((P3PAPISID, v));
+        }
         if let Some(v) = self.sapisid.as_deref() {
             pairs.push((SAPISID, v));
         }
@@ -226,6 +294,15 @@ impl Credentials {
         }
         if let Some(v) = self.socs.as_deref() {
             pairs.push((SOCS, v));
+        }
+        if let Some(v) = self.sidcc.as_deref() {
+            pairs.push((SIDCC, v));
+        }
+        if let Some(v) = self.secure_enid.as_deref() {
+            pairs.push((SECURE_ENID, v));
+        }
+        if let Some(v) = self.nid.as_deref() {
+            pairs.push((NID, v));
         }
 
         let mut extra: Vec<(&String, &String)> = self.extra.iter().collect();
@@ -252,9 +329,13 @@ impl Credentials {
                 PSIDCC => self.psidcc = value,
                 PSIDTS => self.psidts = Some(value),
                 PAPISID => self.papisid = Some(value),
+                P3PAPISID => self.p3papisid = Some(value),
                 SAPISID => self.sapisid = Some(value),
                 APISID => self.apisid = Some(value),
                 SOCS => self.socs = Some(value),
+                SIDCC => self.sidcc = Some(value),
+                SECURE_ENID => self.secure_enid = Some(value),
+                NID => self.nid = Some(value),
                 _ => {
                     self.extra.insert(name, value);
                 }
@@ -277,9 +358,13 @@ impl fmt::Debug for Credentials {
             .field("psidcc", &redact(&self.psidcc))
             .field("psidts", &self.psidts.as_deref().map(redact))
             .field("papisid", &self.papisid.as_deref().map(redact))
+            .field("p3papisid", &self.p3papisid.as_deref().map(redact))
             .field("sapisid", &self.sapisid.as_deref().map(redact))
             .field("apisid", &self.apisid.as_deref().map(redact))
             .field("socs", &self.socs.as_deref().map(redact))
+            .field("sidcc", &self.sidcc.as_deref().map(redact))
+            .field("secure_enid", &self.secure_enid.as_deref().map(redact))
+            .field("nid", &self.nid.as_deref().map(redact))
             .field("extra", &self.extra.len())
             .finish()
     }
@@ -478,6 +563,9 @@ impl From<Credentials> for Cookies {
         if let Some(v) = value.papisid {
             cookies.insert(PAPISID, v);
         }
+        if let Some(v) = value.p3papisid {
+            cookies.insert(P3PAPISID, v);
+        }
         if let Some(v) = value.sapisid {
             cookies.insert(SAPISID, v);
         }
@@ -486,6 +574,15 @@ impl From<Credentials> for Cookies {
         }
         if let Some(v) = value.socs {
             cookies.insert(SOCS, v);
+        }
+        if let Some(v) = value.sidcc {
+            cookies.insert(SIDCC, v);
+        }
+        if let Some(v) = value.secure_enid {
+            cookies.insert(SECURE_ENID, v);
+        }
+        if let Some(v) = value.nid {
+            cookies.insert(NID, v);
         }
         cookies.extend(value.extra);
         cookies
@@ -583,6 +680,35 @@ mod tests {
         creds.sapisid = None;
         creds.apisid = Some("apisid".to_string());
         assert!(creds.is_signed_in());
+
+        // __Secure-3PAPISID also satisfies the SAPISID source requirement.
+        creds.apisid = None;
+        assert!(!creds.is_signed_in());
+        creds.p3papisid = Some("3papisid".to_string());
+        assert!(creds.is_signed_in());
+    }
+
+    #[test]
+    fn credentials_missing_legacy_cookies_lists_absent_names() {
+        let header = format!("{PSID}=a; {PSIDCC}=b; SID=s; HSID=h");
+        let creds = Credentials::from_header(&header).unwrap();
+        let missing = creds.missing_legacy_cookies();
+        assert!(missing.contains(&"SSID"));
+        assert!(missing.contains(&"APISID"));
+        assert!(missing.contains(&"SAPISID"));
+        assert!(missing.contains(&"SIDCC"));
+        assert!(missing.contains(&"__Secure-ENID"));
+        assert!(!missing.contains(&"SID"));
+        assert!(!missing.contains(&"HSID"));
+    }
+
+    #[test]
+    fn credentials_parses_secure_enid_and_sidcc() {
+        let header = format!("{PSID}=a; {PSIDCC}=b; __Secure-ENID=e; SIDCC=c; NID=n");
+        let creds = Credentials::from_header(&header).unwrap();
+        assert_eq!(creds.secure_enid.as_deref(), Some("e"));
+        assert_eq!(creds.sidcc.as_deref(), Some("c"));
+        assert_eq!(creds.nid.as_deref(), Some("n"));
     }
 
     #[test]
