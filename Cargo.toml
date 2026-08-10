@@ -96,6 +96,10 @@ name = "test_attestation"
 path = "examples/test_attestation.rs"
 required-features = ["browser-attestation"]
 
+[[example]]
+name = "v0_2_api_tour"
+path = "examples/v0_2_api_tour.rs"
+
 [[bench]]
 name = "slot_building"
 harness = false

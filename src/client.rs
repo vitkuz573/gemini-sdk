@@ -103,7 +103,7 @@ const WAA_BASE_URL: &str = "https://waa-pa.clients6.google.com";
 const OGADS_BASE_URL: &str = "https://ogads-pa.clients6.google.com";
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
-const X_CLIENT_DATA: &str = "CI7yygE=";
+const X_CLIENT_DATA: &str = "CNeOywE=";
 /// Best-effort default fingerprint used when the live session does not yield
 /// one (e.g., ogads init failed). The captured `Pro` model id is reused as a
 /// stand-in but may not match the live model selection — see spike findings.
