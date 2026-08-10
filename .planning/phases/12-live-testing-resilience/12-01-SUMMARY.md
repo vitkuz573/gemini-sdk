@@ -18,6 +18,7 @@ key_files:
     - examples/live_probe.rs
   modified:
     - src/client.rs
+    - src/conversation_actions.rs
     - src/errors.rs
     - src/session.rs
     - src/retry.rs
@@ -30,6 +31,9 @@ decisions:
   - HAR capture is opt-in via builder and flushes after every entry to limit data loss.
   - Cookie values, Authorization headers, x-goog-ext-* headers, and cookie-like POST substrings are redacted in HAR.
   - send_batchexecute_with_retry classifies transient 400s before the generic retry loop commits them as permanent.
+  - _reqid is regenerated on every batchexecute retry attempt and uses a per-client atomic counter with browser-observed bases per RPC family.
+  - batchexecute headers send x-goog-ext-73010989-jspb: [] (empty), omit x-goog-ext-73010990-jspb, and include session.waa_context in x-goog-ext-525001261-jspb when available.
+  - Conversation action payloads are sent as a single array [id] (not [[id]]) to match the browser, and null/empty no-content responses are treated as success.
 metrics:
   duration: "45 min"
   completed_date: "2026-08-10"
@@ -63,15 +67,18 @@ Added transient WIZ 400 detection, bounded batchexecute retries, opt-in redacted
 
 | Gate | Result | Notes |
 |------|--------|-------|
-| `cargo test` | pass | 143 lib tests + integration tests + doc-tests |
+| `cargo test --all-targets` | pass | 156 lib tests + integration tests + doc-tests |
 | `cargo test --test real_cookies` | pass | 14/14 with live cookies |
 | `cargo clippy --all-targets -- -D warnings` | pass | clean |
 | `cargo doc --no-deps` | pass | no warnings under `#![deny(missing_docs)]` |
 | `cargo build --example live_probe` | pass | builds successfully |
+| `live_probe` | skipped | `GEMINI_COOKIES` not present in environment |
 
 ## Deviations from Plan
 
-None — plan executed exactly as written.
+This hotfix was not part of the original 12-01 plan; it was triggered by live
+probe failures documented in `.planning/debug/` before those notes were
+archived. No deviations from the hotfix scope.
 
 ## Post-Summary Hotfix
 
@@ -92,6 +99,38 @@ original plan completion) adds:
 All verification gates re-passed after the hotfix:
 `cargo test`, `cargo clippy --all-targets -- -D warnings`,
 `cargo doc --no-deps`, `cargo build --example live_probe`.
+
+## Protocol-Drift Hotfix
+
+A second round of live debugging identified two additional protocol drift issues
+that were fixed in commit `39fee36`:
+
+- **`src/session.rs`** — `SessionState::generate_reqid` now uses a per-client
+  atomic counter with browser-observed bases per RPC family instead of a
+  wall-clock millisecond value, matching the digit lengths observed in live HAR
+  captures (6-digit for `otAQ7b`, 7-digit for `PCck7e`).
+- **`src/client.rs`** — `send_batchexecute_with_retry` now regenerates `_reqid`
+  on every retry attempt, includes `session.waa_context` in the
+  `x-goog-ext-525001261-jspb` header for batchexecute calls, sends
+  `x-goog-ext-73010989-jspb: []`, and omits `x-goog-ext-73010990-jspb` for
+  batchexecute. Non-batchexecute endpoints (`/app`, `StreamGenerate`) retain the
+  previous header set.
+- **`src/conversation_actions.rs`** — Regenerate/rate/delete payloads are now
+  sent as a single array `[id]` instead of a nested array `[[id]]`. The parser
+  now treats `null`, `"null"`, `"[]"`, and `"\"[]\""` payloads as successful
+  no-content responses.
+- **Tests** — Added unit tests for `generate_reqid`, updated builder/parser
+  tests, and verified all gates pass.
+
+### Verification after protocol-drift hotfix
+
+| Gate | Result |
+|------|--------|
+| `cargo test --all-targets` | pass |
+| `cargo clippy --all-targets -- -D warnings` | pass |
+| `cargo doc --no-deps` | pass |
+| `cargo build --example live_probe` | pass |
+| `live_probe` with cookies | skipped (no `GEMINI_COOKIES` env) |
 
 ## Cookie-Jar Refresh Follow-Up
 
@@ -128,5 +167,5 @@ No new security-relevant surface beyond the plan's threat model.
 ## Self-Check
 
 - [x] Created files exist on disk.
-- [x] Commits `d0c7c8e`, `2187f0a`, and `78a2271` exist in history.
+- [x] Commits `d0c7c8e`, `2187f0a`, `78a2271`, and `39fee36` exist in history.
 - [x] All quality gates pass.
