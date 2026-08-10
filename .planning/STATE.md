@@ -4,11 +4,11 @@ milestone: v0.2
 milestone_name: API Expansion
 current_phase: 11 — Protocol Drift & Integration
 current_plan: 01
-status: complete
+status: Awaiting next milestone
 stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-08-10T10:10:00.000Z"
+last_updated: "2026-08-10T09:41:19.470Z"
 last_activity: 2026-08-10
-last_activity_desc: Completed Phase 11 Plan 1 (Protocol Drift & Integration)
+last_activity_desc: Milestone v0.2 completed and archived
 progress:
   total_phases: 11
   completed_phases: 11
@@ -117,11 +117,11 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ## Current Position
 
-Phase: 11 — Protocol Drift & Integration (complete)
-Plan: 01
-Status: All v0.2 API Expansion plans complete.
-Last activity: 2026-08-10 — Completed Phase 11 Plan 1 (Protocol Drift & Integration)
+Phase: Milestone v0.2 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-10 — Milestone v0.2 completed and archived
 
 ## Operator Next Steps
 
-- Milestone v0.2 API Expansion is complete. Proceed to milestone summary or begin v1.0 planning.
+- Start the next milestone with /gsd-new-milestone
