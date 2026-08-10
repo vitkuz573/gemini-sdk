@@ -1283,7 +1283,7 @@ fn build_chat_response_from_parts(parts: &[ContentPart]) -> Result<ChatResponse>
         match part {
             ContentPart::Text(t) => texts.push(t.clone()),
             ContentPart::Thinking(t) => thinkings.push(t.clone()),
-            ContentPart::Image(_) => {}
+            ContentPart::Image(_) | ContentPart::Audio(_) | ContentPart::Video(_) => {}
         }
     }
     Ok(ChatResponse::new(texts.join("")).with_thinking(thinkings.join("")))
@@ -1549,6 +1549,8 @@ mod client_tests {
         let prepared = PreparedRequest {
             prompt: "What is Rust?".to_string(),
             inline_images: vec![],
+            inline_audio: vec![],
+            inline_video: vec![],
             config: None,
             category: ModelCategory::Auto,
         };
@@ -1594,6 +1596,8 @@ mod client_tests {
         let prepared = PreparedRequest {
             prompt: "hello".to_string(),
             inline_images: vec![],
+            inline_audio: vec![],
+            inline_video: vec![],
             config: None,
             category: ModelCategory::Auto,
         };

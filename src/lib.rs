@@ -82,8 +82,8 @@ mod session;
 
 pub use auth::{Cookies, CookieHeaderProvider, Credentials, CredentialsError, CredentialsProvider};
 pub use chat::{
-    ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig, ImageSource,
-    ThinkingLevel,
+    AudioSource, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
+    ImageSource, ThinkingLevel, VideoSource,
 };
 // PreparedRequest is intentionally public for benchmarks and advanced use.
 pub use client::{GeminiClient, HttpHook};

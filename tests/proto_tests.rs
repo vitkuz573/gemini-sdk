@@ -195,6 +195,8 @@ fn build_inner_req_list_has_97_slots() {
     let prepared = PreparedRequest {
         prompt: "hello".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: None,
         category: ModelCategory::Auto,
     };
@@ -207,6 +209,8 @@ fn build_inner_req_list_with_attachments() {
     let prepared = PreparedRequest {
         prompt: "describe".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: None,
         category: ModelCategory::Fast,
     };
@@ -225,6 +229,8 @@ fn build_inner_req_list_with_conversation_state() {
     let prepared = PreparedRequest {
         prompt: "follow up".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: None,
         category: ModelCategory::Pro,
     };
@@ -253,6 +259,8 @@ fn build_inner_req_list_slot_30_reflects_model_category() {
         let prepared = PreparedRequest {
             prompt: "hello".to_string(),
             inline_images: vec![],
+            inline_audio: vec![],
+            inline_video: vec![],
             config: None,
             category,
         };
@@ -295,6 +303,8 @@ fn build_inner_req_list_with_inline_images() {
     let prepared = PreparedRequest {
         prompt: "Look at this".to_string(),
         inline_images: vec![("image/png".to_string(), "ZmFrZQ==".to_string())],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: None,
         category: ModelCategory::Auto,
     };
@@ -312,6 +322,8 @@ fn system_instruction_in_slot0() {
     let prepared = PreparedRequest {
         prompt: "hello".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: Some(config),
         category: ModelCategory::Auto,
     };
@@ -325,6 +337,8 @@ fn no_system_instruction_preserved() {
     let prepared = PreparedRequest {
         prompt: "hello".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: None,
         category: ModelCategory::Auto,
     };

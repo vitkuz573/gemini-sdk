@@ -186,6 +186,12 @@ pub fn derive_attachment_filename(mime_type: &str, index: usize) -> String {
         "image/webp" => "webp",
         "image/gif" => "gif",
         "application/pdf" => "pdf",
+        "audio/mp3" | "audio/mpeg" => "mp3",
+        "audio/wav" => "wav",
+        "audio/ogg" => "ogg",
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "video/quicktime" => "mov",
         _ => {
             let clean = mime_type.split(';').next().unwrap_or(mime_type);
             clean.split('/').nth(1).unwrap_or("bin")
@@ -215,6 +221,8 @@ mod tests {
         PreparedRequest {
             prompt: "hello".to_string(),
             inline_images: vec![],
+            inline_audio: vec![],
+            inline_video: vec![],
             config: None,
             category: ModelCategory::Auto,
         }
@@ -313,5 +321,16 @@ mod tests {
         assert_eq!(derive_attachment_filename("image/jpeg", 0), "attachment.jpg");
         assert_eq!(derive_attachment_filename("application/pdf", 1), "attachment_1.pdf");
         assert_eq!(derive_attachment_filename("text/plain", 0), "attachment.plain");
+    }
+
+    #[test]
+    fn derive_attachment_filename_audio_video() {
+        assert_eq!(derive_attachment_filename("audio/mp3", 0), "attachment.mp3");
+        assert_eq!(derive_attachment_filename("audio/mpeg", 0), "attachment.mp3");
+        assert_eq!(derive_attachment_filename("audio/wav", 0), "attachment.wav");
+        assert_eq!(derive_attachment_filename("audio/ogg", 0), "attachment.ogg");
+        assert_eq!(derive_attachment_filename("video/mp4", 1), "attachment_1.mp4");
+        assert_eq!(derive_attachment_filename("video/webm", 2), "attachment_2.webm");
+        assert_eq!(derive_attachment_filename("video/quicktime", 0), "attachment.mov");
     }
 }

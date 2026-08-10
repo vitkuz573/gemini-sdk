@@ -47,6 +47,22 @@ impl ChatMessage {
         }
     }
 
+    /// Creates a message containing audio.
+    pub fn with_audio(role: impl Into<String>, source: AudioSource) -> Self {
+        Self {
+            role: role.into(),
+            parts: vec![ContentPart::Audio(source)],
+        }
+    }
+
+    /// Creates a message containing video.
+    pub fn with_video(role: impl Into<String>, source: VideoSource) -> Self {
+        Self {
+            role: role.into(),
+            parts: vec![ContentPart::Video(source)],
+        }
+    }
+
     /// Appends a content part to this message.
     pub fn with_part(mut self, part: ContentPart) -> Self {
         self.parts.push(part);
@@ -57,6 +73,59 @@ impl ChatMessage {
 /// A source for image content.
 #[derive(Debug, Clone)]
 pub enum ImageSource {
+    /// Base64-encoded inline image data together with its MIME type.
+    InlineData {
+        /// MIME type of the image, e.g. `image/png`.
+        mime_type: String,
+        /// Base64-encoded bytes.
+        data: String,
+    },
+    /// A publicly reachable image URL.
+    Url {
+        /// URL of the image.
+        url: String,
+    },
+}
+
+/// A source for audio content.
+#[derive(Debug, Clone)]
+pub enum AudioSource {
+    /// Base64-encoded inline audio data together with its MIME type.
+    InlineData {
+        /// MIME type of the audio, e.g. `audio/mp3`.
+        mime_type: String,
+        /// Base64-encoded bytes.
+        data: String,
+    },
+    /// A publicly reachable audio URL.
+    Url {
+        /// URL of the audio.
+        url: String,
+    },
+}
+
+impl AudioSource {
+    /// Creates an inline audio source from raw bytes, base64-encoding them.
+    pub fn from_bytes(mime_type: impl Into<String>, bytes: &[u8]) -> Self {
+        Self::InlineData {
+            mime_type: mime_type.into(),
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        }
+    }
+
+    /// Returns the MIME type of this audio source.
+    #[must_use]
+    pub fn mime_type(&self) -> Option<&str> {
+        match self {
+            Self::InlineData { mime_type, .. } => Some(mime_type.as_str()),
+            Self::Url { .. } => None,
+        }
+    }
+}
+
+/// A source for video content.
+#[derive(Debug, Clone)]
+pub enum VideoSource {
     /// Base64-encoded inline image data together with its MIME type.
     InlineData {
         /// MIME type of the image, e.g. `image/png`.
@@ -90,6 +159,25 @@ impl ImageSource {
     }
 }
 
+impl VideoSource {
+    /// Creates an inline video source from raw bytes, base64-encoding them.
+    pub fn from_bytes(mime_type: impl Into<String>, bytes: &[u8]) -> Self {
+        Self::InlineData {
+            mime_type: mime_type.into(),
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        }
+    }
+
+    /// Returns the MIME type of this video source.
+    #[must_use]
+    pub fn mime_type(&self) -> Option<&str> {
+        match self {
+            Self::InlineData { mime_type, .. } => Some(mime_type.as_str()),
+            Self::Url { .. } => None,
+        }
+    }
+}
+
 /// A part of a chat message.
 #[derive(Debug, Clone)]
 pub enum ContentPart {
@@ -99,6 +187,10 @@ pub enum ContentPart {
     Thinking(String),
     /// An image.
     Image(ImageSource),
+    /// An audio attachment.
+    Audio(AudioSource),
+    /// A video attachment.
+    Video(VideoSource),
 }
 
 /// Configuration for a generation request.
@@ -210,7 +302,10 @@ pub(crate) fn extract_prompt(message: &ChatMessage) -> Result<String> {
     for part in &message.parts {
         match part {
             ContentPart::Text(t) => text_parts.push(t.as_str()),
-            ContentPart::Thinking(_) | ContentPart::Image(_) => {}
+            ContentPart::Thinking(_)
+            | ContentPart::Image(_)
+            | ContentPart::Audio(_)
+            | ContentPart::Video(_) => {}
         }
     }
     let prompt = text_parts.join("\n");
@@ -284,6 +379,10 @@ pub struct PreparedRequest {
     pub prompt: String,
     /// Inline images as `(mime_type, base64_data)` pairs.
     pub inline_images: Vec<(String, String)>,
+    /// Inline audio as `(mime_type, base64_data)` pairs.
+    pub inline_audio: Vec<(String, String)>,
+    /// Inline video as `(mime_type, base64_data)` pairs.
+    pub inline_video: Vec<(String, String)>,
     /// Generation configuration.
     pub config: Option<GenerationConfig>,
     /// Selected model category.
@@ -300,6 +399,8 @@ pub(crate) fn prepare_request(
     let prompt = extract_prompt(new_message)?;
 
     let mut inline_images = Vec::new();
+    let mut inline_audio = Vec::new();
+    let mut inline_video = Vec::new();
     for part in &new_message.parts {
         match part {
             ContentPart::Image(ImageSource::InlineData { mime_type, data }) => {
@@ -310,6 +411,22 @@ pub(crate) fn prepare_request(
                     "image URLs are not supported directly by the web frontend: {url}"
                 )));
             }
+            ContentPart::Audio(AudioSource::InlineData { mime_type, data }) => {
+                inline_audio.push((mime_type.clone(), data.clone()));
+            }
+            ContentPart::Audio(AudioSource::Url { url }) => {
+                return Err(Error::bad_request(format!(
+                    "audio URLs are not supported directly by the web frontend: {url}"
+                )));
+            }
+            ContentPart::Video(VideoSource::InlineData { mime_type, data }) => {
+                inline_video.push((mime_type.clone(), data.clone()));
+            }
+            ContentPart::Video(VideoSource::Url { url }) => {
+                return Err(Error::bad_request(format!(
+                    "video URLs are not supported directly by the web frontend: {url}"
+                )));
+            }
             ContentPart::Text(_) | ContentPart::Thinking(_) => {}
         }
     }
@@ -317,6 +434,8 @@ pub(crate) fn prepare_request(
     Ok(PreparedRequest {
         prompt,
         inline_images,
+        inline_audio,
+        inline_video,
         config,
         category: default_category,
     })
@@ -351,6 +470,22 @@ mod tests {
     }
 
     #[test]
+    fn prepare_request_extracts_inline_audio_and_video() {
+        let mut message = ChatMessage::user("Listen and watch");
+        message
+            .parts
+            .push(ContentPart::Audio(AudioSource::from_bytes("audio/mp3", b"fake-audio")));
+        message
+            .parts
+            .push(ContentPart::Video(VideoSource::from_bytes("video/mp4", b"fake-video")));
+
+        let prepared = prepare_request(None, &message, None, ModelCategory::Auto).unwrap();
+        assert_eq!(prepared.inline_audio.len(), 1);
+        assert_eq!(prepared.inline_video.len(), 1);
+        assert_eq!(prepared.prompt, "Listen and watch");
+    }
+
+    #[test]
     fn prepare_request_rejects_image_url() {
         let message = ChatMessage::with_image(
             "user",
@@ -360,5 +495,24 @@ mod tests {
         );
         let result = prepare_request(None, &message, None, ModelCategory::Auto);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn prepare_request_rejects_audio_and_video_urls() {
+        let audio_message = ChatMessage::with_audio(
+            "user",
+            AudioSource::Url {
+                url: "https://example.com/x.mp3".to_string(),
+            },
+        );
+        assert!(prepare_request(None, &audio_message, None, ModelCategory::Auto).is_err());
+
+        let video_message = ChatMessage::with_video(
+            "user",
+            VideoSource::Url {
+                url: "https://example.com/x.mp4".to_string(),
+            },
+        );
+        assert!(prepare_request(None, &video_message, None, ModelCategory::Auto).is_err());
     }
 }

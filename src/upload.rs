@@ -213,16 +213,54 @@ pub(crate) fn upload_progress_stream(
     })
 }
 
-/// Uploads all inline images found in a prepared request and returns attachment
-/// descriptors.
+fn is_allowed_media_type(mime_type: &str) -> bool {
+    let clean = mime_type.split(';').next().unwrap_or(mime_type);
+    if let Some(kind) = clean.split('/').next() {
+        if kind == "image" {
+            return true;
+        }
+    }
+    matches!(
+        clean,
+        "audio/mp3"
+            | "audio/mpeg"
+            | "audio/wav"
+            | "audio/ogg"
+            | "video/mp4"
+            | "video/webm"
+            | "video/quicktime"
+    )
+}
+
+/// Uploads all inline attachments found in a prepared request.
+///
+/// Images, audio, and video are uploaded through the same resumable upload
+/// endpoint. Unsupported MIME types are rejected before any network call.
 pub(crate) async fn upload_attachments(
     client: &reqwest::Client,
     cookies: &Cookies,
     session: &SessionState,
     prepared: &crate::chat::PreparedRequest,
 ) -> Result<Vec<WebAttachment>> {
-    let mut attachments = Vec::with_capacity(prepared.inline_images.len());
-    for (idx, (mime_type, data)) in prepared.inline_images.iter().enumerate() {
+    let total = prepared
+        .inline_images
+        .len()
+        .saturating_add(prepared.inline_audio.len())
+        .saturating_add(prepared.inline_video.len());
+    let mut attachments = Vec::with_capacity(total);
+
+    for (idx, (mime_type, data)) in prepared
+        .inline_images
+        .iter()
+        .chain(prepared.inline_audio.iter())
+        .chain(prepared.inline_video.iter())
+        .enumerate()
+    {
+        if !is_allowed_media_type(mime_type) {
+            return Err(Error::bad_request(format!(
+                "unsupported media type: {mime_type}"
+            )));
+        }
         let bytes = crate::proto::slots::base64_decode(data)?;
         let filename = crate::proto::slots::derive_attachment_filename(mime_type, idx);
         let reference = upload_file(client, cookies, session, &filename, mime_type, bytes).await?;
@@ -233,4 +271,30 @@ pub(crate) async fn upload_attachments(
         });
     }
     Ok(attachments)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_allowed_media_type_accepts_images_audio_video() {
+        assert!(is_allowed_media_type("image/png"));
+        assert!(is_allowed_media_type("image/jpeg"));
+        assert!(is_allowed_media_type("audio/mp3"));
+        assert!(is_allowed_media_type("audio/mpeg"));
+        assert!(is_allowed_media_type("audio/wav"));
+        assert!(is_allowed_media_type("audio/ogg"));
+        assert!(is_allowed_media_type("video/mp4"));
+        assert!(is_allowed_media_type("video/webm"));
+        assert!(is_allowed_media_type("video/quicktime"));
+    }
+
+    #[test]
+    fn is_allowed_media_type_rejects_unknown() {
+        assert!(!is_allowed_media_type("audio/flac"));
+        assert!(!is_allowed_media_type("video/avi"));
+        assert!(!is_allowed_media_type("application/json"));
+        assert!(!is_allowed_media_type("text/plain"));
+    }
 }

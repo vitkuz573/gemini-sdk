@@ -7,6 +7,8 @@ fn bench_build_inner_req_list(c: &mut Criterion) {
     let prepared = PreparedRequest {
         prompt: "Explain quantum computing in simple terms.".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: Some(GenerationConfig {
             max_output_tokens: Some(1024),
             temperature: Some(0.7),

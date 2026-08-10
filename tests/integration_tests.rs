@@ -153,6 +153,8 @@ async fn client_default_system_instruction_reaches_request() {
     let prepared = gemini_sdk::chat::PreparedRequest {
         prompt: "hello".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: None,
         category: ModelCategory::Auto,
     };
@@ -179,6 +181,8 @@ async fn system_instruction_override_wins() {
     let prepared = gemini_sdk::chat::PreparedRequest {
         prompt: "hello".to_string(),
         inline_images: vec![],
+        inline_audio: vec![],
+        inline_video: vec![],
         config: Some(config),
         category: ModelCategory::Auto,
     };

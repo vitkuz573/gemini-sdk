@@ -195,7 +195,7 @@ pub fn parse_chat_response(body: &str) -> Result<ChatResponse> {
         match part {
             ContentPart::Text(t) => texts.push(t),
             ContentPart::Thinking(t) => thinkings.push(t),
-            ContentPart::Image(_) => {}
+            ContentPart::Image(_) | ContentPart::Audio(_) | ContentPart::Video(_) => {}
         }
     }
 
