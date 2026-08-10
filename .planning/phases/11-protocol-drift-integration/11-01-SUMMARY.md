@@ -36,7 +36,7 @@ Updated the v0.2 protocol drift fix, added a runnable v0.2 API tour example, con
 - **`.planning/ROADMAP.md`**: Marked Phase 11 Plan 01 complete.
 - **`.planning/STATE.md`**: Updated phase completion and progress.
 
-## Verification Results
+## Quality Gate Results
 
 | Gate | Result | Details |
 |------|--------|---------|
