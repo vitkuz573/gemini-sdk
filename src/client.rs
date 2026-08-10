@@ -17,6 +17,11 @@ use crate::chat::{
     prepare_request, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, PreparedRequest,
 };
+use crate::conversation_actions::{
+    build_delete_payload, build_rate_payload, build_regenerate_payload,
+    parse_conversation_action_response, ConversationAction, ConversationActionResult,
+    TurnRating, PCCK7E_RPC_ID,
+};
 use crate::errors::{Error, Result};
 use crate::tool::{Tool, ToolError, ToolResult};
 use crate::models::{ModelCategory, ModelInfo};
@@ -106,8 +111,9 @@ struct Inner {
     provider: Mutex<Option<Arc<dyn CredentialsProvider>>>,
 }
 
+/// Configuration values shared by every request made by a [`GeminiClient`].
 #[derive(Clone)]
-struct ClientConfig {
+pub struct ClientConfig {
     language: String,
     max_retries: usize,
     timeout: Duration,
@@ -115,6 +121,7 @@ struct ClientConfig {
     http_hook: Option<Arc<dyn HttpHook>>,
     fatal_hook_errors: bool,
     metrics_recorder: Option<Arc<dyn crate::metrics::MetricsRecorder>>,
+    base_url: String,
 }
 
 impl std::fmt::Debug for ClientConfig {
@@ -126,6 +133,7 @@ impl std::fmt::Debug for ClientConfig {
             .field("system_instruction", &self.system_instruction)
             .field("http_hook", &self.http_hook.is_some())
             .field("fatal_hook_errors", &self.fatal_hook_errors)
+            .field("base_url", &self.base_url)
             .finish()
     }
 }
@@ -140,7 +148,16 @@ impl Default for ClientConfig {
             http_hook: None,
             fatal_hook_errors: false,
             metrics_recorder: None,
+            base_url: WEB_BASE_URL.to_string(),
         }
+    }
+}
+
+impl ClientConfig {
+    /// Returns the configured Gemini frontend base URL.
+    #[must_use]
+    pub fn base_url(&self) -> &str {
+        &self.base_url
     }
 }
 
@@ -186,11 +203,30 @@ impl GeminiClient {
     ///
     /// Returns an error if the credentials are missing required cookies.
     pub fn from_http_client(client: reqwest::Client, credentials: impl Into<Cookies>) -> Result<Self> {
+        Self::from_http_client_with_config(client, credentials, ClientConfig::default())
+    }
+
+    /// Creates a client from an externally built [`reqwest::Client`] and a
+    /// fully populated client configuration.
+    ///
+    /// This is the most flexible constructor: it lets callers supply a custom
+    /// HTTP client, a custom base URL, and every other SDK option in one call.
+    /// It is primarily useful for testing against a mock server or proxy, and
+    /// for advanced deployment scenarios.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the credentials are missing required cookies.
+    pub fn from_http_client_with_config(
+        client: reqwest::Client,
+        credentials: impl Into<Cookies>,
+        config: ClientConfig,
+    ) -> Result<Self> {
         let cookies: Cookies = credentials.into();
         cookies
             .to_credentials()
             .map_err(|e| Error::Config(e.to_string()))?;
-        Self::with_http_client(cookies, ClientConfig::default(), client)
+        Self::with_http_client(cookies, config, client)
     }
 
     /// Creates a client from a [`HashMap`] of cookies.
@@ -248,6 +284,18 @@ impl GeminiClient {
     pub async fn with_max_retries(self, max_retries: usize) -> Self {
         let mut config = self.inner.config.write().await;
         config.max_retries = max_retries;
+        drop(config);
+        self
+    }
+
+    /// Sets a custom Gemini frontend base URL.
+    ///
+    /// The default is `https://gemini.google.com`. Override this to point the
+    /// client at a mock server, proxy, or regional endpoint.
+    pub async fn with_base_url(self, base_url: impl Into<String>) -> Self {
+        let base_url = base_url.into();
+        let mut config = self.inner.config.write().await;
+        config.base_url = base_url;
         drop(config);
         self
     }
@@ -343,6 +391,13 @@ impl GeminiClient {
         Self::with_http_client(cookies, config, http)
     }
 
+    /// Returns the currently configured Gemini frontend base URL.
+    ///
+    /// The default is `https://gemini.google.com`.
+    pub async fn base_url(&self) -> String {
+        self.inner.config.read().await.base_url.clone()
+    }
+
     fn with_http_client(cookies: Cookies, config: ClientConfig, http: Client) -> Result<Self> {
         let mut session = SessionState::new();
         session.language.clone_from(&config.language);
@@ -357,6 +412,17 @@ impl GeminiClient {
                 provider: Mutex::new(None),
             }),
         })
+    }
+
+    /// Returns a direct reference to the internal session mutex.
+    ///
+    /// # Safety
+    ///
+    /// This is intended for integration tests and advanced mocking scenarios
+    /// only. Mutating the session can cause requests to fail or behave
+    /// unexpectedly.
+    pub fn inner_session_for_tests(&self) -> &tokio::sync::Mutex<crate::session::SessionState> {
+        &self.inner.session
     }
 
     /// Returns a builder for sending a single chat message.
@@ -473,6 +539,164 @@ impl GeminiClient {
         Ok((client, parsed.conversation))
     }
 
+    /// Regenerates the model response for a single conversation turn.
+    ///
+    /// Sends the `PCck7e` batchexecute RPC to `/app/{conversation_id}` with
+    /// the response id to regenerate.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.regenerate_turn", level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
+    pub async fn regenerate_turn(
+        &self,
+        conversation_id: impl AsRef<str>,
+        response_id: impl AsRef<str>,
+    ) -> Result<ConversationActionResult> {
+        self.conversation_action(
+            conversation_id.as_ref(),
+            response_id.as_ref(),
+            ConversationAction::Regenerate,
+            build_regenerate_payload,
+        )
+        .await
+    }
+
+    /// Rates a model response for a single conversation turn.
+    ///
+    /// Sends the `PCck7e` batchexecute RPC to `/app/{conversation_id}` with
+    /// the response id and the selected [`TurnRating`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.rate_turn", level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
+    pub async fn rate_turn(
+        &self,
+        conversation_id: impl AsRef<str>,
+        response_id: impl AsRef<str>,
+        rating: TurnRating,
+    ) -> Result<ConversationActionResult> {
+        let response_id = response_id.as_ref();
+        self.conversation_action(
+            conversation_id.as_ref(),
+            response_id,
+            ConversationAction::Rate(rating),
+            |id| build_rate_payload(id, rating),
+        )
+        .await
+    }
+
+    /// Deletes a single conversation turn.
+    ///
+    /// Sends the `PCck7e` batchexecute RPC to `/app/{conversation_id}` with
+    /// the response id to delete.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session is not initialized, the request fails,
+    /// or the response cannot be parsed.
+    #[tracing::instrument(name = "gemini.delete_turn", level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
+    pub async fn delete_turn(
+        &self,
+        conversation_id: impl AsRef<str>,
+        response_id: impl AsRef<str>,
+    ) -> Result<ConversationActionResult> {
+        self.conversation_action(
+            conversation_id.as_ref(),
+            response_id.as_ref(),
+            ConversationAction::Delete,
+            build_delete_payload,
+        )
+        .await
+    }
+
+    /// Sends a `PCck7e` batchexecute request for a conversation action.
+    ///
+    /// This helper centralises request construction and response parsing for
+    /// [`Self::regenerate_turn`], [`Self::rate_turn`], and
+    /// [`Self::delete_turn`].
+    async fn conversation_action(
+        &self,
+        conversation_id: &str,
+        response_id: &str,
+        action: ConversationAction,
+        build_payload: impl FnOnce(&str) -> Value,
+    ) -> Result<ConversationActionResult> {
+        // Avoid re-initialising the session if it already has the values we
+        // need, so tests against a mock server can inject session state and
+        // skip the live /app init flow.
+        let already_initialised = {
+            let session = self.inner.session.lock().await;
+            session.build_label.is_some()
+                && session.session_id.is_some()
+                && session.access_token.is_some()
+        };
+        if !already_initialised {
+            self.ensure_session().await?;
+        }
+
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let cookies = self.cookies().await;
+        let (params, body, cookie_header) = {
+            let session = self.inner.session.lock().await;
+            let reqid = SessionState::generate_reqid();
+            let source_path = format!("/app/{conversation_id}");
+            let mut params: Vec<(&str, String)> = vec![
+                ("rpcids", PCCK7E_RPC_ID.to_string()),
+                ("source-path", source_path),
+                ("hl", session.language.clone()),
+                ("_reqid", reqid),
+                ("rt", "c".to_string()),
+            ];
+            if let Some(bl) = session.build_label.as_deref() {
+                params.push(("bl", bl.to_string()));
+            }
+            if let Some(sid) = session.session_id.as_deref() {
+                params.push(("f.sid", sid.to_string()));
+            }
+            let inner_payload = build_payload(response_id);
+            let body = crate::proto::build_batchexecute_body_for_rpc(
+                PCCK7E_RPC_ID,
+                &serde_json::to_string(&inner_payload).unwrap_or_default(),
+                session.access_token.as_deref(),
+            );
+            let cookie_header = cookies.to_header_value();
+            (params, body, cookie_header)
+        };
+        let headers = self.build_headers(None, None, None).await;
+
+        let response = self
+            .send_with_retry(|| {
+                let client = self.inner.http.clone();
+                let url = url.clone();
+                let params = params.clone();
+                let body = body.clone();
+                let headers = headers.clone();
+                let cookie_header = cookie_header.clone();
+                async move {
+                    let mut req = client.post(&url).query(&params).body(body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
+                    }
+                    req = req.header("Cookie", cookie_header);
+                    req.send().await
+                }
+            })
+            .await?;
+
+        let status = response.status();
+        let text = response.text().await.map_err(Error::Request)?;
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        parse_conversation_action_response(&text, action, response_id.to_string())
+    }
+
     /// Refreshes credentials from a provider and re-initializes the session.
     ///
     /// This replaces the stored cookies, clears session state, and runs the
@@ -501,7 +725,8 @@ impl GeminiClient {
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>> {
         self.ensure_session().await?;
 
-        let url = format!("{WEB_BASE_URL}/_/BardChatUi/data/batchexecute");
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
         let cookies = self.cookies().await;
         let (params, body, headers, cookie_header) = {
             let session = self.inner.session.lock().await;
@@ -520,7 +745,7 @@ impl GeminiClient {
                 params.push(("f.sid", sid.to_string()));
             }
             let body = build_batchexecute_body(session.access_token.as_deref());
-            let headers = Self::build_headers(None, None, None);
+            let headers = self.build_headers(None, None, None).await;
             let cookie_header = cookies.to_header_value();
             (params, body, headers, cookie_header)
         };
@@ -858,6 +1083,7 @@ impl GeminiClient {
         mime_type: impl Into<String>,
         bytes: Vec<u8>,
     ) -> Pin<Box<dyn Stream<Item = Result<UploadEvent>> + Send + 'static>> {
+        let base_url = self.inner.config.read().await.base_url.clone();
         upload::upload_progress_stream(
             self.inner.http.clone(),
             self.cookies().await,
@@ -865,6 +1091,7 @@ impl GeminiClient {
             filename.into(),
             mime_type.into(),
             bytes,
+            base_url,
         )
     }
 
@@ -895,8 +1122,9 @@ impl GeminiClient {
         let (inner_req_list, request_uuid, _headers, cookie_header) =
             self.build_stream_generate_request(prepared).await?;
 
+        let base_url = self.inner.config.read().await.base_url.clone();
         let url = format!(
-            "{WEB_BASE_URL}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate"
+            "{base_url}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate"
         );
 
         let (params, at, waa_context, waa_fingerprint) = {
@@ -926,7 +1154,7 @@ impl GeminiClient {
             waa_context.as_deref(),
             &request_uuid,
         );
-        let headers = Self::build_headers(Some(&request_uuid), Some(&waa_header), None);
+        let headers = self.build_headers(Some(&request_uuid), Some(&waa_header), None).await;
 
         let response = self
             .send_with_retry(|| {
@@ -997,8 +1225,9 @@ impl GeminiClient {
             )
         };
 
+        let base_url = self.inner.config.read().await.base_url.clone();
         let attachments =
-            upload::upload_attachments(&self.inner.http, &cookies, &session_for_upload, prepared)
+            upload::upload_attachments(&self.inner.http, &cookies, &session_for_upload, prepared, &base_url)
                 .await?;
 
         let proto_state = conversation_state.as_ref().map(map_proto_state);
@@ -1018,7 +1247,7 @@ impl GeminiClient {
             session_for_upload.waa_context.as_deref(),
             &request_uuid,
         );
-        let headers = Self::build_headers(Some(&request_uuid), Some(&waa_header), None);
+        let headers = self.build_headers(Some(&request_uuid), Some(&waa_header), None).await;
         let cookie_header = cookies.to_header_value();
 
         Ok((inner_req_list, request_uuid, headers, cookie_header))
@@ -1181,7 +1410,8 @@ impl GeminiClient {
         cookie_header: &str,
         source_path_override: Option<&str>,
     ) -> Result<String> {
-        let url = format!("{WEB_BASE_URL}/_/BardChatUi/data/batchexecute");
+        let base_url = self.inner.config.read().await.base_url.clone();
+        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
         let reqid = SessionState::generate_reqid();
         let mut params: Vec<(&str, String)> = vec![
             ("rpcids", rpcids.to_string()),
@@ -1197,7 +1427,7 @@ impl GeminiClient {
             params.push(("f.sid", sid.to_string()));
         }
 
-        let headers = Self::build_headers(None, None, None);
+        let headers = self.build_headers(None, None, None).await;
         let response = self
             .send_with_retry(|| {
                 let client = self.inner.http.clone();
@@ -1227,6 +1457,7 @@ impl GeminiClient {
 
     async fn waa_create(&self, cookie_header: &str) -> Result<String> {
         let url = format!("{WAA_BASE_URL}/$rpc/google.internal.waa.v1.Waa/Create");
+        let base_url = self.inner.config.read().await.base_url.clone();
         let body = build_waa_create_body();
         let response = self
             .inner
@@ -1237,8 +1468,8 @@ impl GeminiClient {
             .header("x-user-agent", "grpc-web-javascript/0.1")
             .header("Cookie", cookie_header)
             .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{WEB_BASE_URL}/"))
-            .header("Origin", WEB_BASE_URL)
+            .header("Referer", format!("{base_url}/"))
+            .header("Origin", base_url)
             .header("x-client-data", X_CLIENT_DATA)
             .body(body)
             .send()
@@ -1273,8 +1504,9 @@ impl GeminiClient {
         waa_token: &str,
     ) -> Result<String> {
         let url = format!("{OGADS_BASE_URL}/$rpc/google.internal.onegoogle.asyncdata.v1.AsyncDataService/GetAsyncData");
+        let base_url = self.inner.config.read().await.base_url.clone();
         let body = build_ogads_body(waa_token, self.inner.session.lock().await.language.as_str());
-        let auth = credentials_to_sapisid_hash(credentials, WEB_BASE_URL);
+        let auth = credentials_to_sapisid_hash(credentials, &base_url);
         let mut req = self
             .inner
             .http
@@ -1283,8 +1515,8 @@ impl GeminiClient {
             .header("x-goog-api-key", OGADS_API_KEY)
             .header("Cookie", cookie_header)
             .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{WEB_BASE_URL}/"))
-            .header("Origin", WEB_BASE_URL)
+            .header("Referer", format!("{base_url}/"))
+            .header("Origin", base_url)
             .header("x-client-data", X_CLIENT_DATA);
         if let Some(auth) = auth {
             req = req.header("Authorization", auth);
@@ -1305,13 +1537,14 @@ impl GeminiClient {
     }
 
     async fn fetch_app_page(&self) -> Result<String> {
-        let (language, cookie_header) = {
+        let (language, cookie_header, base_url) = {
             let session = self.inner.session.lock().await;
+            let config = self.inner.config.read().await;
             let cookie_header = self.cookies().await.to_header_value();
-            (session.language.clone(), cookie_header)
+            (session.language.clone(), cookie_header, config.base_url.clone())
         };
 
-        let url = format!("{WEB_BASE_URL}/app?hl={language}");
+        let url = format!("{base_url}/app?hl={language}");
         let response = self
             .inner
             .http
@@ -1334,15 +1567,18 @@ impl GeminiClient {
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
         let cookie_header = self.cookies().await.to_header_value();
 
-        let language = self.inner.config.read().await.language.clone();
+        let (language, base_url) = {
+            let config = self.inner.config.read().await;
+            (config.language.clone(), config.base_url.clone())
+        };
         let response = self
             .inner
             .http
             .post(save_url)
             .header("Cookie", &cookie_header)
             .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{WEB_BASE_URL}/app?hl={language}"))
-            .header("Origin", WEB_BASE_URL)
+            .header("Referer", format!("{base_url}/app?hl={language}"))
+            .header("Origin", base_url)
             .header("Content-Length", "0")
             .body("")
             .send()
@@ -1363,19 +1599,21 @@ impl GeminiClient {
         self.fetch_app_page().await
     }
 
-    fn build_headers(
+    async fn build_headers(
+        &self,
         reqid: Option<&str>,
         waa_context: Option<&str>,
         authorization: Option<&str>,
     ) -> Vec<(String, String)> {
+        let origin = self.inner.config.read().await.base_url.clone();
         let mut headers = vec![
             (
                 "Content-Type".to_string(),
                 "application/x-www-form-urlencoded;charset=UTF-8".to_string(),
             ),
             ("User-Agent".to_string(), USER_AGENT.to_string()),
-            ("Origin".to_string(), WEB_BASE_URL.to_string()),
-            ("Referer".to_string(), format!("{WEB_BASE_URL}/")),
+            ("Origin".to_string(), origin.clone()),
+            ("Referer".to_string(), format!("{origin}/")),
             ("X-Same-Domain".to_string(), "1".to_string()),
             ("Cache-Control".to_string(), "no-cache".to_string()),
             ("Pragma".to_string(), "no-cache".to_string()),

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use gemini_sdk::{
     ChatMessage, ContentPart, Conversation, Error, GenerationConfig, GeminiClient, ImageSource,
-    ModelCategory, Tool, ToolError,
+    ModelCategory, Tool, ToolError, TurnRating,
 };
 
 #[test]
@@ -345,6 +345,140 @@ async fn generate_with_tools_round_trip() {
     // the request encoding path still validates that the method builds and
     // attempts to send a prepared request with tool declarations.
     assert!(response.is_err());
+}
+
+#[tokio::test]
+async fn conversation_action_parsers_are_exported() {
+    // Smoke test that ensures the new types are public and usable.
+    let _rating = TurnRating::Good;
+    let _action = gemini_sdk::ConversationAction::Regenerate;
+}
+
+#[tokio::test]
+async fn regenerate_turn_sends_pcck7e_payload() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/pcck7e_success.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    // Inject the session parameters that would normally come from /app so the
+    // client skips the live init flow and sends the batchexecute request.
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.regenerate_turn("conv_123", "r_abc").await;
+    assert!(result.is_ok(), "regenerate_turn failed: {:?}", result);
+    assert!(result.unwrap().success());
+}
+
+#[tokio::test]
+async fn rate_turn_sends_rating_value() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/pcck7e_success.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.rate_turn("conv_123", "r_abc", TurnRating::Good).await;
+    assert!(result.is_ok(), "rate_turn failed: {:?}", result);
+    assert!(result.unwrap().success());
+}
+
+#[tokio::test]
+async fn delete_turn_reports_failure_on_error_payload() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
+            "fixtures/pcck7e_error.txt"
+        )))
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+    )
+    .unwrap()
+    .with_base_url(&mock_uri)
+    .await
+    .with_max_retries(0)
+    .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.delete_turn("conv_123", "r_abc").await;
+    assert!(result.is_ok(), "delete_turn failed: {:?}", result);
+    assert!(!result.unwrap().success());
+}
+
+#[test]
+fn parse_conversation_action_response_handles_wrapped_array() {
+    use gemini_sdk::{ConversationAction, ConversationActionResult};
+
+    let body = " )] } ' \n\n[[[\"wrb.fr\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]]";
+    let result = ConversationActionResult::parse_response(
+        body,
+        ConversationAction::Regenerate,
+        "r_abc".to_string(),
+    );
+    assert!(result.is_ok(), "wrapped array parse failed: {:?}", result);
+    assert!(result.unwrap().success());
 }
 
 #[tokio::test]

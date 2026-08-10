@@ -71,6 +71,7 @@ pub mod errors;
 pub mod metrics;
 pub mod models;
 pub mod proto;
+pub mod conversation_actions;
 pub mod tool;
 pub mod upload;
 
@@ -86,6 +87,7 @@ pub use chat::{
     AudioSource, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, ThinkingLevel, VideoSource,
 };
+pub use conversation_actions::{ConversationAction, ConversationActionResult, TurnRating};
 pub use metrics::{MetricsRecorder, NoOpMetricsRecorder};
 #[cfg(feature = "metrics")]
 pub use metrics::OpenTelemetryRecorder;

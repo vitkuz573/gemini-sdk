@@ -13,7 +13,6 @@ use crate::proto::slots::WebAttachment;
 use crate::session::SessionState;
 
 const PUSH_UPLOAD_URL: &str = "https://push.clients6.google.com/upload/";
-const WEB_BASE_URL: &str = "https://gemini.google.com";
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 
@@ -44,9 +43,10 @@ pub(crate) async fn upload_file(
     filename: &str,
     mime_type: &str,
     bytes: Vec<u8>,
+    base_url: &str,
 ) -> Result<String> {
     let (upload_url, push_id_str, cookie_header) =
-        start_upload(client, cookies, session, filename, bytes.len()).await?;
+        start_upload(client, cookies, session, filename, bytes.len(), base_url).await?;
     finalize_upload(
         client,
         &upload_url,
@@ -54,6 +54,7 @@ pub(crate) async fn upload_file(
         &cookie_header,
         mime_type,
         bytes,
+        base_url,
     )
     .await
 }
@@ -65,6 +66,7 @@ pub(crate) async fn start_upload(
     session: &SessionState,
     filename: &str,
     total_bytes: usize,
+    base_url: &str,
 ) -> Result<(String, String, String)> {
     let cookie_header = cookies.to_header_value();
     let push_id = session.effective_push_id();
@@ -78,8 +80,8 @@ pub(crate) async fn start_upload(
         .header("x-tenant-id", "bard-storage")
         .header("push-id", &push_id_str)
         .header("Cookie", &cookie_header)
-        .header("Origin", WEB_BASE_URL)
-        .header("Referer", format!("{WEB_BASE_URL}/"))
+        .header("Origin", base_url)
+        .header("Referer", format!("{base_url}/"))
         .header("User-Agent", USER_AGENT)
         .header(
             "sec-ch-ua",
@@ -127,6 +129,7 @@ pub(crate) async fn finalize_upload(
     cookie_header: &str,
     mime_type: &str,
     bytes: Vec<u8>,
+    base_url: &str,
 ) -> Result<String> {
     let finalize_response = client
         .post(upload_url)
@@ -135,8 +138,8 @@ pub(crate) async fn finalize_upload(
         .header("x-tenant-id", "bard-storage")
         .header("push-id", push_id)
         .header("Cookie", cookie_header)
-        .header("Origin", WEB_BASE_URL)
-        .header("Referer", format!("{WEB_BASE_URL}/"))
+        .header("Origin", base_url)
+        .header("Referer", format!("{base_url}/"))
         .header("User-Agent", USER_AGENT)
         .header(
             "sec-ch-ua",
@@ -181,6 +184,7 @@ pub(crate) fn upload_progress_stream(
     filename: String,
     mime_type: String,
     bytes: Vec<u8>,
+    base_url: String,
 ) -> Pin<Box<dyn Stream<Item = Result<UploadEvent>> + Send>> {
     use async_stream::stream;
 
@@ -189,7 +193,7 @@ pub(crate) fn upload_progress_stream(
         yield Ok(UploadEvent::Progress { uploaded: 0, total });
 
         let (upload_url, push_id, cookie_header) =
-            start_upload(&client, &cookies, &session, &filename, bytes.len()).await?;
+            start_upload(&client, &cookies, &session, &filename, bytes.len(), &base_url).await?;
 
         yield Ok(UploadEvent::Progress { uploaded: 0, total });
 
@@ -200,6 +204,7 @@ pub(crate) fn upload_progress_stream(
             &cookie_header,
             &mime_type,
             bytes,
+            &base_url,
         )
         .await?;
 
@@ -241,6 +246,7 @@ pub(crate) async fn upload_attachments(
     cookies: &Cookies,
     session: &SessionState,
     prepared: &crate::chat::PreparedRequest,
+    base_url: &str,
 ) -> Result<Vec<WebAttachment>> {
     let total = prepared
         .inline_images
@@ -263,7 +269,7 @@ pub(crate) async fn upload_attachments(
         }
         let bytes = crate::proto::slots::base64_decode(data)?;
         let filename = crate::proto::slots::derive_attachment_filename(mime_type, idx);
-        let reference = upload_file(client, cookies, session, &filename, mime_type, bytes).await?;
+        let reference = upload_file(client, cookies, session, &filename, mime_type, bytes, base_url).await?;
         attachments.push(WebAttachment {
             reference,
             mime_type: mime_type.clone(),
