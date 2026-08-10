@@ -67,10 +67,10 @@
 
 ### Conversation Actions
 
-- [ ] **CONVACT-01**: SDK exposes `regenerate_turn(conversation_id, response_id)` using RPC `PCck7e`.
-- [ ] **CONVACT-02**: SDK exposes `rate_turn(conversation_id, response_id, rating)` using RPC `PCck7e`.
-- [ ] **CONVACT-03**: SDK exposes `delete_turn(conversation_id, response_id)` using RPC `PCck7e`.
-- [ ] **CONVACT-04**: Action responses are parsed into a typed `ConversationActionResult` with success/failure status.
+- [x] **CONVACT-01**: SDK exposes `regenerate_turn(conversation_id, response_id)` using RPC `PCck7e`.
+- [x] **CONVACT-02**: SDK exposes `rate_turn(conversation_id, response_id, rating)` using RPC `PCck7e`.
+- [x] **CONVACT-03**: SDK exposes `delete_turn(conversation_id, response_id)` using RPC `PCck7e`.
+- [x] **CONVACT-04**: Action responses are parsed into a typed `ConversationActionResult` with success/failure status.
 
 ### User Profile
 
@@ -132,10 +132,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONVACT-01 | Phase 7 | Pending |
-| CONVACT-02 | Phase 7 | Pending |
-| CONVACT-03 | Phase 7 | Pending |
-| CONVACT-04 | Phase 7 | Pending |
+| CONVACT-01 | Phase 7 | Complete |
+| CONVACT-02 | Phase 7 | Complete |
+| CONVACT-03 | Phase 7 | Complete |
+| CONVACT-04 | Phase 7 | Complete |
 | USER-01 | Phase 8 | Pending |
 | USER-02 | Phase 8 | Pending |
 | PREFS-01 | Phase 8 | Pending |

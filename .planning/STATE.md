@@ -41,7 +41,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 | 4 — Advanced Media & Sessions | ✓ Complete | 2/2 | 100% |
 | 5 — Tools & Auto-Refresh | ✓ Complete | 3/3 | 100% |
 | 6 — v1.0 Release | ✓ Complete | 2/2 | 100% |
-| 7 — Conversation Actions | Not started | 0/? | 0% |
+| 7 — Conversation Actions | ✓ Complete | 1/1 | 100% |
 | 8 — User Profile & Preferences | Not started | 0/? | 0% |
 | 9 — Locale & Model Config | Not started | 0/? | 0% |
 | 10 — Settings Pages | Not started | 0/? | 0% |
