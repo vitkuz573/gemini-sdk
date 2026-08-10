@@ -17,7 +17,7 @@ const WEB_BASE_URL: &str = "https://gemini.google.com";
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 
-/// Events emitted by [`GeminiClient::upload_with_progress`].
+/// Events emitted by upload progress streams.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum UploadEvent {

@@ -80,6 +80,10 @@ pub enum Error {
     /// A user-supplied hook returned an error.
     #[error("hook error: {0}")]
     Hook(String),
+
+    /// A tool-related error occurred during function calling.
+    #[error("tool error: {0}")]
+    Tool(#[from] crate::tool::ToolError),
 }
 
 impl Error {
@@ -150,5 +154,6 @@ mod tests {
         assert!(!Error::NotSignedIn("expired".to_string()).is_transient());
         assert!(!Error::AttestationFailed { reason: "waa".to_string() }.is_transient());
         assert!(!Error::api(reqwest::StatusCode::BAD_REQUEST, "client error").is_transient());
+        assert!(!Error::Tool(crate::tool::ToolError::NotFound("x".to_string())).is_transient());
     }
 }

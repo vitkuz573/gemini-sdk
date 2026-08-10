@@ -71,6 +71,7 @@ pub mod client;
 pub mod errors;
 pub mod models;
 pub mod proto;
+pub mod tool;
 pub mod upload;
 
 #[cfg(feature = "browser-attestation")]
@@ -96,4 +97,5 @@ pub use proto::{
     extract_bard_error_code, extract_text_from_parsed_response,
     extract_thinking_from_parsed_response, parse_chat_response, parse_response_parts,
 };
+pub use tool::{tool_declaration, Tool, ToolCall, ToolError, ToolResult};
 pub use upload::UploadEvent;
