@@ -4,6 +4,7 @@ use base64::Engine;
 use serde_json::{json, Value};
 
 use crate::chat::{PreparedRequest, ThinkingLevel};
+use crate::proto::indices::builder::*;
 
 /// Number of slots in the `StreamGenerate` inner request list.
 pub const SLOT_COUNT: usize = 97;
@@ -69,30 +70,31 @@ pub fn build_inner_req_list(
         None => build_fallback_base(conversation_state),
     };
 
-    inner[0] = build_slot0(&request.prompt, attachments);
-    inner[1] = json!([language]);
-    inner[3] = waa_token.map_or_else(|| Value::Null, |t| json!(t));
-    inner[4] = json!(nonce);
-    inner[7] = json!(1);
-    inner[10] = json!(1);
-    inner[11] = json!(0);
+    inner[SLOT_PROMPT] = build_slot0(&request.prompt, attachments);
+    inner[SLOT_LANGUAGE] = json!([language]);
+    inner[SLOT_WAA_TOKEN] = waa_token.map_or_else(|| Value::Null, |t| json!(t));
+    inner[SLOT_NONCE] = json!(nonce);
+    inner[SLOT_CATEGORY] = json!(1);
+    inner[SLOT_REQUEST_UUID] = json!(1);
+    inner[SLOT_FRESH_FLAG] = json!(0);
     inner[18] = json!(0);
     inner[27] = json!(1);
-    inner[30] = json!([request.category.as_enum_value()]);
-    inner[41] = json!([1]);
+    inner[SLOT_REQUEST_CATEGORY] = json!([request.category.as_enum_value()]);
+    inner[SLOT_THINKING_FLAG] = json!([1]);
     inner[53] = json!(0);
     inner[59] = json!(request_uuid);
     inner[61] = json!([]);
     inner[66] = Value::Null;
     inner[68] = json!(2);
     inner[79] = json!(3);
-    inner[80] = json!(ThinkingLevel::Standard.as_enum_value().unwrap_or(1));
+    inner[SLOT_THINKING_LEVEL] =
+        json!(ThinkingLevel::Standard.as_enum_value().unwrap_or(1));
     inner[91] = json!(0);
     // Slot 96 is 1 for a fresh conversation and 0 when continuing an existing one.
-    inner[96] = json!(if conversation_state.is_some() { 0 } else { 1 });
+    inner[SLOT_CONVERSATION_TYPE] = json!(if conversation_state.is_some() { 0 } else { 1 });
 
     if browser_payload.is_none() {
-        inner[6] = json!([1]);
+        inner[SLOT_CONTINUATION_FLAG] = json!([1]);
     }
 
     if let Some(level) = request
@@ -101,7 +103,7 @@ pub fn build_inner_req_list(
         .and_then(|c| c.thinking_level)
         .and_then(ThinkingLevel::as_enum_value)
     {
-        inner[80] = json!(level);
+        inner[SLOT_THINKING_LEVEL] = json!(level);
     }
 
     inner
@@ -119,7 +121,7 @@ fn normalize_payload(payload: &[Value]) -> Vec<Value> {
 
 fn build_fallback_base(conversation_state: Option<&ConversationState>) -> Vec<Value> {
     let mut slots = vec![Value::Null; SLOT_COUNT];
-    slots[2] = match conversation_state {
+    slots[SLOT_CONVERSATION_STATE] = match conversation_state {
         Some(state) => state.to_slot2(),
         None => Value::Array(vec![
             json!(""),
@@ -134,8 +136,8 @@ fn build_fallback_base(conversation_state: Option<&ConversationState>) -> Vec<Va
             json!(""),
         ]),
     };
-    slots[3] = Value::Null;
-    slots[4] = json!("");
+    slots[SLOT_WAA_TOKEN] = Value::Null;
+    slots[SLOT_NONCE] = json!("");
     slots[17] = if conversation_state.is_some() {
         json!([[1]])
     } else {
@@ -229,7 +231,8 @@ mod tests {
         let req = minimal_prepared();
         let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
         assert!(inner[2].is_array());
-        assert!(!inner[2].as_array().unwrap()[0].is_array());
+        let slot2 = inner[2].as_array().expect("slot 2 is an array");
+        assert!(!slot2[0].is_array());
     }
 
     #[test]

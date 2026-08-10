@@ -11,9 +11,11 @@ use rand::Rng;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+pub mod indices;
 pub mod parser;
 pub mod slots;
 
+pub use indices::*;
 pub use parser::*;
 pub use slots::*;
 

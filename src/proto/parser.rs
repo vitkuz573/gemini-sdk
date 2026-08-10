@@ -6,25 +6,11 @@ use std::collections::HashMap;
 use crate::chat::{ChatResponse, ContentPart};
 use crate::errors::{Error, Result};
 use crate::models::ModelInfo;
+use crate::proto::indices::parser::*;
 use crate::proto::slots::ConversationState;
 
 /// Re-export of [`parse_chat_response`] for the crate root.
 pub use parse_chat_response as parse_chat_response_fn;
-
-/// Index of the accumulated answer-text chunk list within a candidate part.
-///
-/// Each `StreamGenerate` candidate part carries the answer text as an array of
-/// string fragments; concatenating them yields the full reply. This mirrors the
-/// protobuf field layout of the `assistant.lamda.BardFrontendService` request.
-const PART_TEXT_INDEX: usize = 1;
-
-/// Index of the reasoning block within a candidate part.
-///
-/// When the selected model reasons, the part carries the accumulated thinking
-/// text as `[<fragments>, <structured-step-metadata>]`. Only the first element
-/// (the plain-text fragments) is needed for extraction. Parts without reasoning
-/// omit this index entirely.
-const PART_THINKING_INDEX: usize = 37;
 
 /// Text and reasoning content extracted from a single candidate part.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -37,7 +23,7 @@ struct PartContent {
 fn extract_part_content(part_arr: &[Value]) -> PartContent {
     let mut content = PartContent::default();
 
-    if let Some(chunks) = part_arr.get(PART_TEXT_INDEX).and_then(|v| v.as_array()) {
+    if let Some(chunks) = part_arr.get(PART_TEXT).and_then(|v| v.as_array()) {
         for c in chunks {
             if let Some(s) = c.as_str() {
                 if s.is_empty() || is_id_string(s) {
@@ -50,7 +36,7 @@ fn extract_part_content(part_arr: &[Value]) -> PartContent {
 
     // Reasoning block shape: [<fragments>, <structured-step-metadata>].
     if let Some(fragments) = part_arr
-        .get(PART_THINKING_INDEX)
+        .get(PART_THINKING)
         .and_then(|v| v.as_array())
         .and_then(|a| a.first())
         .and_then(|v| v.as_array())
@@ -84,7 +70,11 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
     fn find_rpc_entry(value: &Value) -> Option<&Value> {
         if let Some(arr) = value.as_array() {
             if let Some(entry) = arr.iter().find(|entry| {
-                entry.get(1).and_then(|v| v.as_str()).map(|s| s == "otAQ7b").unwrap_or(false)
+                entry
+                    .get(1)
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == "otAQ7b")
+                    .unwrap_or(false)
             }) {
                 return Some(entry);
             }
@@ -92,7 +82,11 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
             // array (extra wrapping level).
             if let Some(first) = arr.first().and_then(|v| v.as_array()) {
                 return first.iter().find(|entry| {
-                    entry.get(1).and_then(|v| v.as_str()).map(|s| s == "otAQ7b").unwrap_or(false)
+                    entry
+                        .get(1)
+                        .and_then(|v| v.as_str())
+                        .map(|s| s == "otAQ7b")
+                        .unwrap_or(false)
                 });
             }
         }
@@ -106,10 +100,15 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
     // response shape (index 2 is the canonical location for batchexecute
     // RPC replies; some responses place it at index 3).
     let payload_str = rpc_entry
-        .get(2)
+        .get(PAYLOAD)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .or_else(|| rpc_entry.get(3).and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
+        .or_else(|| {
+            rpc_entry
+                .get(PAYLOAD_ALT)
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+        })
         .ok_or_else(|| Error::parse("GetUserStatus response payload missing"))?;
 
     let inner: Value = serde_json::from_str(payload_str)
@@ -129,19 +128,36 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
             continue;
         }
 
-        let id = mode_arr.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let id = mode_arr
+            .first()
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         if id.is_empty() {
             continue;
         }
 
-        let title = mode_arr.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let description = mode_arr.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let title = mode_arr
+            .get(1)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let description = mode_arr
+            .get(2)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
         let versioned_name = mode_arr
             .get(11)
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .or_else(|| mode_arr.get(19).and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
+            .or_else(|| {
+                mode_arr
+                    .get(19)
+                    .and_then(|v| v.as_str())
+                    .filter(|s| !s.is_empty())
+            })
             .map(|s| s.to_string());
 
         let category_enum = mode_arr
@@ -227,10 +243,10 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
             Some(s) => s,
             None => continue,
         };
-        if rpc_id != "wrb.fr" {
+        if rpc_id != RPC_ID {
             continue;
         }
-        let payload_str = match entry_arr.get(2).and_then(|v| v.as_str()) {
+        let payload_str = match entry_arr.get(PAYLOAD).and_then(|v| v.as_str()) {
             Some(s) => s,
             None => continue,
         };
@@ -244,16 +260,16 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         };
 
         if payload_arr.len() == 3 {
-            if let Some(second) = payload_arr.get(1).and_then(|v| v.as_array()) {
+            if let Some(second) = payload_arr.get(CONVERSATION_IDS).and_then(|v| v.as_array()) {
                 // Meta entry shape: [null, [null, <r_id>], {"<n>": <token>, ...}]
                 // The continuation token may live at key "26" or, in newer
                 // responses, at key "21" as a single-element array.
                 if second.len() == 2 && second.get(1).and_then(|v| v.as_str()).is_some() {
                     if let Some(obj) = payload_arr.get(2).and_then(|v| v.as_object()) {
-                        if let Some(token) = obj.get("26").and_then(|v| v.as_str()) {
+                        if let Some(token) = obj.get(META_TOKEN_KEY_26).and_then(|v| v.as_str()) {
                             continuation_token = Some(token.to_string());
                         } else if let Some(token) = obj
-                            .get("21")
+                            .get(META_TOKEN_KEY_21)
                             .and_then(|v| v.as_array())
                             .and_then(|a| a.first())
                             .and_then(|v| v.as_str())
@@ -272,7 +288,7 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
                     && second.get(1).and_then(|v| v.as_str()).is_some()
                 {
                     if let Some(obj) = payload_arr.get(2).and_then(|v| v.as_object()) {
-                        if let Some(token) = obj.get("26").and_then(|v| v.as_str()) {
+                        if let Some(token) = obj.get(META_TOKEN_KEY_26).and_then(|v| v.as_str()) {
                             continuation_token = Some(token.to_string());
                         }
                     }
@@ -281,7 +297,12 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
             continue;
         }
 
-        if payload_arr.len() >= 5 && payload_arr.get(4).and_then(|v| v.as_array()).is_some() {
+        if payload_arr.len() >= MAIN_ENTRY_MIN_LEN
+            && payload_arr
+                .get(CANDIDATE_PARTS)
+                .and_then(|v| v.as_array())
+                .is_some()
+        {
             main_entry = Some(payload);
         }
     }
@@ -293,7 +314,7 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         .ok_or_else(|| Error::parse("StreamGenerate main entry is not an array"))?;
 
     let ids = main_arr
-        .get(1)
+        .get(CONVERSATION_IDS)
         .and_then(|v| v.as_array())
         .ok_or_else(|| Error::parse("StreamGenerate response missing conversation ids"))?;
     let conversation_id = ids
@@ -306,7 +327,7 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         .ok_or_else(|| Error::parse("StreamGenerate response missing response_id"))?;
 
     let parts = main_arr
-        .get(4)
+        .get(CANDIDATE_PARTS)
         .and_then(|v| v.as_array())
         .ok_or_else(|| Error::parse("StreamGenerate response missing parts array"))?;
     let first_part = parts
@@ -405,10 +426,10 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                 }
             };
             let rpc_id = entry[0].as_str().unwrap_or("");
-            if rpc_id != "wrb.fr" {
+            if rpc_id != RPC_ID {
                 continue;
             }
-            let json_str = match entry[2].as_str() {
+            let json_str = match entry[PAYLOAD].as_str() {
                 Some(s) => s,
                 None => {
                     last_error = Some("wrb.fr payload is not a string".to_string());
@@ -429,13 +450,17 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     continue;
                 }
             };
-            let parts_json = if let Some(parts) = inner_arr.get(4).and_then(|v| v.as_array()) {
+            let parts_json = if let Some(parts) = inner_arr
+                .get(CANDIDATE_PARTS)
+                .and_then(|v| v.as_array())
+            {
                 parts
             } else if let Some(first) = inner_arr.first().and_then(|v| v.as_array()) {
-                match first.get(4).and_then(|v| v.as_array()) {
+                match first.get(CANDIDATE_PARTS).and_then(|v| v.as_array()) {
                     Some(parts) => parts,
                     None => {
-                        last_error = Some("candidate parts array not found at index 4".to_string());
+                        last_error =
+                            Some("candidate parts array not found at expected index".to_string());
                         continue;
                     }
                 }
@@ -452,7 +477,11 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                         continue;
                     }
                 };
-                let id = part_arr.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let id = part_arr
+                    .get(PART_ID)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 let content = extract_part_content(part_arr);
                 if content.text.is_empty() && content.thinking.is_empty() {
                     continue;
@@ -507,7 +536,11 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
 
 /// Returns a short, redacted prefix of a response body for diagnostics.
 fn redact_body_snippet(body: &str, max_len: usize) -> String {
-    let end = body.char_indices().map(|(i, _)| i).nth(max_len).unwrap_or(body.len());
+    let end = body
+        .char_indices()
+        .map(|(i, _)| i)
+        .nth(max_len)
+        .unwrap_or(body.len());
     let snippet = &body[..end];
     // Redact values that look like cookie values or long tokens.
     let mut out = String::with_capacity(snippet.len());
@@ -579,10 +612,10 @@ fn parsed_parts_content(parsed: &Value) -> Vec<PartContent> {
         if entry.len() < 3 {
             continue;
         }
-        if entry[0].as_str() != Some("wrb.fr") {
+        if entry[0].as_str() != Some(RPC_ID) {
             continue;
         }
-        let Some(payload_str) = entry[2].as_str() else {
+        let Some(payload_str) = entry[PAYLOAD].as_str() else {
             continue;
         };
         let Ok(payload) = serde_json::from_str::<Value>(payload_str) else {
@@ -591,7 +624,7 @@ fn parsed_parts_content(parsed: &Value) -> Vec<PartContent> {
         let Some(payload_arr) = payload.as_array() else {
             continue;
         };
-        let Some(parts) = payload_arr.get(4).and_then(|v| v.as_array()) else {
+        let Some(parts) = payload_arr.get(CANDIDATE_PARTS).and_then(|v| v.as_array()) else {
             continue;
         };
 
@@ -634,14 +667,15 @@ mod tests {
     #[test]
     fn parse_simple_text_response() {
         let body = include_str!("../../tests/fixtures/chat_response_minimal.json");
-        let response = parse_chat_response(body).unwrap();
+        let response = parse_chat_response(body).expect("simple text fixture should parse");
         assert_eq!(response.text(), "Hello, world!");
     }
 
     #[test]
     fn parse_text_response_with_concatenated_strings() {
         let body = include_str!("../../tests/fixtures/chat_response_concatenated.json");
-        let response = parse_chat_response(body).unwrap();
+        let response = parse_chat_response(body)
+            .expect("concatenated text fixture should parse");
         assert_eq!(response.text(), "Hello, world!");
     }
 
@@ -669,7 +703,7 @@ mod tests {
     #[test]
     fn parse_model_list_example() {
         let body = include_str!("../../tests/fixtures/model_list_minimal.txt");
-        let models = parse_model_list(body).unwrap();
+        let models = parse_model_list(body).expect("model list fixture should parse");
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].display_name(), "Gemini 3.6 Flash");
         assert_eq!(models[0].category_enum, 1);
@@ -678,7 +712,7 @@ mod tests {
     #[test]
     fn parse_thinking_response_extracts_reasoning() {
         let body = include_str!("../../tests/fixtures/thinking_response_raw.txt");
-        let response = parse_chat_response(body).unwrap();
+        let response = parse_chat_response(body).expect("thinking fixture should parse");
 
         assert!(response.text().contains("идентичный скриншот"));
         assert!(response.thinking().contains("**Comparing Images**"));
@@ -689,7 +723,7 @@ mod tests {
     #[test]
     fn parse_thinking_stream_deduplicates_chunks() {
         let body = include_str!("../../tests/fixtures/thinking_response_raw.txt");
-        let parts = parse_response_parts(body).unwrap();
+        let parts = parse_response_parts(body).expect("thinking fixture should yield parts");
 
         let text_parts: Vec<_> = parts
             .iter()
@@ -722,10 +756,21 @@ mod tests {
     #[test]
     fn extract_part_content_reads_text_and_thinking() {
         let body = include_str!("../../tests/fixtures/thinking_single_part.json");
-        let parsed: Value = serde_json::from_str(body).unwrap();
-        let entry = parsed.as_array().and_then(|a| a.first()).and_then(|v| v.as_array()).unwrap();
-        let payload: Value = serde_json::from_str(entry[2].as_str().unwrap()).unwrap();
-        let part = payload[4][0].as_array().unwrap();
+        let parsed: Value = serde_json::from_str(body).expect("fixture is valid JSON");
+        let entry = parsed
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|v| v.as_array())
+            .expect("fixture entry is an array");
+        let payload: Value = serde_json::from_str(
+            entry[PAYLOAD]
+                .as_str()
+                .expect("fixture payload is a string"),
+        )
+        .expect("fixture payload is valid JSON");
+        let part = payload[CANDIDATE_PARTS][0]
+            .as_array()
+            .expect("fixture part is an array");
         let content = extract_part_content(part);
         assert_eq!(content.text, "hello ");
         assert_eq!(content.thinking, "think step 1");
@@ -734,10 +779,23 @@ mod tests {
     #[test]
     fn extract_part_content_skips_id_strings() {
         let body = include_str!("../../tests/fixtures/thinking_id_strings.json");
-        let parsed: Value = serde_json::from_str(body).unwrap();
-        let entry = parsed.as_array().unwrap().first().unwrap().as_array().unwrap();
-        let payload: Value = serde_json::from_str(entry[2].as_str().unwrap()).unwrap();
-        let part = payload[4][0].as_array().unwrap();
+        let parsed: Value = serde_json::from_str(body).expect("fixture is valid JSON");
+        let entry = parsed
+            .as_array()
+            .expect("fixture is an array")
+            .first()
+            .expect("fixture has at least one element")
+            .as_array()
+            .expect("fixture entry is an array");
+        let payload: Value = serde_json::from_str(
+            entry[PAYLOAD]
+                .as_str()
+                .expect("fixture payload is a string"),
+        )
+        .expect("fixture payload is valid JSON");
+        let part = payload[CANDIDATE_PARTS][0]
+            .as_array()
+            .expect("fixture part is an array");
         let content = extract_part_content(part);
         assert_eq!(content.text, "real");
         assert_eq!(content.thinking, "thought");
@@ -746,15 +804,21 @@ mod tests {
     #[test]
     fn parsed_helpers_extract_text_and_thinking() {
         let body = include_str!("../../tests/fixtures/thinking_single_part.json");
-        let parsed: Value = serde_json::from_str(body).unwrap();
-        assert_eq!(extract_text_from_parsed_response(&parsed).as_deref(), Some("hello "));
-        assert_eq!(extract_thinking_from_parsed_response(&parsed).as_deref(), Some("think step 1"));
+        let parsed: Value = serde_json::from_str(body).expect("fixture is valid JSON");
+        assert_eq!(
+            extract_text_from_parsed_response(&parsed).as_deref(),
+            Some("hello ")
+        );
+        assert_eq!(
+            extract_thinking_from_parsed_response(&parsed).as_deref(),
+            Some("think step 1")
+        );
     }
 
     #[test]
     fn parse_response_parts_keeps_longest_chunk() {
         let body = include_str!("../../tests/fixtures/thinking_dedup.txt");
-        let parts = parse_response_parts(body).unwrap();
+        let parts = parse_response_parts(body).expect("dedup fixture should yield parts");
         assert_eq!(parts.len(), 2);
         match (&parts[0], &parts[1]) {
             (ContentPart::Text(t), ContentPart::Thinking(tk)) => {
@@ -768,7 +832,8 @@ mod tests {
     #[test]
     fn parse_response_parts_handles_thinking_before_text() {
         let body = include_str!("../../tests/fixtures/thinking_before_text.txt");
-        let parts = parse_response_parts(body).unwrap();
+        let parts = parse_response_parts(body)
+            .expect("thinking-before-text fixture should yield parts");
         assert_eq!(parts.len(), 2);
         match (&parts[0], &parts[1]) {
             (ContentPart::Text(t), ContentPart::Thinking(tk)) => {
@@ -777,5 +842,15 @@ mod tests {
             }
             other => panic!("unexpected parts: {other:?}"),
         }
+    }
+
+    #[test]
+    fn malformed_response_no_panic() {
+        let body = r#"[["wrb.fr",null,"not-valid-json"]]"#;
+        let result = parse_chat_response(body);
+        assert!(
+            matches!(result, Err(Error::Parse(_))),
+            "malformed frame should return structured parse error, got {result:?}"
+        );
     }
 }

@@ -1,6 +1,7 @@
 //! Protocol-level unit/integration tests.
 
 use gemini_sdk::chat::{ContentPart, ImageSource, PreparedRequest};
+use gemini_sdk::errors::Error;
 use gemini_sdk::models::ModelCategory;
 use gemini_sdk::proto::parser::{
     extract_bard_error_code, extract_conversation_state, parse_chat_response, parse_model_list,
@@ -52,10 +53,25 @@ fn parse_model_list_from_real_fixture() {
 }
 
 #[test]
-fn parse_chat_response_extracts_text() {
+fn parse_simple_text_response() {
     let body = include_str!("fixtures/chat_response_minimal.json");
     let response = parse_chat_response(body).unwrap();
     assert_eq!(response.text(), "Hello, world!");
+}
+
+#[test]
+fn parse_concatenated_text_response() {
+    let body = include_str!("fixtures/chat_response_concatenated.json");
+    let response = parse_chat_response(body).unwrap();
+    assert_eq!(response.text(), "Hello, world!");
+}
+
+#[test]
+fn parse_thinking_response() {
+    let body = include_str!("fixtures/chat_response_thinking.json");
+    let response = parse_chat_response(body).unwrap();
+    assert_eq!(response.text(), "hello ");
+    assert_eq!(response.thinking(), "think step 1");
 }
 
 #[test]
@@ -66,15 +82,34 @@ fn parse_chat_response_detects_bard_error_1100() {
 }
 
 #[test]
+fn parse_chat_response_detects_bard_error_wrapper() {
+    let body = include_str!("fixtures/bard_error_wrapper.json");
+    let result = parse_chat_response(body);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    let message = err.to_string();
+    assert!(message.contains("BardErrorInfo"), "error should mention BardErrorInfo: {message}");
+    assert!(message.contains("1101"), "error should include the Bard error code: {message}");
+}
+
+#[test]
 fn extract_bard_error_code_parses_code() {
     let body = include_str!("fixtures/bard_error_1096.json");
     assert_eq!(extract_bard_error_code(body), Some("1096".to_string()));
 }
 
 #[test]
-fn extract_conversation_state_reads_ids_and_token() {
-    let body = include_str!("fixtures/conversation_state.json");
+fn extract_first_turn_meta_token() {
+    let body = include_str!("fixtures/conversation_state_first_turn.json");
+    let state = extract_conversation_state(body).unwrap();
+    assert_eq!(state.conversation_id, "c_abc");
+    assert_eq!(state.response_id, "r_def");
+    assert_eq!(state.continuation_token, "first_turn_token");
+}
 
+#[test]
+fn extract_continuation_token_key_21() {
+    let body = include_str!("fixtures/conversation_state_key_21.json");
     let state = extract_conversation_state(body).unwrap();
     assert_eq!(state.conversation_id, "c_abc");
     assert_eq!(state.response_id, "r_def");
@@ -82,8 +117,18 @@ fn extract_conversation_state_reads_ids_and_token() {
 }
 
 #[test]
-fn extract_conversation_state_reads_token_from_key_21() {
-    let body = include_str!("fixtures/conversation_state_key_21.json");
+fn malformed_response_no_panic() {
+    let body = r#"[["wrb.fr",null,"not-valid-json"]]"#;
+    let result = parse_chat_response(body);
+    assert!(
+        matches!(result, Err(Error::Parse(_))),
+        "malformed frame should return structured parse error, got {result:?}"
+    );
+}
+
+#[test]
+fn extract_conversation_state_reads_ids_and_token() {
+    let body = include_str!("fixtures/conversation_state.json");
 
     let state = extract_conversation_state(body).unwrap();
     assert_eq!(state.conversation_id, "c_abc");
