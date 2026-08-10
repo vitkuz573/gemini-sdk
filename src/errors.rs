@@ -57,6 +57,13 @@ pub enum Error {
     #[error("not signed in: {0}")]
     NotSignedIn(String),
 
+    /// WAA / ogads attestation initialization failed.
+    #[error("attestation failed: {reason}")]
+    AttestationFailed {
+        /// Human-readable reason for the attestation failure.
+        reason: String,
+    },
+
     /// Cookie / credentials validation failed.
     #[error("credentials error: {0}")]
     Credentials(#[from] crate::auth::CredentialsError),
@@ -137,6 +144,7 @@ mod tests {
         assert!(!Error::Parse("bad json".to_string()).is_transient());
         assert!(!Error::BadRequest("invalid".to_string()).is_transient());
         assert!(!Error::NotSignedIn("expired".to_string()).is_transient());
+        assert!(!Error::AttestationFailed { reason: "waa".to_string() }.is_transient());
         assert!(!Error::api(reqwest::StatusCode::BAD_REQUEST, "client error").is_transient());
     }
 }

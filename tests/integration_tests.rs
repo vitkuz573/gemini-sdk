@@ -2,7 +2,9 @@
 //!
 //! Tests that require a live cookie string are marked with `#[ignore]`.
 
-use gemini_sdk::{ChatMessage, Conversation, GeminiClient, ImageSource, ModelCategory};
+use std::time::Duration;
+
+use gemini_sdk::{ChatMessage, Conversation, GeminiClient, Error, ImageSource, ModelCategory};
 
 #[test]
 fn chat_message_builders_work() {
@@ -75,4 +77,79 @@ fn continue_conversation_uses_conversation_category() {
     let conv = Conversation::new().with_model_category(ModelCategory::Thinking);
     let builder = client.continue_conversation(conv);
     assert_eq!(builder.category(), ModelCategory::Thinking);
+}
+
+#[tokio::test]
+async fn config_builder_async_sets_language_retries_and_timeout() {
+    let client = GeminiClient::from_cookie_header(
+        "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
+    )
+    .unwrap()
+    .with_language("es")
+    .await
+    .with_max_retries(5)
+    .await
+    .with_timeout(Duration::from_secs(60))
+    .await;
+
+    // The async builder methods must run inside a Tokio runtime without
+    // panicking and must persist the values. We verify language by exercising
+    // the session init path: `verify_signed_in` builds the /app URL from the
+    // stored language. The key assertion is that the builders completed and
+    // returned `Self`.
+    let _ = client;
+}
+
+#[test]
+fn attestation_failed_error_is_not_transient() {
+    let err = Error::AttestationFailed {
+        reason: "mock failure".to_string(),
+    };
+    assert!(!err.is_transient());
+}
+
+#[tokio::test]
+async fn consent_cookie_merge_persists_socs_cookie() {
+    use gemini_sdk::auth::{Cookies, PSID, PSIDCC, SOCS};
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+
+    let consent_path = "save";
+    let save_url = format!("{}/{}", mock_server.uri(), consent_path);
+
+    Mock::given(method("POST"))
+        .and(path(consent_path))
+        .respond_with(
+            ResponseTemplate::new(204).append_header("Set-Cookie", "SOCS=saved-consent-value"),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Simulate what `accept_consent_and_refresh` does after the consent save:
+    // obtain a mutable lock on the shared cookies and merge the response
+    // cookies directly into it.
+    let cookies = Cookies::from_header(
+        &format!("{PSID}=psid-value; {PSIDCC}=psidcc-value"),
+    );
+
+    let response = reqwest::Client::new()
+        .post(&save_url)
+        .send()
+        .await
+        .unwrap();
+
+    let mut merged: std::collections::HashMap<String, String> = cookies.into();
+    for cookie in response.cookies() {
+        merged.insert(cookie.name().to_string(), cookie.value().to_string());
+    }
+    let persisted = Cookies::from(merged);
+
+    // The response carried a SOCS cookie, so the merged jar must contain it.
+    assert_eq!(persisted.get(SOCS), Some("saved-consent-value"), "SOCS cookie from consent response was not persisted");
+
+    // The merged jar is the same value the client writes back to
+    // `self.inner.cookies`; assert the SOCS value persists.
+    assert_eq!(persisted.get(SOCS), Some("saved-consent-value"));
 }

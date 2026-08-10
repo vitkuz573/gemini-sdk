@@ -6,10 +6,8 @@ use std::time::Duration;
 
 use reqwest::Client;
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::debug;
-
-use std::sync::Mutex as StdMutex;
 
 use crate::auth::{Cookies, Credentials, CredentialsProvider};
 use crate::chat::{
@@ -56,7 +54,7 @@ struct Inner {
     http: Client,
     cookies: Mutex<Cookies>,
     session: Mutex<SessionState>,
-    config: StdMutex<ClientConfig>,
+    config: RwLock<ClientConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -137,36 +135,28 @@ impl GeminiClient {
     }
 
     /// Sets the language code sent to the Gemini frontend.
-    pub fn with_language(self, language: impl Into<String>) -> Self {
+    pub async fn with_language(self, language: impl Into<String>) -> Self {
         let language = language.into();
-        self.update_config_blocking(|config| {
-            config.language.clone_from(&language);
-        });
+        let mut config = self.inner.config.write().await;
+        config.language.clone_from(&language);
+        drop(config);
         self
     }
 
     /// Sets the maximum number of retries for transient failures.
-    pub fn with_max_retries(self, max_retries: usize) -> Self {
-        self.update_config_blocking(|config| config.max_retries = max_retries);
+    pub async fn with_max_retries(self, max_retries: usize) -> Self {
+        let mut config = self.inner.config.write().await;
+        config.max_retries = max_retries;
+        drop(config);
         self
     }
 
     /// Sets the request timeout.
-    pub fn with_timeout(self, timeout: Duration) -> Self {
-        self.update_config_blocking(|config| config.timeout = timeout);
+    pub async fn with_timeout(self, timeout: Duration) -> Self {
+        let mut config = self.inner.config.write().await;
+        config.timeout = timeout;
+        drop(config);
         self
-    }
-
-    fn update_config_blocking<F>(&self, f: F)
-    where
-        F: FnOnce(&mut ClientConfig),
-    {
-        let mut config = self
-            .inner
-            .config
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        f(&mut config);
     }
 
     /// Returns a clone of the cookies used by this client.
@@ -191,7 +181,7 @@ impl GeminiClient {
                 http,
                 cookies: Mutex::new(cookies),
                 session: Mutex::new(session),
-                config: StdMutex::new(config),
+                config: RwLock::new(config),
             }),
         })
     }
@@ -531,11 +521,9 @@ impl GeminiClient {
             session.push_id = extracted.push_id.or_else(|| session.push_id.clone());
         }
 
-        // Run the WAA / warm-up chain. Individual failures are logged but do not
-        // block the session: the server may still accept the request.
-        if let Err(e) = self.run_waa_init_chain().await {
-            debug!(error = %e, "WAA init chain failed; continuing without WAA token");
-        }
+        // Run the WAA / warm-up chain. Failures are now surfaced so callers can
+        // decide whether to proceed without attestation context.
+        self.run_waa_init_chain().await?;
 
         Ok(())
     }
@@ -543,7 +531,9 @@ impl GeminiClient {
     /// Performs the warm-up/WAA RPC chain captured from the Gemini frontend.
     ///
     /// Stores the resulting WAA token and `x-goog-ext-525001261-jspb` context in
-    /// the session state.
+    /// the session state. Failures from the WAA `Create` and ogads
+    /// `GetAsyncData` steps are surfaced as [`Error::AttestationFailed`]
+    /// instead of being silently replaced with a synthetic context.
     async fn run_waa_init_chain(&self) -> Result<()> {
         let (at, language, build_label, session_id, cookie_header, credentials) = {
             let (cookie_header, credentials) = {
@@ -590,16 +580,19 @@ impl GeminiClient {
             .await?;
 
         // 3. WAA Create.
-        let waa_token = self
-            .waa_create(&cookie_header)
-            .await
-            .map_err(|e| Error::Transient(format!("WAA Create failed: {e}")))?;
+        let waa_token = self.waa_create(&cookie_header).await.map_err(|e| {
+            Error::AttestationFailed {
+                reason: format!("WAA Create failed: {e}"),
+            }
+        })?;
 
         // 4. ogads GetAsyncData.
         let waa_context = self
             .ogads_get_async_data(&cookie_header, &credentials, &waa_token)
             .await
-            .unwrap_or_else(|_| build_default_waa_context());
+            .map_err(|e| Error::AttestationFailed {
+                reason: format!("ogads GetAsyncData failed: {e}"),
+            })?;
 
         // 5. ESY5D feature flags.
         let _ = self
@@ -788,7 +781,7 @@ impl GeminiClient {
     async fn accept_consent_and_refresh(&self, save_url: &str) -> Result<String> {
         let cookie_header = self.cookies().await.to_header_value();
 
-        let language = self.inner.config.lock().unwrap_or_else(|e| e.into_inner()).language.clone();
+        let language = self.inner.config.read().await.language.clone();
         let response = self
             .inner
             .http
@@ -810,10 +803,8 @@ impl GeminiClient {
         }
 
         {
-            let mut cookies = self.cookies().await;
-            cookies.merge_response_cookies(response.cookies());
             let mut guard = self.inner.cookies.lock().await;
-            *guard = cookies;
+            guard.merge_response_cookies(response.cookies());
         }
 
         self.fetch_app_page().await

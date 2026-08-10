@@ -424,18 +424,6 @@ impl Cookies {
     }
 }
 
-impl From<HashMap<String, String>> for Cookies {
-    fn from(map: HashMap<String, String>) -> Self {
-        Self { inner: map }
-    }
-}
-
-impl From<Cookies> for HashMap<String, String> {
-    fn from(cookies: Cookies) -> Self {
-        cookies.inner
-    }
-}
-
 impl Extend<(String, String)> for Cookies {
     fn extend<T: IntoIterator<Item = (String, String)>>(&mut self, iter: T) {
         self.inner.extend(iter);
@@ -482,6 +470,18 @@ impl From<Credentials> for Cookies {
         }
         cookies.extend(value.extra);
         cookies
+    }
+}
+
+impl From<HashMap<String, String>> for Cookies {
+    fn from(map: HashMap<String, String>) -> Self {
+        Self { inner: map }
+    }
+}
+
+impl From<Cookies> for HashMap<String, String> {
+    fn from(cookies: Cookies) -> Self {
+        cookies.inner
     }
 }
 
