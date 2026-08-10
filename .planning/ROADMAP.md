@@ -250,14 +250,38 @@
 
 ---
 
+## Phase 12: Live Testing & Backend Resilience
+
+**Goal:** Make the SDK resilient to live Google backend flakiness by detecting cookie rejection, retrying a documented transient WIZ 400 pattern, adding redacted HAR capture, and shipping a live probe plus expanded real-cookie integration tests.
+
+**Requirements:** RESIL-01, RESIL-02, RESIL-03, RESIL-04, TOOL-06, TOOL-07
+
+**Key outcomes:**
+
+- `Error::NotSignedIn` is returned when `/app` does not contain signed-in markers.
+- A transient `batchexecute` WIZ 400 (`er` + `di` + `af.httprm`) triggers bounded exponential-backoff retries.
+- Optional HAR capture writes W3C 1.2 entries with cookies, Authorization, and `x-goog-ext-*` values redacted.
+- `examples/live_probe.rs` exercises all v0.2 APIs plus base chat/list_models and emits a JSON telemetry report.
+- `tests/real_cookies.rs` covers all v0.2 APIs and skips gracefully without env cookies.
+
+**Mode:** standard
+**Depends on:** Phase 11
+**Estimated waves:** 1
+
+**Plans:**
+
+- [x] 12-01-PLAN.md — Live Testing & Backend Resilience
+
+---
+
 ## Milestones
 
 | Milestone | Phases | Target | Definition of Done |
 |-----------|--------|--------|--------------------|
 | v0.1 Core | 1-6 | Shipped 2026-08-10 | `cargo test`, `cargo clippy`, `cargo doc` pass; API stable enough for external users; crate published. |
-| v0.2 API Expansion | 7-11 | In progress | All 9 undocumented `batchexecute` RPCs exposed as typed public APIs; `x-client-data` drift fixed; quality gates green. |
+| v0.2 API Expansion | 7-12 | In progress | All 9 undocumented `batchexecute` RPCs exposed as typed public APIs; live-testing and resilience probes added; quality gates green. |
 | v1.0 | TBD | TBD | Semver-stable API published. |
 
 ---
 
-*Last updated: 2026-08-10 after v0.2 roadmap created*
+*Last updated: 2026-08-10 after Phase 12 plan execution*

@@ -106,6 +106,13 @@
 - [x] **TOOL-06**: Each new RPC has a mocked fixture test using a captured or synthetic response.
 - [x] **TOOL-07**: `cargo test`, `cargo clippy`, and `cargo doc` pass after all additions.
 
+### Live Testing & Backend Resilience
+
+- [x] **RESIL-01**: SDK detects stale/rejected cookies and surfaces `Error::NotSignedIn` instead of generic `Api 400`.
+- [x] **RESIL-02**: SDK retries batchexecute RPCs when the response body matches the transient WIZ 400 pattern (`er` + `di` + `af.httprm`).
+- [x] **RESIL-03**: SDK supports optional HAR capture for request/response auditing with cookie/auth redaction.
+- [x] **RESIL-04**: `examples/live_probe.rs` exercises all v0.2 APIs plus base chat/list_models and writes a JSON telemetry report.
+
 ## Future
 
 - **AUTH-V2-01**: OAuth / refresh-token flow as an alternative to cookie strings.
@@ -152,11 +159,15 @@
 | DRIFT-01 | Phase 11 | Complete |
 | TOOL-06 | Phase 11 | Complete |
 | TOOL-07 | Phase 11 | Complete |
+| RESIL-01 | Phase 12 | Complete |
+| RESIL-02 | Phase 12 | Complete |
+| RESIL-03 | Phase 12 | Complete |
+| RESIL-04 | Phase 12 | Complete |
 
 **Coverage:**
 
-- v0.2 requirements: 20 total
-- Mapped to phases: 20
+- v0.2 requirements: 24 total
+- Mapped to phases: 24
 - Unmapped: 0 ✓
 
 ---
