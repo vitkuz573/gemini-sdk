@@ -171,20 +171,28 @@ async fn main() {
     // Independent calls.
     run_named_call(&client, &state, "verify_signed_in", || async {
         match client.diagnose_signed_in().await {
-            Ok(diag) if diag.signed_in => ProbeResult::ok(),
             Ok(diag) => {
-                let report = AppDiagnosticsReport {
-                    signed_in: diag.signed_in,
-                    gaia_id: diag.gaia_id,
-                    email: diag.email,
-                    failure_reason: diag.failure_reason,
-                    missing_legacy_cookies: diag
-                        .missing_legacy_cookies
-                        .into_iter()
-                        .map(std::string::ToString::to_string)
-                        .collect(),
-                };
-                ProbeResult::err_with_diagnostics("not signed in", Some(report))
+                let refreshed = client.cookies().await.len();
+                println!(
+                    "verify_signed_in: signed_in={}, cookies_after={}",
+                    diag.signed_in, refreshed
+                );
+                if diag.signed_in {
+                    ProbeResult::ok()
+                } else {
+                    let report = AppDiagnosticsReport {
+                        signed_in: diag.signed_in,
+                        gaia_id: diag.gaia_id,
+                        email: diag.email,
+                        failure_reason: diag.failure_reason,
+                        missing_legacy_cookies: diag
+                            .missing_legacy_cookies
+                            .into_iter()
+                            .map(std::string::ToString::to_string)
+                            .collect(),
+                    };
+                    ProbeResult::err_with_diagnostics("not signed in", Some(report))
+                }
             }
             Err(e) => ProbeResult::err(e),
         }

@@ -93,6 +93,34 @@ All verification gates re-passed after the hotfix:
 `cargo test`, `cargo clippy --all-targets -- -D warnings`,
 `cargo doc --no-deps`, `cargo build --example live_probe`.
 
+## Cookie-Jar Refresh Follow-Up
+
+The SDK now enables reqwest's built-in cookie store and merges refreshed
+`Set-Cookie` values back into stored `Credentials` after every `/app` and
+batchexecute response. This means `save_session()` captures an up-to-date jar
+and subsequent clients restored from the snapshot use the latest cookies. The
+initial `/app` request still explicitly sends the user-provided `Cookie` header
+on top of whatever the store adds.
+
+Changes for this follow-up:
+
+- `src/client.rs` — `cookie_store(true)` on the inner `reqwest::Client`;
+  `merge_response_cookies` helper; `Set-Cookie` merging in `fetch_app_page`,
+  `accept_consent_and_refresh`, and `send_batchexecute_with_retry`; public
+  `GeminiClient::cookies()` accessor.
+- `src/auth.rs` — `Cookies::merge_response_cookie_pairs` for owned name/value
+  pairs; `Cookies::len`/`is_empty` accessors.
+- `examples/live_probe.rs` — prints refreshed cookie count after
+  `diagnose_signed_in`.
+- `tests/real_cookies.rs` — asserts that after successful
+  `diagnose_signed_in`, the refreshed jar still contains the originally
+  supplied cookie names; documents cookie refresh behavior.
+
+Despite this mechanism, the live cookies currently supplied to the test
+environment remain invalid for Gemini signed-in detection. The cookie-jar
+refresh is production-ready behavior, but it cannot compensate for stale or
+insufficient credentials.
+
 ## Threat Flags
 
 No new security-relevant surface beyond the plan's threat model.

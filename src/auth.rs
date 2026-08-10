@@ -324,21 +324,25 @@ impl Credentials {
         for cookie in cookies {
             let name = cookie.name().to_string();
             let value = cookie.value().to_string();
-            match name.as_str() {
-                PSID => self.psid = value,
-                PSIDCC => self.psidcc = value,
-                PSIDTS => self.psidts = Some(value),
-                PAPISID => self.papisid = Some(value),
-                P3PAPISID => self.p3papisid = Some(value),
-                SAPISID => self.sapisid = Some(value),
-                APISID => self.apisid = Some(value),
-                SOCS => self.socs = Some(value),
-                SIDCC => self.sidcc = Some(value),
-                SECURE_ENID => self.secure_enid = Some(value),
-                NID => self.nid = Some(value),
-                _ => {
-                    self.extra.insert(name, value);
-                }
+            self.set_cookie_value(name, value);
+        }
+    }
+
+    fn set_cookie_value(&mut self, name: String, value: String) {
+        match name.as_str() {
+            PSID => self.psid = value,
+            PSIDCC => self.psidcc = value,
+            PSIDTS => self.psidts = Some(value),
+            PAPISID => self.papisid = Some(value),
+            P3PAPISID => self.p3papisid = Some(value),
+            SAPISID => self.sapisid = Some(value),
+            APISID => self.apisid = Some(value),
+            SOCS => self.socs = Some(value),
+            SIDCC => self.sidcc = Some(value),
+            SECURE_ENID => self.secure_enid = Some(value),
+            NID => self.nid = Some(value),
+            _ => {
+                self.extra.insert(name, value);
             }
         }
     }
@@ -500,6 +504,18 @@ impl Cookies {
         self.inner.remove(name)
     }
 
+    /// Returns the number of cookies in the jar.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Returns `true` if the jar contains no cookies.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     /// Returns `true` if the jar contains the minimum signed-in cookies.
     #[must_use]
     pub fn is_signed_in(&self) -> bool {
@@ -523,7 +539,16 @@ impl Cookies {
         cookies: impl Iterator<Item = reqwest::cookie::Cookie<'a>>,
     ) {
         for cookie in cookies {
-            self.inner.insert(cookie.name().to_string(), cookie.value().to_string());
+            self.inner
+                .insert(cookie.name().to_string(), cookie.value().to_string());
+        }
+    }
+
+    /// Merges cookies from owned name/value pairs (useful when the source
+    /// `reqwest::cookie::Cookie` cannot outlive the borrow).
+    pub(crate) fn merge_response_cookie_pairs(&mut self, cookies: impl Iterator<Item = (String, String)>) {
+        for (name, value) in cookies {
+            self.inner.insert(name, value);
         }
     }
 }

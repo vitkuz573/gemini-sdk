@@ -22,6 +22,15 @@
 //! - `__Secure-ENID`
 //! - `NID`
 //! - `SOCS`
+//!
+//! # Cookie refresh
+//!
+//! The SDK enables reqwest's cookie store and merges `Set-Cookie` headers from
+//! `/app` and batchexecute responses back into `Credentials`. After successful
+//! sign-in verification the stored cookies should include at least the names
+//! originally provided, and may include additional refreshed values such as
+//! `__Secure-1PSIDCC`, `__Secure-3PSIDCC`, `__Secure-3PSID`, `__Secure-3PSIDTS`,
+//! `__Secure-ENID`, and `COMPASS`.
 
 use std::path::PathBuf;
 
@@ -41,6 +50,22 @@ fn cookies() -> Option<String> {
     std::env::var("GEMINI_COOKIES").ok().filter(|s| !s.is_empty())
 }
 
+/// Returns the cookie names present in the supplied header.
+fn supplied_cookie_names(header: &str) -> Vec<String> {
+    header
+        .split(';')
+        .filter_map(|pair| {
+            let name = pair.trim().split('=').next()?;
+            let name = name.trim();
+            if name.is_empty() {
+                None
+            } else {
+                Some(name.to_string())
+            }
+        })
+        .collect()
+}
+
 fn push_id() -> Option<String> {
     std::env::var("GEMINI_PUSH_ID").ok().filter(|s| !s.is_empty())
 }
@@ -52,6 +77,7 @@ async fn list_models_works() {
         return;
     };
 
+    let supplied_names = supplied_cookie_names(&cookies);
     let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
     let diag = client.diagnose_signed_in().await.expect("diagnose_signed_in should succeed");
     assert!(
@@ -59,6 +85,17 @@ async fn list_models_works() {
         "not signed in: {diag:?}; missing legacy cookies may include {:?}",
         diag.missing_legacy_cookies
     );
+
+    // The cookie jar should have merged refreshed cookies; ensure the original
+    // cookie names are still present.
+    let refreshed = client.cookies().await;
+    for name in &supplied_names {
+        assert!(
+            refreshed.get(name).is_some(),
+            "expected refreshed cookies to still contain {name}"
+        );
+    }
+
     let models = client.list_models().await.expect("list_models should succeed");
     assert!(!models.is_empty(), "expected at least one model");
     for model in &models {

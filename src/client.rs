@@ -419,7 +419,7 @@ impl GeminiClient {
     }
 
     /// Returns a clone of the cookies used by this client.
-    async fn cookies(&self) -> Cookies {
+    pub async fn cookies(&self) -> Cookies {
         self.inner.cookies.lock().await.clone()
     }
 
@@ -460,6 +460,7 @@ impl GeminiClient {
             .pool_max_idle_per_host(20)
             .connect_timeout(Duration::from_secs(10))
             .timeout(config.timeout)
+            .cookie_store(true)
             .build()
             .map_err(|e| Error::Config(format!("failed to build HTTP client: {e}")))?;
 
@@ -2413,7 +2414,13 @@ impl GeminiClient {
 
         let status = response.status();
         let response_headers = response.headers().clone();
+        let cookies: Vec<(String, String)> = response
+            .cookies()
+            .map(|c| (c.name().to_string(), c.value().to_string()))
+            .collect();
         let text = response.text().await.map_err(Error::Request)?;
+
+        self.merge_response_cookies_owned(cookies.into_iter()).await;
 
         self.maybe_record_har(
             "GET",
@@ -2502,10 +2509,7 @@ impl GeminiClient {
             return Err(Error::api(status, text));
         }
 
-        {
-            let mut guard = self.inner.cookies.lock().await;
-            guard.merge_response_cookies(response.cookies());
-        }
+        self.merge_response_cookies(response.cookies()).await;
 
         self.fetch_app_page().await
     }
@@ -2555,6 +2559,24 @@ impl GeminiClient {
         headers
     }
 
+    async fn merge_response_cookies<'a>(
+        &self,
+        cookies: impl Iterator<Item = reqwest::cookie::Cookie<'a>>,
+    ) {
+        let owned: Vec<(String, String)> = cookies
+            .map(|c| (c.name().to_string(), c.value().to_string()))
+            .collect();
+        self.merge_response_cookies_owned(owned.into_iter()).await;
+    }
+
+    async fn merge_response_cookies_owned(
+        &self,
+        cookies: impl Iterator<Item = (String, String)>,
+    ) {
+        let mut guard = self.inner.cookies.lock().await;
+        guard.merge_response_cookie_pairs(cookies);
+    }
+
     async fn send_with_retry<F, Fut>(&self, operation: F) -> Result<reqwest::Response>
     where
         F: Fn() -> Fut,
@@ -2568,7 +2590,8 @@ impl GeminiClient {
     ///
     /// The closure must return a fresh request each call. The helper reads the
     /// status and body eagerly so it can reclassify transient 400s before the
-    /// retry loop commits them as permanent.
+    /// retry loop commits them as permanent. Any `Set-Cookie` headers received
+    /// on the final response are merged back into the stored credentials.
     async fn send_batchexecute_with_retry<F, Fut>(&self, operation: F) -> Result<ResponseWithBody>
     where
         F: Fn() -> Fut,
@@ -2584,6 +2607,10 @@ impl GeminiClient {
                     Ok(response) => {
                         let status = response.status();
                         let headers = response.headers().clone();
+                        let cookies: Vec<(String, String)> = response
+                            .cookies()
+                            .map(|c| (c.name().to_string(), c.value().to_string()))
+                            .collect();
                         let body = response.text().await.unwrap_or_default();
                         if status == StatusCode::BAD_REQUEST && is_wiz_transient_400(status, &body)
                         {
@@ -2592,7 +2619,12 @@ impl GeminiClient {
                                 "Google rejected batchexecute with WIZ error frames",
                             ))
                         } else {
-                            Ok(ResponseWithBody { status, headers, body })
+                            Ok(ResponseWithBody {
+                                status,
+                                headers,
+                                cookies,
+                                body,
+                            })
                         }
                     }
                     Err(err) => Err(crate::Error::Request(err)),
@@ -2605,6 +2637,11 @@ impl GeminiClient {
             if let Some(recorder) = self.inner.config.read().await.metrics_recorder.clone() {
                 recorder.increment_counter("gemini_sdk.retries", &[("operation", "batchexecute")]);
             }
+        }
+
+        if let Ok(ref response) = result {
+            let mut guard = self.inner.cookies.lock().await;
+            guard.merge_response_cookie_pairs(response.cookies.clone().into_iter());
         }
 
         result
@@ -2653,6 +2690,7 @@ impl GeminiClient {
 struct ResponseWithBody {
     status: reqwest::StatusCode,
     headers: reqwest::header::HeaderMap,
+    cookies: Vec<(String, String)>,
     body: String,
 }
 
