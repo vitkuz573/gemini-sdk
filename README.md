@@ -10,15 +10,24 @@ Google Gemini / Bard web frontend (`gemini.google.com`).
 ## Features
 
 - Cookie-based authentication using browser cookies.
-- Text-only and image (inline data) chat completions.
+- Pluggable async `CredentialsProvider` for env/file/keyring auth sources.
+- Text-only and image/audio/video (inline data / URL) chat completions.
 - Streaming and non-streaming response handling.
 - Model reasoning / thinking content extraction (`ChatResponse::thinking()`).
 - Multi-turn conversation state.
 - Model listing via `batchexecute` (`GetUserStatus` / `Fd0Qje`).
-- File upload to `push.clients6.google.com`.
+- File upload to `push.clients6.google.com` with progress events
+  (`UploadEvent`).
 - Optional browser attestation using headless Chrome CDP (`browser-attestation`
   feature).
 - Consent / `SOCS` cookie auto-acquisition.
+- Request/response `HttpHook` for custom observability.
+- `tracing` spans on public operations (secrets are never logged).
+- Injectable `reqwest::Client` for custom timeouts, middleware, or connection
+  pooling.
+- Function calling / tools via the `Tool` trait and `generate_with_tools`.
+- Feature-gated metrics facade (`metrics` feature) with OpenTelemetry support.
+- Session save/restore (`Snapshot`) and conversation save/restore.
 - Proper error types, retry logic with exponential backoff, and rate-limit
   handling.
 - Comprehensive unit and integration tests.
@@ -53,11 +62,14 @@ use gemini_sdk::{GeminiClient, ModelCategory};
 #[tokio::main]
 async fn main() -> gemini_sdk::Result<()> {
     let cookies = "__Secure-1PSID=...; __Secure-1PSIDCC=...";
-    let client = GeminiClient::from_cookie_header(cookies)
-        .await?
-        .with_category(ModelCategory::Auto);
+    let client = GeminiClient::from_cookie_header(cookies)?;
 
-    let response = client.chat().send_message("What is Rust?").await?;
+    let response = client
+        .chat()
+        .with_category(ModelCategory::Auto)
+        .send_message("What is Rust?")
+        .await?;
+
     println!("{}", response.text());
 
     Ok(())
@@ -109,16 +121,26 @@ Public types that are expected to grow over time are marked with
 `#[non_exhaustive]` and their fields are kept private; use the provided
 constructors and accessor methods to remain compatible with future releases.
 
+See [`docs/migration-v0-to-v1.md`](docs/migration-v0-to-v1.md) for the current
+breaking changes on the path to v1.0.
+
 ## Development
 
 ```bash
-cargo check
-cargo test
-cargo clippy --all-targets
-cargo doc --no-deps
+cargo fmt --check
+cargo test --all-targets --all-features
+cargo clippy --all-targets --all-features -- -D warnings
+cargo doc --no-deps --all-features
+cargo publish --dry-run --all-features
 ```
 
 Integration tests that require live cookies are marked with `#[ignore]`.
+
+### MSRV policy
+
+The Minimum Supported Rust Version is **1.80**, declared in `Cargo.toml` as
+`rust-version`. MSRV is only raised in minor 0.x or major releases, never in
+patch releases.
 
 ## License
 
