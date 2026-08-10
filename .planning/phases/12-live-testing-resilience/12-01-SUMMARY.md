@@ -3,11 +3,11 @@ phase: 12-live-testing-resilience
 plan: 01
 subsystem: resilience
 status: complete
-tags: [resilience, har, retry, live-testing, cookies]
+tags: [resilience, har, retry, live-testing, cookies, hotfix]
 dependency_graph:
   requires: [11-01]
   provides: [RESIL-01, RESIL-02, RESIL-03, RESIL-04, TOOL-06, TOOL-07]
-  affects: [src/client.rs, src/errors.rs, src/session.rs, src/retry.rs, src/har.rs, src/transient_400.rs, src/chat.rs, src/lib.rs, examples/live_probe.rs, tests/real_cookies.rs, Cargo.toml]
+  affects: [src/auth.rs, src/client.rs, src/errors.rs, src/session.rs, src/retry.rs, src/har.rs, src/transient_400.rs, src/chat.rs, src/lib.rs, examples/live_probe.rs, tests/real_cookies.rs, README.md, Cargo.toml]
 tech_stack:
   added: [humantime, tempfile]
   patterns: [W3C HAR 1.2, exponential backoff, cookie redaction, synthetic transient errors]
@@ -73,6 +73,26 @@ Added transient WIZ 400 detection, bounded batchexecute retries, opt-in redacted
 
 None — plan executed exactly as written.
 
+## Post-Summary Hotfix
+
+A live cookie probe revealed that the minimal secure cookie set is insufficient
+for Gemini signed-in detection. Hotfix commit `78a2271` (applied after the
+original plan completion) adds:
+
+- Explicit preservation of legacy/account cookies in `Credentials`:
+  `__Secure-3PAPISID`, `SIDCC`, `__Secure-ENID`, `NID`.
+- `Credentials::missing_legacy_cookies()` diagnostics.
+- `session::diagnose_signed_in_html()` with `SignedInFailure` reasons.
+- `GeminiClient::diagnose_signed_in()` and `AppDiagnostics`.
+- Missing-cookie hints in `Error::NotSignedIn` messages.
+- `/app` diagnostics in `examples/live_probe.rs` JSON report.
+- Updated `tests/real_cookies.rs` and `README.md` with the full required cookie
+  set.
+
+All verification gates re-passed after the hotfix:
+`cargo test`, `cargo clippy --all-targets -- -D warnings`,
+`cargo doc --no-deps`, `cargo build --example live_probe`.
+
 ## Threat Flags
 
 No new security-relevant surface beyond the plan's threat model.
@@ -80,5 +100,5 @@ No new security-relevant surface beyond the plan's threat model.
 ## Self-Check
 
 - [x] Created files exist on disk.
-- [x] Commits `d0c7c8e` and `2187f0a` exist in history.
+- [x] Commits `d0c7c8e`, `2187f0a`, and `78a2271` exist in history.
 - [x] All quality gates pass.
