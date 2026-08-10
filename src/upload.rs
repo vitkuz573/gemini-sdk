@@ -3,6 +3,10 @@
 //! Inline images are uploaded to `push.clients6.google.com` using the same
 //! two-step resumable upload flow that the Gemini web UI uses.
 
+use std::pin::Pin;
+
+use futures::Stream;
+
 use crate::auth::Cookies;
 use crate::errors::{Error, Result};
 use crate::proto::slots::WebAttachment;
@@ -13,7 +17,26 @@ const WEB_BASE_URL: &str = "https://gemini.google.com";
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 
+/// Events emitted by [`GeminiClient::upload_with_progress`].
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub enum UploadEvent {
+    /// Upload progress: bytes sent so far and total size if known.
+    Progress {
+        /// Bytes uploaded so far.
+        uploaded: u64,
+        /// Total bytes to upload, if known.
+        total: Option<u64>,
+    },
+    /// Upload completed successfully.
+    Complete {
+        /// The attachment descriptor returned by the server.
+        attachment: WebAttachment,
+    },
+}
+
 /// Uploads a file to Google's resumable upload endpoint.
+#[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.upload_file", bytes = bytes.len()))]
 pub(crate) async fn upload_file(
     client: &reqwest::Client,
     cookies: &Cookies,
@@ -22,18 +45,38 @@ pub(crate) async fn upload_file(
     mime_type: &str,
     bytes: Vec<u8>,
 ) -> Result<String> {
+    let (upload_url, push_id_str, cookie_header) =
+        start_upload(client, cookies, session, filename, bytes.len()).await?;
+    finalize_upload(
+        client,
+        &upload_url,
+        &push_id_str,
+        &cookie_header,
+        mime_type,
+        bytes,
+    )
+    .await
+}
+
+/// Initiates a resumable upload and returns the upload URL, push id, and cookie header.
+pub(crate) async fn start_upload(
+    client: &reqwest::Client,
+    cookies: &Cookies,
+    session: &SessionState,
+    filename: &str,
+    total_bytes: usize,
+) -> Result<(String, String, String)> {
     let cookie_header = cookies.to_header_value();
     let push_id = session.effective_push_id();
-    let push_id_str = push_id.as_str();
+    let push_id_str = push_id;
 
-    // Step 1: initiate the resumable upload.
     let start_response = client
         .post(PUSH_UPLOAD_URL)
         .header("x-goog-upload-command", "start")
-        .header("x-goog-upload-header-content-length", bytes.len().to_string())
+        .header("x-goog-upload-header-content-length", total_bytes.to_string())
         .header("x-goog-upload-protocol", "resumable")
         .header("x-tenant-id", "bard-storage")
-        .header("push-id", push_id_str)
+        .header("push-id", &push_id_str)
         .header("Cookie", &cookie_header)
         .header("Origin", WEB_BASE_URL)
         .header("Referer", format!("{WEB_BASE_URL}/"))
@@ -62,9 +105,10 @@ pub(crate) async fn upload_file(
         .headers()
         .get("x-goog-upload-url")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| Error::parse("file upload start response missing X-Goog-Upload-URL"))?;
+        .ok_or_else(|| Error::parse("file upload start response missing X-Goog-Upload-URL"))?
+        .to_string();
 
-    let parsed = reqwest::Url::parse(upload_url)
+    let parsed = reqwest::Url::parse(&upload_url)
         .map_err(|e| Error::parse(format!("invalid upload URL: {e}")))?;
     if parsed.scheme() != "https"
         || !matches!(parsed.host_str(), Some(host) if host.ends_with(".google.com"))
@@ -72,14 +116,25 @@ pub(crate) async fn upload_file(
         return Err(Error::parse("upload URL has untrusted origin"));
     }
 
-    // Step 2: upload the bytes and finalize.
+    Ok((upload_url, push_id_str, cookie_header))
+}
+
+/// Uploads the bytes and finalizes a resumable upload, returning the attachment reference.
+pub(crate) async fn finalize_upload(
+    client: &reqwest::Client,
+    upload_url: &str,
+    push_id: &str,
+    cookie_header: &str,
+    mime_type: &str,
+    bytes: Vec<u8>,
+) -> Result<String> {
     let finalize_response = client
         .post(upload_url)
         .header("x-goog-upload-command", "upload, finalize")
         .header("x-goog-upload-offset", "0")
         .header("x-tenant-id", "bard-storage")
-        .header("push-id", push_id_str)
-        .header("Cookie", &cookie_header)
+        .header("push-id", push_id)
+        .header("Cookie", cookie_header)
         .header("Origin", WEB_BASE_URL)
         .header("Referer", format!("{WEB_BASE_URL}/"))
         .header("User-Agent", USER_AGENT)
@@ -116,6 +171,46 @@ pub(crate) async fn upload_file(
     }
 
     Ok(reference)
+}
+
+/// Returns a stream of upload progress events for a single file.
+pub(crate) fn upload_progress_stream(
+    client: reqwest::Client,
+    cookies: Cookies,
+    session: SessionState,
+    filename: String,
+    mime_type: String,
+    bytes: Vec<u8>,
+) -> Pin<Box<dyn Stream<Item = Result<UploadEvent>> + Send>> {
+    use async_stream::stream;
+
+    Box::pin(stream! {
+        let total = Some(bytes.len() as u64);
+        yield Ok(UploadEvent::Progress { uploaded: 0, total });
+
+        let (upload_url, push_id, cookie_header) =
+            start_upload(&client, &cookies, &session, &filename, bytes.len()).await?;
+
+        yield Ok(UploadEvent::Progress { uploaded: 0, total });
+
+        let reference = finalize_upload(
+            &client,
+            &upload_url,
+            &push_id,
+            &cookie_header,
+            &mime_type,
+            bytes,
+        )
+        .await?;
+
+        yield Ok(UploadEvent::Complete {
+            attachment: WebAttachment {
+                reference,
+                mime_type: mime_type.clone(),
+                filename: filename.clone(),
+            },
+        });
+    })
 }
 
 /// Uploads all inline images found in a prepared request and returns attachment

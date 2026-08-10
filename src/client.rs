@@ -1,6 +1,7 @@
 //! Main SDK client.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,7 +10,7 @@ use futures::Stream;
 use reqwest::Client;
 use serde_json::Value;
 use tokio::sync::{Mutex, RwLock};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::auth::{Cookies, Credentials, CredentialsProvider};
 use crate::chat::{
@@ -30,7 +31,49 @@ use crate::proto::{
 use crate::session::{
     extract_consent_save_url, extract_from_app_html, extract_quoted_value, SessionState,
 };
-use crate::upload;
+use crate::upload::{self, UploadEvent};
+
+/// Async hook that observes prepared requests and parsed responses.
+///
+/// Hooks receive only typed SDK types ([`PreparedRequest`] and [`ChatResponse`]),
+/// never raw cookies, auth headers, or base64 image payloads. Implementers must
+/// not rely on interior mutability to alter the request or response; the trait
+/// takes immutable references for a reason. Any secret values observed inside
+/// the hook must be redacted by the implementer before logging or exporting.
+pub trait HttpHook: Send + Sync {
+    /// Called after a request has been prepared but before it is sent.
+    ///
+    /// The supplied [`PreparedRequest`] contains the flattened prompt text and
+    /// inline image metadata (count and MIME type), not the raw base64 bytes.
+    fn on_request<'a>(
+        &'a self,
+        request: &'a PreparedRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+
+    /// Called after a response has been parsed and a [`ChatResponse`] produced.
+    fn on_response<'a>(
+        &'a self,
+        response: &'a ChatResponse,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+}
+
+impl HttpHook for Arc<dyn HttpHook> {
+    fn on_request<'a>(
+        &'a self,
+        request: &'a PreparedRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        (**self).on_request(request)
+    }
+
+    fn on_response<'a>(
+        &'a self,
+        response: &'a ChatResponse,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        (**self).on_response(response)
+    }
+}
+
+
 
 const WEB_BASE_URL: &str = "https://gemini.google.com";
 const WAA_BASE_URL: &str = "https://waa-pa.clients6.google.com";
@@ -62,12 +105,27 @@ struct Inner {
     config: RwLock<ClientConfig>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ClientConfig {
     language: String,
     max_retries: usize,
     timeout: Duration,
     system_instruction: Option<String>,
+    http_hook: Option<Arc<dyn HttpHook>>,
+    fatal_hook_errors: bool,
+}
+
+impl std::fmt::Debug for ClientConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClientConfig")
+            .field("language", &self.language)
+            .field("max_retries", &self.max_retries)
+            .field("timeout", &self.timeout)
+            .field("system_instruction", &self.system_instruction)
+            .field("http_hook", &self.http_hook.is_some())
+            .field("fatal_hook_errors", &self.fatal_hook_errors)
+            .finish()
+    }
 }
 
 impl Default for ClientConfig {
@@ -77,6 +135,8 @@ impl Default for ClientConfig {
             max_retries: 3,
             timeout: Duration::from_secs(120),
             system_instruction: None,
+            http_hook: None,
+            fatal_hook_errors: false,
         }
     }
 }
@@ -111,6 +171,23 @@ impl GeminiClient {
     /// underlying HTTP client cannot be built.
     pub fn from_cookies(cookies: impl Into<Cookies>) -> Result<Self> {
         Self::with_config(cookies.into(), ClientConfig::default())
+    }
+
+    /// Creates a client from an externally built [`reqwest::Client`].
+    ///
+    /// This allows callers to control connection pooling, timeouts, middleware,
+    /// and other HTTP client configuration. The provided client is used as-is;
+    /// the SDK will not rebuild or reconfigure it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the credentials are missing required cookies.
+    pub fn from_http_client(client: reqwest::Client, credentials: impl Into<Cookies>) -> Result<Self> {
+        let cookies: Cookies = credentials.into();
+        cookies
+            .to_credentials()
+            .map_err(|e| Error::Config(e.to_string()))?;
+        Self::with_http_client(cookies, ClientConfig::default(), client)
     }
 
     /// Creates a client from a [`HashMap`] of cookies.
@@ -176,9 +253,57 @@ impl GeminiClient {
         self
     }
 
+    /// Sets a request/response hook for observing traffic.
+    pub async fn with_http_hook(self, hook: impl HttpHook + 'static) -> Self {
+        let mut config = self.inner.config.write().await;
+        config.http_hook = Some(Arc::new(hook));
+        drop(config);
+        self
+    }
+
+    /// Makes hook errors abort the request instead of being logged and ignored.
+    pub async fn with_fatal_hook_errors(self, fatal: bool) -> Self {
+        let mut config = self.inner.config.write().await;
+        config.fatal_hook_errors = fatal;
+        drop(config);
+        self
+    }
+
     /// Returns a clone of the cookies used by this client.
     async fn cookies(&self) -> Cookies {
         self.inner.cookies.lock().await.clone()
+    }
+
+    pub(crate) async fn run_request_hook(&self, request: &PreparedRequest) -> Result<()> {
+        let (hook, fatal) = {
+            let config = self.inner.config.read().await;
+            (config.http_hook.clone(), config.fatal_hook_errors)
+        };
+        if let Some(hook) = hook {
+            if let Err(err) = hook.on_request(request).await {
+                if fatal {
+                    return Err(err);
+                }
+                warn!("request hook error (non-fatal): {}", err);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn run_response_hook(&self, response: &ChatResponse) -> Result<()> {
+        let (hook, fatal) = {
+            let config = self.inner.config.read().await;
+            (config.http_hook.clone(), config.fatal_hook_errors)
+        };
+        if let Some(hook) = hook {
+            if let Err(err) = hook.on_response(response).await {
+                if fatal {
+                    return Err(err);
+                }
+                warn!("response hook error (non-fatal): {}", err);
+            }
+        }
+        Ok(())
     }
 
     fn with_config(cookies: Cookies, config: ClientConfig) -> Result<Self> {
@@ -189,6 +314,10 @@ impl GeminiClient {
             .build()
             .map_err(|e| Error::Config(format!("failed to build HTTP client: {e}")))?;
 
+        Self::with_http_client(cookies, config, http)
+    }
+
+    fn with_http_client(cookies: Cookies, config: ClientConfig, http: Client) -> Result<Self> {
         let mut session = SessionState::new();
         session.language.clone_from(&config.language);
         session.waa_fingerprint = Some(WAA_FINGERPRINT_DEFAULT.to_string());
@@ -228,6 +357,7 @@ impl GeminiClient {
     ///
     /// Internally calls `BardFrontendService.GetUserStatus` through the
     /// batchexecute transport using the `otAQ7b` RPC id.
+    #[tracing::instrument(name = "gemini.list_models", level = "info", skip_all, fields(operation = "gemini.list_models"))]
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>> {
         self.ensure_session().await?;
 
@@ -287,6 +417,7 @@ impl GeminiClient {
     ///
     /// Prefer using [`GeminiClient::chat`] for an ergonomic API. If you need to
     /// pass an existing [`Conversation`] use [`GeminiClient::generate_with_conversation`].
+    #[tracing::instrument(name = "gemini.generate", level = "info", skip_all, fields(operation = "gemini.generate", category = ?category))]
     pub async fn generate(
         &self,
         message: &ChatMessage,
@@ -303,6 +434,7 @@ impl GeminiClient {
     /// seen so far. After the upstream stream ends, the full response body is
     /// ingested into the client's conversation state so that multi-turn chats
     /// can continue.
+    #[tracing::instrument(name = "gemini.generate_stream", level = "info", skip_all, fields(operation = "gemini.generate_stream", category = ?category))]
     pub async fn generate_stream(
         &self,
         message: &ChatMessage,
@@ -346,6 +478,7 @@ impl GeminiClient {
                         if let Ok(parts) = parse_response_parts(line) {
                             if !parts.is_empty() {
                                 let response = build_chat_response_from_parts(&parts)?;
+                                client.run_response_hook(&response).await?;
                                 yield response;
                             }
                         }
@@ -358,6 +491,7 @@ impl GeminiClient {
                 if let Ok(parts) = parse_response_parts(&line_buffer) {
                     if !parts.is_empty() {
                         let response = build_chat_response_from_parts(&parts)?;
+                        client.run_response_hook(&response).await?;
                         yield response;
                     }
                 }
@@ -372,6 +506,7 @@ impl GeminiClient {
     ///
     /// This is the public entry point for callers that manage a
     /// [`Conversation`] manually instead of using the builder API.
+    #[tracing::instrument(name = "gemini.generate_with_conversation", level = "info", skip_all, fields(operation = "gemini.generate_with_conversation", category = ?category))]
     pub async fn generate_with_conversation(
         &self,
         message: &ChatMessage,
@@ -390,22 +525,20 @@ impl GeminiClient {
                 .clone()
                 .map(|instruction| GenerationConfig::default().with_system_instruction(instruction))
         };
-        let body = self.generate_raw(message, conversation, category, config).await?;
-        parse_chat_response(&body)
+        let prepared = prepare_request(conversation, message, config, category)?;
+        self.run_request_hook(&prepared).await?;
+        let body = self.generate_raw_with_prepared(&prepared).await?;
+        let response = self.parse_response(&body)?;
+        self.run_response_hook(&response).await?;
+        Ok(response)
     }
 
-    /// Sends a generation request and returns the raw response body.
-    ///
-    /// This is useful when implementing custom streaming or logging.
-    pub async fn generate_raw(
+    /// Sends an already prepared request and returns the raw response body.
+    async fn generate_raw_with_prepared(
         &self,
-        message: &ChatMessage,
-        conversation: Option<&Conversation>,
-        category: ModelCategory,
-        config: Option<GenerationConfig>,
+        prepared: &PreparedRequest,
     ) -> Result<String> {
-        let mut response =
-            self.stream_generate_raw(message, conversation, category, config).await?;
+        let mut response = self.stream_generate_raw_with_prepared(prepared).await?;
 
         let mut body_bytes = Vec::new();
         while let Some(chunk) = response.chunk().await.map_err(Error::Request)? {
@@ -416,6 +549,26 @@ impl GeminiClient {
 
         self.ingest_conversation_state(&body).await?;
         Ok(body)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.parse_response", bytes = body.len()))]
+    fn parse_response(&self, body: &str) -> Result<ChatResponse> {
+        parse_chat_response(body)
+    }
+
+    /// Sends a generation request and returns the raw response body.
+    ///
+    /// This is useful when implementing custom streaming or logging.
+    #[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.generate_raw", category = ?category))]
+    pub async fn generate_raw(
+        &self,
+        message: &ChatMessage,
+        conversation: Option<&Conversation>,
+        category: ModelCategory,
+        config: Option<GenerationConfig>,
+    ) -> Result<String> {
+        let prepared = prepare_request(conversation, message, config, category)?;
+        self.generate_raw_with_prepared(&prepared).await
     }
 
     /// Starts a streaming generation request and returns the upstream response.
@@ -431,6 +584,28 @@ impl GeminiClient {
         self.stream_generate_raw(message, None, category, config).await
     }
 
+    /// Returns a stream of upload progress events for a single file.
+    ///
+    /// The stream yields [`UploadEvent::Progress`] at least once and a final
+    /// [`UploadEvent::Complete`] when the upload finishes. Dropping the stream
+    /// before `Complete` leaves server-side upload state best-effort.
+    #[tracing::instrument(name = "gemini.upload_with_progress", level = "info", skip_all, fields(operation = "gemini.upload_with_progress", bytes = bytes.len()))]
+    pub async fn upload_with_progress(
+        &self,
+        filename: impl Into<String>,
+        mime_type: impl Into<String>,
+        bytes: Vec<u8>,
+    ) -> Pin<Box<dyn Stream<Item = Result<UploadEvent>> + Send + 'static>> {
+        upload::upload_progress_stream(
+            self.inner.http.clone(),
+            self.cookies().await,
+            self.inner.session.lock().await.clone(),
+            filename.into(),
+            mime_type.into(),
+            bytes,
+        )
+    }
+
     /// Starts a streaming generation request and returns raw bytes.
     ///
     /// This lower-level method gives callers direct access to the upstream WIZ
@@ -444,11 +619,19 @@ impl GeminiClient {
         category: ModelCategory,
         config: Option<GenerationConfig>,
     ) -> Result<reqwest::Response> {
+        let prepared = prepare_request(conversation, message, config, category)?;
+        self.run_request_hook(&prepared).await?;
+        self.stream_generate_raw_with_prepared(&prepared).await
+    }
+
+    async fn stream_generate_raw_with_prepared(
+        &self,
+        prepared: &PreparedRequest,
+    ) -> Result<reqwest::Response> {
         self.ensure_session().await?;
 
-        let prepared = prepare_request(conversation, message, config, category)?;
         let (inner_req_list, request_uuid, _headers, cookie_header) =
-            self.build_stream_generate_request(&prepared).await?;
+            self.build_stream_generate_request(prepared).await?;
 
         let url = format!(
             "{WEB_BASE_URL}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate"
@@ -529,6 +712,11 @@ impl GeminiClient {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.ingest_conversation_state", bytes = body.len()))]
+    async fn ingest_conversation_state_inner(&self, body: &str) -> Result<()> {
+        self.ingest_conversation_state(body).await
+    }
+
     async fn build_stream_generate_request(
         &self,
         prepared: &PreparedRequest,
@@ -590,6 +778,7 @@ impl GeminiClient {
     /// inspects the returned HTML. Returns `true` only if the page is not a
     /// sign-in redirect and contains `window.WIZ_global_data` with a non-empty
     /// numeric `S06Grb` Gaia id and a present `oPEP7c` email address.
+    #[tracing::instrument(name = "gemini.verify_signed_in", level = "info", skip_all, fields(operation = "gemini.verify_signed_in"))]
     pub async fn verify_signed_in(&self) -> Result<bool> {
         let body = self.fetch_app_page().await?;
         Ok(extract_signed_in_state(&body).is_some())
@@ -633,6 +822,7 @@ impl GeminiClient {
     /// the session state. Failures from the WAA `Create` and ogads
     /// `GetAsyncData` steps are surfaced as [`Error::AttestationFailed`]
     /// instead of being silently replaced with a synthetic context.
+    #[tracing::instrument(level = "info", skip_all, fields(operation = "gemini.waa_init_chain"))]
     async fn run_waa_init_chain(&self) -> Result<()> {
         let (at, language, build_label, session_id, cookie_header, credentials) = {
             let (cookie_header, credentials) = {
@@ -1243,6 +1433,181 @@ impl<'a> ChatBuilder<'a> {
 mod client_tests {
     use super::*;
     use futures::StreamExt;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Debug, Default)]
+    struct CountingHook {
+        requests: AtomicUsize,
+        responses: AtomicUsize,
+        request_prompt: tokio::sync::Mutex<Option<String>>,
+    }
+
+    impl Clone for CountingHook {
+        fn clone(&self) -> Self {
+            Self {
+                requests: AtomicUsize::new(self.requests.load(Ordering::SeqCst)),
+                responses: AtomicUsize::new(self.responses.load(Ordering::SeqCst)),
+                request_prompt: tokio::sync::Mutex::new(None),
+            }
+        }
+    }
+
+    impl HttpHook for CountingHook {
+        fn on_request<'a>(
+            &'a self,
+            request: &'a PreparedRequest,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+            self.requests.fetch_add(1, Ordering::SeqCst);
+            let text = request.prompt.clone();
+            Box::pin(async move {
+                *self.request_prompt.lock().await = Some(text);
+                Ok(())
+            })
+        }
+
+        fn on_response<'a>(
+            &'a self,
+            _response: &'a ChatResponse,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+            self.responses.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move { Ok(()) })
+        }
+    }
+
+    #[derive(Debug, Default, Clone)]
+    struct ErrorHook {
+        on_request: bool,
+    }
+
+    impl HttpHook for ErrorHook {
+        fn on_request<'a>(
+            &'a self,
+            _request: &'a PreparedRequest,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+            if self.on_request {
+                Box::pin(async move { Err(Error::Hook("request hook error".to_string())) })
+            } else {
+                Box::pin(async move { Ok(()) })
+            }
+        }
+
+        fn on_response<'a>(
+            &'a self,
+            _response: &'a ChatResponse,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+            if !self.on_request {
+                Box::pin(async move { Err(Error::Hook("response hook error".to_string())) })
+            } else {
+                Box::pin(async move { Ok(()) })
+            }
+        }
+    }
+
+    async fn build_client(hook: impl HttpHook + 'static) -> GeminiClient {
+        GeminiClient::from_cookie_header(
+            "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+        )
+        .unwrap()
+        .with_http_hook(hook)
+        .await
+        .with_max_retries(0)
+        .await
+    }
+
+    #[tokio::test]
+    async fn response_hook_called_inside_stream() {
+        let concrete = std::sync::Arc::new(CountingHook::default());
+        let hook: std::sync::Arc<dyn HttpHook> = concrete.clone();
+        let client = build_client(hook).await;
+
+        let body = include_str!("../tests/fixtures/turn1_response_raw.txt");
+        let bytes_stream = futures::stream::iter(vec![Ok(bytes::Bytes::from(body))]);
+
+        let mut stream = GeminiClient::stream_responses(bytes_stream, client);
+        let mut chunks = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            chunks.push(chunk.unwrap());
+        }
+
+        assert!(!chunks.is_empty());
+        assert_eq!(concrete.responses.load(Ordering::SeqCst), chunks.len());
+    }
+
+    #[tokio::test]
+    async fn request_hook_observes_prepared_request() {
+        let concrete = std::sync::Arc::new(CountingHook::default());
+        let hook: std::sync::Arc<dyn HttpHook> = concrete.clone();
+        let client = GeminiClient::from_cookie_header(
+            "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+        )
+        .unwrap()
+        .with_http_hook(hook)
+        .await;
+
+        let prepared = PreparedRequest {
+            prompt: "What is Rust?".to_string(),
+            inline_images: vec![],
+            config: None,
+            category: ModelCategory::Auto,
+        };
+
+        client.run_request_hook(&prepared).await.unwrap();
+
+        assert_eq!(concrete.requests.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            concrete.request_prompt.lock().await.as_deref(),
+            Some("What is Rust?")
+        );
+    }
+
+    #[tokio::test]
+    async fn response_hook_is_non_fatal() {
+        let hook: std::sync::Arc<dyn HttpHook> = std::sync::Arc::new(ErrorHook { on_request: false });
+        let client = GeminiClient::from_cookie_header(
+            "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+        )
+        .unwrap()
+        .with_http_hook(hook.clone())
+        .await;
+
+        let response = ChatResponse::new("hello");
+        client
+            .run_response_hook(&response)
+            .await
+            .expect("non-fatal response hook errors should be swallowed");
+    }
+
+    #[tokio::test]
+    async fn fatal_request_hook_errors_abort() {
+        let hook: std::sync::Arc<dyn HttpHook> = std::sync::Arc::new(ErrorHook { on_request: true });
+        let client = GeminiClient::from_cookie_header(
+            "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
+        )
+        .unwrap()
+        .with_http_hook(hook.clone())
+        .await
+        .with_fatal_hook_errors(true)
+        .await;
+
+        let prepared = PreparedRequest {
+            prompt: "hello".to_string(),
+            inline_images: vec![],
+            config: None,
+            category: ModelCategory::Auto,
+        };
+
+        let err = client
+            .run_request_hook(&prepared)
+            .await
+            .expect_err("fatal hook errors should abort");
+
+        match err {
+            Error::Hook(msg) => assert_eq!(msg, "request hook error"),
+            other => panic!("expected Error::Hook, got {other:?}"),
+        }
+    }
 
     #[test]
     fn extract_waa_fingerprint_anchors_to_pro_model_block() {

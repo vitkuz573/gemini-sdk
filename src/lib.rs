@@ -86,7 +86,8 @@ pub use chat::{
     ThinkingLevel,
 };
 // PreparedRequest is intentionally public for benchmarks and advanced use.
-pub use client::GeminiClient;
+pub use client::{GeminiClient, HttpHook};
+pub use chat::PreparedRequest;
 pub use errors::{Error, Result};
 pub use models::{ModelCategory, ModelInfo};
 // Re-export parsing helpers so consumers can convert streaming responses.
@@ -94,3 +95,4 @@ pub use proto::{
     extract_bard_error_code, extract_text_from_parsed_response,
     extract_thinking_from_parsed_response, parse_chat_response, parse_response_parts,
 };
+pub use upload::UploadEvent;

@@ -121,6 +121,28 @@ fn extract_waa_fingerprint(body: &str) -> Option<String> {
     None
 }
 
+/// Tries to extract a value from `window.WIZ_global_data` first, then from the
+/// whole body, using each key in `keys` in order. The first value that passes
+/// `validate` is returned.
+fn try_extract_value(
+    body: &str,
+    keys: &[&str],
+    validate: impl Fn(&str) -> Option<String>,
+) -> Option<String> {
+    let block = extract_wiz_global_data_block(body);
+    for key in keys {
+        if let Some(b) = block {
+            if let Some(value) = extract_quoted_value(b, key).and_then(|v| validate(&v)) {
+                return Some(value);
+            }
+        }
+        if let Some(value) = extract_quoted_value(body, key).and_then(|v| validate(&v)) {
+            return Some(value);
+        }
+    }
+    None
+}
+
 /// Validates the observed `SNlM0e` shape: base64-url-ish prefix, colon,
 /// 13-digit Unix timestamp in milliseconds.
 fn is_valid_snlim0e(token: &str) -> bool {
@@ -139,47 +161,39 @@ fn is_valid_snlim0e(token: &str) -> bool {
 }
 
 fn extract_snlim0e(body: &str) -> Option<String> {
-    // Primary: anchor to the window.WIZ_global_data block.
-    if let Some(block) = extract_wiz_global_data_block(body) {
-        if let Some(token) = extract_quoted_value(block, "SNlM0e") {
-            if is_valid_snlim0e(&token) {
-                return Some(token);
-            }
-        }
-    }
+    // Alias order observed in the wild: canonical `SNlM0e`, case variants
+    // `SnlM0e` and `snlM0e` (spikes 005, 008).
+    try_extract_value(body, &["SNlM0e", "SnlM0e", "snlM0e"], |value| {
+        is_valid_snlim0e(value).then(|| value.to_string())
+    })
+}
 
-    // Fallback: non-anchored search for the quoted key anywhere in the body.
-    if let Some(token) = extract_quoted_value(body, "SNlM0e") {
-        if is_valid_snlim0e(&token) {
-            return Some(token);
-        }
+fn is_valid_build_label(label: &str) -> Option<String> {
+    if label.starts_with("boq_assistant-bard-web-") && label.len() > 10 {
+        Some(label.to_string())
+    } else {
+        None
     }
-
-    None
 }
 
 fn extract_build_label(body: &str) -> Option<String> {
-    // Primary: Google stores the build label under the key `cfb2h` inside
-    // window.WIZ_global_data in the current HTML shape.
-    if let Some(block) = extract_wiz_global_data_block(body) {
-        if let Some(label) = extract_quoted_value(block, "cfb2h") {
-            if label.starts_with("boq_assistant-bard-web-") && label.len() > 10 {
-                return Some(label);
-            }
-        }
+    // Primary: Google stores the build label under `cfb2h` inside
+    // window.WIZ_global_data. Fallback keys: `build_label`.
+    if let Some(value) = try_extract_value(body, &["cfb2h", "build_label"], is_valid_build_label) {
+        return Some(value);
     }
 
     // Fallback: bare substring search for older or stripped responses.
-    // Require the same prefix as the primary path so we never pick up a JS
-    // bundle name such as `boq-bard-web...`.
+    // Require the same prefix so we never pick up a JS bundle name such as
+    // `boq-bard-web...`.
     for pattern in ["boq_assistant-bard-web-server_", "boq_assistant-bard-web-frontend_"] {
         if let Some(idx) = body.find(pattern) {
             let area = &body[idx..];
             for end_char in ['"', '\\', '\'', '`'] {
                 if let Some(end) = area.find(end_char) {
                     let label = &area[..end];
-                    if label.starts_with("boq_assistant-bard-web-") && label.len() > 10 {
-                        return Some(label.to_string());
+                    if let Some(valid) = is_valid_build_label(label) {
+                        return Some(valid);
                     }
                 }
             }
@@ -188,39 +202,24 @@ fn extract_build_label(body: &str) -> Option<String> {
     None
 }
 
-fn extract_session_id(body: &str) -> Option<String> {
-    // FdrFJe is the canonical frontend session id (sent as `f.sid`).
-    let search_in = extract_wiz_global_data_block(body).unwrap_or(body);
-    if let Some(sid) = extract_quoted_value(search_in, "FdrFJe") {
-        if looks_like_session_id(&sid) {
-            return Some(sid);
-        }
-    }
-
-    // Fallback for older/consent pages that may use an explicit session_id key.
-    if let Some(sid) = extract_quoted_value(body, "session_id") {
-        if looks_like_session_id(&sid) {
-            return Some(sid);
-        }
-    }
-
-    None
-}
-
 fn looks_like_session_id(sid: &str) -> bool {
     !sid.is_empty() && sid.chars().all(|c| c.is_ascii_digit() || c == '-') && sid.len() >= 3
 }
 
+fn extract_session_id(body: &str) -> Option<String> {
+    // Canonical key `FdrFJe` is sent as `f.sid`. Older/consent pages may use
+    // `session_id`.
+    try_extract_value(body, &["FdrFJe", "f.sid", "session_id"], |value| {
+        looks_like_session_id(value).then(|| value.to_string())
+    })
+}
+
 fn extract_push_id(body: &str) -> Option<String> {
-    let search_in = extract_wiz_global_data_block(body).unwrap_or(body);
-    for key in ["qKIAYe", "KnDnFf"] {
-        if let Some(feed) = extract_quoted_value(search_in, key) {
-            if feed.starts_with("feeds/") {
-                return Some(feed);
-            }
-        }
-    }
-    None
+    // `qKIAYe` is the canonical key; `KnDnFf` and `push_id` are observed
+    // aliases in older HTML shapes.
+    try_extract_value(body, &["qKIAYe", "KnDnFf", "push_id"], |value| {
+        value.starts_with("feeds/").then(|| value.to_string())
+    })
 }
 
 /// Returns the contents of the `window.WIZ_global_data = { ... };` block,
@@ -346,9 +345,27 @@ mod tests {
     }
 
     #[test]
+    fn extract_build_label_falls_back_to_build_label_key() {
+        let body = r#"window.WIZ_global_data = {"build_label":"boq_assistant-bard-web-server_20260804.05_p0"};"#;
+        assert_eq!(
+            extract_build_label(body),
+            Some("boq_assistant-bard-web-server_20260804.05_p0".to_string())
+        );
+    }
+
+    #[test]
     fn extract_session_id_finds_fdrfje() {
         let body = include_str!("../tests/fixtures/app_session_id.txt");
         assert_eq!(extract_session_id(body), Some("4202905934864668489".to_string()));
+    }
+
+    #[test]
+    fn extract_session_id_falls_back_to_session_id_key() {
+        let body = r#"window.WIZ_global_data = {"session_id":"1234567890123456789"};"#;
+        assert_eq!(
+            extract_session_id(body),
+            Some("1234567890123456789".to_string())
+        );
     }
 
     #[test]
@@ -358,12 +375,55 @@ mod tests {
     }
 
     #[test]
+    fn extract_push_id_falls_back_to_push_id_key() {
+        let body = r#"window.WIZ_global_data = {"push_id":"feeds/fallback-push-id"};"#;
+        assert_eq!(extract_push_id(body), Some("feeds/fallback-push-id".to_string()));
+    }
+
+    #[test]
+    fn extract_push_id_rejects_non_feeds() {
+        let body = r#"window.WIZ_global_data = {"qKIAYe":"not-a-feed","KnDnFf":"also-not"};"#;
+        assert_eq!(extract_push_id(body), None);
+    }
+
+    #[test]
     fn extract_snlim0e_from_real_wiz_global_data() {
         let body = include_str!("../tests/fixtures/wiz_global_data.txt");
         assert_eq!(
             extract_snlim0e(body),
             Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
         );
+    }
+
+    #[test]
+    fn extract_snlim0e_falls_back_to_case_variants() {
+        let body = r#"window.WIZ_global_data = {"SnlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132"};"#;
+        assert_eq!(
+            extract_snlim0e(body),
+            Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
+        );
+
+        let body2 = r#"window.WIZ_global_data = {"snlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132"};"#;
+        assert_eq!(
+            extract_snlim0e(body2),
+            Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_snlim0e_prefers_canonical_when_both_present() {
+        let body = r#"window.WIZ_global_data = {"snlM0e":"bad:1786124577132","SNlM0e":"ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132"};"#;
+        assert_eq!(
+            extract_snlim0e(body),
+            Some("ADR5zap56yDlZ6DzL1MQJYvlqzHr:1786124577132".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_snlim0e_rejects_invalid_token() {
+        // Token suffix has only 12 digits, not 13.
+        let body = r#"window.WIZ_global_data = {"SNlM0e":"bad:123456789012"};"#;
+        assert_eq!(extract_snlim0e(body), None);
     }
 
     #[test]
@@ -380,19 +440,6 @@ mod tests {
         );
         assert_eq!(state.session_id, Some("-1594710263937718439".to_string()));
         assert_eq!(state.push_id, Some("feeds/mcudyrk2a4khkz".to_string()));
-    }
-
-    #[test]
-    fn extract_snlim0e_rejects_invalid_token() {
-        // Token suffix has only 12 digits, not 13.
-        let body = r#"window.WIZ_global_data = {"SNlM0e":"bad:123456789012"};"#;
-        assert_eq!(extract_snlim0e(body), None);
-    }
-
-    #[test]
-    fn extract_push_id_rejects_non_feeds() {
-        let body = r#"window.WIZ_global_data = {"qKIAYe":"not-a-feed","KnDnFf":"also-not"};"#;
-        assert_eq!(extract_push_id(body), None);
     }
 
     #[test]

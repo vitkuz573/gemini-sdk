@@ -76,6 +76,10 @@ pub enum Error {
     /// A generic internal error.
     #[error("internal error: {0}")]
     Internal(String),
+
+    /// A user-supplied hook returned an error.
+    #[error("hook error: {0}")]
+    Hook(String),
 }
 
 impl Error {
