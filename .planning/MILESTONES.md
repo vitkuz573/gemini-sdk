@@ -1,5 +1,22 @@
 # Milestones
 
+## v0.3 Magic String Elimination (Shipped: 2026-08-11)
+
+**Phases completed:** 4 phases (13-16), 4 plans
+**Git range:** `cc8e7c7..39cbd1d`
+**Closeout type:** verified_closeout
+**Requirements:** 19/19 MAINT requirements validated (see [archive](milestones/v0.3-REQUIREMENTS.md))
+
+**Key accomplishments:**
+
+- Created a single `src/constants.rs` source of truth for protocol literals: URL paths, batchexecute query/transport markers, WIZ/session keys, RPC identifiers, model/category strings, chat roles, MIME types, upload headers, static headers, HAR/redaction values, transient WIZ markers, tracing/metric names, CDP attestation strings, and tool schema keys.
+- Refactored `src/client.rs`, `src/session.rs`, `src/proto/`, `src/upload.rs`, `src/har.rs`, `src/transient_400.rs`, `src/metrics.rs`, `src/attestation.rs`, `src/tool.rs`, `src/models.rs`, and `src/chat.rs` to consume the new constants without changing public API signatures.
+- Promoted a minimal public subset of constants so examples and integration tests stay DRY, added `tests/common/mod.rs`, and refactored all tests/examples to reuse centralized constants.
+- Added a `#[cfg(test)]` regression gate in `src/constants.rs` that walks `src/` and fails if high-risk denied literals reappear in production code.
+- Kept all quality gates green: `cargo test --all-targets` (164 lib + 31 integration + 32 doctests), `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`.
+
+---
+
 ## v0.2 API Expansion (Shipped: 2026-08-11)
 
 **Phases completed:** 6 phases (7-12), 6 plans, 18 tasks

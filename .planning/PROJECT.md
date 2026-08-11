@@ -45,10 +45,12 @@ Developers can reliably integrate Gemini into Rust applications using a stable, 
 - ✓ Transient WIZ 400 retry and `Error::NotSignedIn` detection — v0.2
 - ✓ Opt-in redacted HAR capture — v0.2
 - ✓ Live probe and real-cookie integration tests — v0.2
+- ✓ Centralized protocol, transport, model, MIME, header, HAR, tracing, attestation, and tool-schema constants — v0.3
+- ✓ Regression gate preventing reintroduction of eliminated magic strings in `src/` — v0.3
+- ✓ Cleaned-up tests and examples reusing centralized constants — v0.3
 
 ### Active
 
-- [ ] Eliminate magic strings across SDK source, tests, and examples (v0.3)
 - [ ] Final API audit and deprecation cleanup for v1.0
 - [ ] Document and verify MSRV policy
 - [ ] crates.io publication with changelog and release notes
@@ -68,9 +70,9 @@ Developers can reliably integrate Gemini into Rust applications using a stable, 
 
 The project started as a reverse-engineering exercise and now has working implementations for chat, upload, auth, session management, browser attestation, conversation actions, user profile/preferences, locale/model config, settings-page data, and live backend resilience. The codebase is organized as a typical Rust crate with `src/`, `tests/`, `examples/`, `benches/`, and `docs/`. Spikes in `.planning/spikes/` document the protocol discovery process.
 
-Key external dependencies: `reqwest`, `tokio`, `serde`, `thiserror`, `tracing`, `tokio-tungstenite` (optional attestation), `humantime`, `tempfile`.
+Key external dependencies: `reqwest`, `tokio`, `serde`, `thiserror`, `tracing`, `tokio-tungstenite` (optional attestation), `humantime`, `tempfile`, `const_format`.
 
-Google can change the web frontend protocol without notice, so the SDK must fail loudly and recover gracefully when response shapes drift. v0.2 introduced `serde_json::Value` wrappers for undocumented RPC surfaces, conservative transient-400 detection, and redacted HAR capture to aid debugging without leaking secrets.
+Google can change the web frontend protocol without notice, so the SDK must fail loudly and recover gracefully when response shapes drift. v0.2 introduced `serde_json::Value` wrappers for undocumented RPC surfaces, conservative transient-400 detection, and redacted HAR capture to aid debugging without leaking secrets. v0.3 consolidated protocol literals into `src/constants.rs` so future drift updates touch a single source of truth and a regression gate keeps high-risk literals from reappearing in production code.
 
 ## Constraints
 
@@ -92,6 +94,8 @@ Google can change the web frontend protocol without notice, so the SDK must fail
 | Return `serde_json::Value` wrappers for undocumented config RPCs | Prevents brittle structs when Google changes shapes | ✓ Good — no parser breakages across v0.2 |
 | Conservative transient WIZ 400 detection (`er` + `di` + `af.httprm`) | Avoids retrying genuine client errors | ✓ Good — live probe passes 14/14 |
 | Opt-in HAR capture with cookie/auth redaction | Aids debugging without leaking credentials | ✓ Good — redaction verified in unit tests |
+| Centralize magic strings in `src/constants.rs` with minimal public API exposure | Makes protocol drift safer to update and review | ✓ Good — 19 MAINT requirements validated, regression gate green |
+| Keep test fixtures raw while centralizing production constants | Fixtures retain captured protocol shapes; production code uses named constants | ✓ Good — no production inline literals for targeted deny-list |
 
 ## Evolution
 
@@ -110,21 +114,13 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-## Current Milestone: v0.3 Magic String Elimination
+## Current State
 
-**Goal:** Centralize all literal protocol, transport, model, MIME, header, HAR, tracing, attestation, and tool-schema strings as named constants, clean up tests/examples, and add a regression gate so the codebase stays maintainable as the protocol surface grows.
+**Shipped:** v0.3 Magic String Elimination (2026-08-11)
+**Phases completed:** 16 of 16 (100%)
+**Current focus:** Planning v1.0 Stable Release
 
-**Target features:**
-- Centralized URL paths, query keys, batchexecute markers, WIZ/session keys, and RPC identifiers.
-- Centralized model/category strings, chat roles, MIME types, and upload headers.
-- Centralized base URLs, static headers, HAR/redaction strings, transient WIZ markers, tracing/metrics names, CDP strings, and tool schema keys.
-- Tests and examples reference constants instead of duplicating literals.
-- Regression gate (clippy or test) preventing re-introduction of eliminated magic strings.
-
-**Key constraints:**
-- No public API breakage; constants remain `pub(crate)` unless already public.
-- All quality gates (`cargo test`, `cargo clippy`, `cargo doc`) must remain green.
-- Phase plans are deliberately small (2-3 tasks each) to keep review focused.
+v0.3 delivered a single cross-cutting `src/constants.rs` module that centralizes protocol literals across the SDK. All production modules now consume named constants for URL paths, batchexecute query/transport markers, WIZ/session keys, RPC identifiers, model/category strings, chat roles, MIME types, upload headers, static headers, HAR/redaction values, transient WIZ markers, tracing/metric names, CDP attestation strings, and tool schema keys. Tests and examples were refactored to reuse these constants, and a regression gate prevents reintroduction of high-risk magic strings in `src/`. All quality gates (`cargo test --all-targets`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps`) pass.
 
 ## Next Milestone: v1.0 Stable Release
 
@@ -137,4 +133,4 @@ This document evolves at phase transitions and milestone boundaries.
 - Migration guide from v0.x to v1.0
 
 ---
-*Last updated: 2026-08-11 — inserted v0.3 milestone plan*
+*Last updated: 2026-08-11 after v0.3 milestone completion*

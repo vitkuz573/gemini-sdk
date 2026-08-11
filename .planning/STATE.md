@@ -1,40 +1,40 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3
-milestone_name: Magic String Elimination
-current_phase: 15 — infrastructure constants
-current_phase_name: Infrastructure Constants
-current_plan: 15-01
-status: executing
-stopped_at: Phase 15 Plan 01 execution complete, pending commit
-last_updated: "2026-08-11T09:32:17.601Z"
+milestone: v1.0
+milestone_name: Stable Release
+current_phase: 17
+current_phase_name: API Audit & Deprecation Cleanup
+current_plan: Not started
+status: planning
+stopped_at: Completed v0.3 milestone closeout
+last_updated: "2026-08-11T12:00:00.000Z"
 last_activity: 2026-08-11
-last_activity_desc: Phase 14 complete, transitioned to Phase 15
+last_activity_desc: v0.3 milestone archived
 progress:
-  total_phases: 16
-  completed_phases: 14
+  total_phases: 19
+  completed_phases: 16
   total_plans: 29
-  completed_plans: 28
-  percent: 90
+  completed_plans: 29
+  percent: 84
 ---
 
 # Project State
 
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
-**Current milestone:** v0.3 — Magic String Elimination
-**Current phase:** 15 — infrastructure constants
+**Current milestone:** v1.0 — Stable Release
+**Current phase:** 17
 **Current Plan:** Not started
 **Total Plans in Phase:** 0/TBD
 
-milestone: v0.3
+milestone: v1.0
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (updated 2026-08-11)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** Milestone v0.2 archived. Planning v0.3 Magic String Elimination: centralize URL paths, RPC identifiers, WIZ/session keys, model/category strings, MIME types, HAR/redaction strings, tracing operation names, DevTools/attestation strings, and tool schema keys as named constants.
+**Current focus:** Milestone v0.3 archived. Planning v1.0 Stable Release: final API audit and deprecation cleanup, MSRV policy verification, crates.io publication, and migration guide.
 
 ## Phase Status
 
@@ -55,7 +55,10 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 13 — Core Protocol Constants | ✓ Complete | 1/1 | 100% |
 | 14 — Model/Chat/Upload Constants | ✓ Complete | 1/1 | 100% |
 | 15 — Infrastructure Constants | ✓ Complete | 1/1 | 100% |
-| 16 — Test & Example Cleanup + Regression Guard | 🚧 Planning | 0/TBD | 0% |
+| 16 — Test & Example Cleanup + Regression Guard | ✓ Complete | 1/1 | 100% |
+| 17 — API Audit & Deprecation Cleanup | ⏳ Not started | 0/TBD | 0% |
+| 18 — MSRV Policy & Documentation Polish | ⏳ Not started | 0/TBD | 0% |
+| 19 — crates.io Publication | ⏳ Not started | 0/TBD | 0% |
 
 ## Active Decisions
 
@@ -82,7 +85,7 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ---
-*Last updated: 2026-08-11 — started v0.3 milestone planning*
+*Last updated: 2026-08-11 — completed v0.3 milestone closeout, now targeting v1.0 Stable Release*
 
 ## Performance Metrics
 
@@ -113,12 +116,12 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ## Current Position
 
-Phase: 13 — Core Protocol Constants
+Phase: 17 — API Audit & Deprecation Cleanup
 Plan: —
 Status: Planning
-Last activity: 2026-08-11 — Phase 14 complete, transitioned to Phase 15
+Last activity: 2026-08-11 — v0.3 milestone archived
 
 ## Operator Next Steps
 
-- Review the four v0.3 phase plans under `.planning/phases/13-*` through `16-*`.
-- Run `/gsd-execute-phase 13` to begin implementation.
+- Run `/gsd-new-milestone` to initialize v1.0 Stable Release requirements and roadmap.
+- Or run `/gsd-discuss-phase 17` to start planning Phase 17.
