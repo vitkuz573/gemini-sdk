@@ -3,17 +3,22 @@
 //! Tests that require a live cookie string are marked with `#[ignore]`.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use gemini_sdk::{
     ChatMessage, ContentPart, Conversation, Error, GeminiClient, GenerationConfig, ImageSource,
     ModelCategory, Tool, ToolError, TurnRating,
 };
 
+mod common;
+use common::{
+    default_test_timeout, BATCHEXECUTE_PATH, MIME_PNG, MINIMAL_COOKIE_HEADER, MODEL_ROLE,
+    MOCK_COOKIE_HEADER, TEST_LANGUAGE, TEST_MOCK_LANGUAGE, TEST_PROMPT, USER_ROLE, WRB_FR,
+};
+
 #[test]
 fn chat_message_builders_work() {
-    let msg = ChatMessage::user("hello");
-    assert_eq!(msg.role, "user");
+    let msg = ChatMessage::user(TEST_PROMPT);
+    assert_eq!(msg.role, USER_ROLE);
     assert_eq!(msg.parts.len(), 1);
 }
 
@@ -26,8 +31,8 @@ fn conversation_keeps_history() {
 
 #[test]
 fn image_source_from_bytes() {
-    let image = ImageSource::from_bytes("image/png", b"fake");
-    assert_eq!(image.mime_type(), Some("image/png"));
+    let image = ImageSource::from_bytes(MIME_PNG, b"fake");
+    assert_eq!(image.mime_type(), Some(MIME_PNG));
 }
 
 #[tokio::test]
@@ -57,8 +62,8 @@ fn conversation_history_grows_with_turns() {
     let mut conv = Conversation::new();
     conv.add_user_text("hi").add_model_text("hello");
     assert_eq!(conv.messages().len(), 2);
-    assert_eq!(conv.messages()[0].role, "user");
-    assert_eq!(conv.messages()[1].role, "model");
+    assert_eq!(conv.messages()[0].role, USER_ROLE);
+    assert_eq!(conv.messages()[1].role, MODEL_ROLE);
 }
 
 #[test]
@@ -73,8 +78,7 @@ fn conversation_preserves_category_across_clone() {
 fn continue_conversation_uses_conversation_category() {
     // Build a client only to obtain a ChatBuilder; the test never makes a
     // network call because `send_message` is not invoked.
-    let client =
-        GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def").unwrap();
+    let client = GeminiClient::from_cookie_header(MINIMAL_COOKIE_HEADER).unwrap();
 
     let conv = Conversation::new().with_model_category(ModelCategory::Thinking);
     let builder = client.continue_conversation(conv);
@@ -83,13 +87,13 @@ fn continue_conversation_uses_conversation_category() {
 
 #[tokio::test]
 async fn config_builder_async_sets_language_retries_and_timeout() {
-    let client = GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def")
+    let client = GeminiClient::from_cookie_header(MINIMAL_COOKIE_HEADER)
         .unwrap()
-        .with_language("es")
+        .with_language(TEST_MOCK_LANGUAGE)
         .await
         .with_max_retries(5)
         .await
-        .with_timeout(Duration::from_secs(60))
+        .with_timeout(default_test_timeout())
         .await;
 
     // The async builder methods must run inside a Tokio runtime without
@@ -125,8 +129,7 @@ async fn generate_stream_yields_response_chunks() {
 
 #[tokio::test]
 async fn generate_stream_handles_empty_body() {
-    let _client =
-        GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def").unwrap();
+    let _client = GeminiClient::from_cookie_header(MINIMAL_COOKIE_HEADER).unwrap();
 
     let message = ChatMessage::user("hi");
     let result = _client.generate_stream(&message, ModelCategory::Auto, None).await;
@@ -141,13 +144,13 @@ async fn generate_stream_handles_empty_body() {
 async fn client_default_system_instruction_reaches_request() {
     use gemini_sdk::proto::slots::build_inner_req_list;
 
-    let _client = GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def")
+    let _client = GeminiClient::from_cookie_header(MINIMAL_COOKIE_HEADER)
         .unwrap()
         .with_system_instruction("You are a Rust expert")
         .await;
 
     let prepared = gemini_sdk::chat::PreparedRequest {
-        prompt: "hello".to_string(),
+        prompt: TEST_PROMPT.to_string(),
         inline_images: vec![],
         inline_audio: vec![],
         inline_video: vec![],
@@ -156,18 +159,18 @@ async fn client_default_system_instruction_reaches_request() {
         tools: None,
         refresh_on_auth_error: false,
     };
-    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
+    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", TEST_LANGUAGE, None, "nonce");
     // Without going through the builder, the client default is not reflected
     // in a standalone PreparedRequest. The real assertion happens via the
     // builder path in the next test.
-    assert_eq!(inner[0][0], serde_json::json!("hello"));
+    assert_eq!(inner[0][0], serde_json::json!(TEST_PROMPT));
 }
 
 #[tokio::test]
 async fn system_instruction_override_wins() {
     use gemini_sdk::proto::slots::build_inner_req_list;
 
-    let _client = GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def")
+    let _client = GeminiClient::from_cookie_header(MINIMAL_COOKIE_HEADER)
         .unwrap()
         .with_system_instruction("You are a Rust expert")
         .await;
@@ -175,7 +178,7 @@ async fn system_instruction_override_wins() {
     let config = gemini_sdk::chat::GenerationConfig::default()
         .with_system_instruction("You are a Python expert");
     let prepared = gemini_sdk::chat::PreparedRequest {
-        prompt: "hello".to_string(),
+        prompt: TEST_PROMPT.to_string(),
         inline_images: vec![],
         inline_audio: vec![],
         inline_video: vec![],
@@ -184,7 +187,7 @@ async fn system_instruction_override_wins() {
         tools: None,
         refresh_on_auth_error: false,
     };
-    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", "en", None, "nonce");
+    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", TEST_LANGUAGE, None, "nonce");
     let prompt = inner[0][0].as_str().expect("slot 0 prompt is a string");
     assert!(prompt.starts_with("You are a Python expert"));
 }
@@ -211,7 +214,7 @@ async fn consent_cookie_merge_persists_socs_cookie() {
     // Simulate what `accept_consent_and_refresh` does after the consent save:
     // obtain a mutable lock on the shared cookies and merge the response
     // cookies directly into it.
-    let cookies = Cookies::from_header(&format!("{PSID}=psid-value; {PSIDCC}=psidcc-value"));
+    let cookies = Cookies::from_header(&format!("{PSID}=psid-value; {PSIDCC}=psidcc-value; {SOCS}=old"));
 
     let response = reqwest::Client::new().post(&save_url).send().await.unwrap();
 
@@ -261,7 +264,7 @@ impl Tool for DoublerTool {
 
 fn tool_call_frame(name: &str, args: serde_json::Value) -> String {
     serde_json::json!([[
-        "wrb.fr",
+        WRB_FR,
         null,
         serde_json::json!([
             null,
@@ -279,7 +282,7 @@ fn tool_call_frame(name: &str, args: serde_json::Value) -> String {
 
 fn final_text_frame(text: &str) -> String {
     serde_json::json!([[
-        "wrb.fr",
+        WRB_FR,
         null,
         serde_json::json!([
             null,
@@ -310,19 +313,17 @@ async fn generate_with_tools_round_trip() {
         .await;
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     let tools: Vec<Arc<dyn Tool>> = vec![Arc::new(DoublerTool)];
     let response = client
@@ -356,21 +357,19 @@ async fn regenerate_turn_sends_pcck7e_payload() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200).set_body_string(include_str!("fixtures/pcck7e_success.txt")),
         )
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     // Inject the session parameters that would normally come from /app so the
     // client skips the live init flow and sends the batchexecute request.
@@ -395,21 +394,19 @@ async fn rate_turn_sends_rating_value() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200).set_body_string(include_str!("fixtures/pcck7e_success.txt")),
         )
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -432,21 +429,19 @@ async fn delete_turn_reports_failure_on_error_payload() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200).set_body_string(include_str!("fixtures/pcck7e_error.txt")),
         )
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -464,9 +459,11 @@ async fn delete_turn_reports_failure_on_error_payload() {
 fn parse_conversation_action_response_handles_wrapped_array() {
     use gemini_sdk::{ConversationAction, ConversationActionResult};
 
-    let body = " )] } ' \n\n[[[\"wrb.fr\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]]";
+    let body = format!(
+        " )] }} ' \n\n[[[\"{WRB_FR}\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]]"
+    );
     let result = ConversationActionResult::parse_response(
-        body,
+        &body,
         ConversationAction::Regenerate,
         "r_abc".to_string(),
     );
@@ -497,7 +494,7 @@ async fn get_user_info_parses_full_profile() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/o30O0e_user_info.txt")),
@@ -505,14 +502,12 @@ async fn get_user_info_parses_full_profile() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -538,7 +533,7 @@ async fn get_user_info_tolerates_missing_and_null_fields() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/o30O0e_user_info_partial.txt")),
@@ -546,14 +541,12 @@ async fn get_user_info_tolerates_missing_and_null_fields() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -577,7 +570,7 @@ async fn get_last_selected_mode_returns_mode_id() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/L5adhe_last_mode.txt")),
@@ -585,14 +578,12 @@ async fn get_last_selected_mode_returns_mode_id() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -614,7 +605,7 @@ async fn get_last_selected_mode_returns_none_for_null() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/L5adhe_null_mode.txt")),
@@ -622,14 +613,12 @@ async fn get_last_selected_mode_returns_none_for_null() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -651,7 +640,7 @@ async fn get_locale_tools_returns_value() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/cYRIkd_locale_tools.txt")),
@@ -659,14 +648,12 @@ async fn get_locale_tools_returns_value() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -693,7 +680,7 @@ async fn get_model_config_returns_value() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/whPPme_model_config.txt")),
@@ -701,14 +688,12 @@ async fn get_model_config_returns_value() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -735,7 +720,7 @@ async fn get_locale_config_returns_value() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/Te6DCf_locale_config.txt")),
@@ -743,14 +728,12 @@ async fn get_locale_config_returns_value() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -777,7 +760,7 @@ async fn get_tools_config_returns_value() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/ku4Jyf_tools_config.txt")),
@@ -785,14 +768,12 @@ async fn get_tools_config_returns_value() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -819,7 +800,7 @@ async fn get_usage_stats_returns_value() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/jSf9Qc_usage_stats.txt")),
@@ -827,14 +808,12 @@ async fn get_usage_stats_returns_value() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -864,7 +843,7 @@ async fn get_scheduled_prompts_returns_value() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(
             ResponseTemplate::new(200)
                 .set_body_string(include_str!("fixtures/XPSWpd_scheduled_prompts.txt")),
@@ -872,14 +851,12 @@ async fn get_scheduled_prompts_returns_value() {
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;
@@ -909,19 +886,17 @@ async fn set_last_selected_mode_sends_l5adhe_payload() {
     let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
-        .and(path("/_/BardChatUi/data/batchexecute"))
+        .and(path(BATCHEXECUTE_PATH))
         .respond_with(ResponseTemplate::new(200).set_body_string(""))
         .mount(&mock_server)
         .await;
 
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
-    )
-    .unwrap()
-    .with_base_url(&mock_uri)
-    .await
-    .with_max_retries(0)
-    .await;
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
 
     {
         let mut session = client.inner_session_for_tests().lock().await;

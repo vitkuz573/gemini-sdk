@@ -8,15 +8,14 @@ use std::pin::Pin;
 use futures::Stream;
 
 use crate::auth::Cookies;
+use crate::constants::headers as header_constants;
 use crate::constants::mime;
 use crate::constants::upload as upload_constants;
 use crate::constants::urls::PUSH_UPLOAD_BASE_URL;
+use crate::constants::user_agents::UPLOAD_BROWSER_LIKE;
 use crate::errors::{Error, Result};
 use crate::proto::slots::WebAttachment;
 use crate::session::SessionState;
-
-const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 
 /// Events emitted by upload progress streams.
 #[derive(Debug, Clone)]
@@ -74,19 +73,16 @@ pub(crate) async fn start_upload(
         .header(upload_constants::X_GOOG_UPLOAD_PROTOCOL, upload_constants::RESUMABLE_PROTOCOL)
         .header(upload_constants::X_TENANT_ID, upload_constants::BARD_STORAGE_TENANT)
         .header(upload_constants::PUSH_ID_HEADER, &push_id_str)
-        .header("Cookie", &cookie_header)
-        .header("Origin", base_url)
-        .header("Referer", format!("{base_url}/"))
-        .header("User-Agent", USER_AGENT)
-        .header(
-            "sec-ch-ua",
-            "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"",
-        )
-        .header("sec-ch-ua-mobile", "?0")
-        .header("sec-ch-ua-platform", "\"Windows\"")
-        .header("sec-fetch-dest", "empty")
-        .header("sec-fetch-mode", "cors")
-        .header("sec-fetch-site", "cross-site")
+        .header(header_constants::COOKIE, &cookie_header)
+        .header(header_constants::ORIGIN, base_url)
+        .header(header_constants::REFERER, format!("{base_url}/"))
+        .header(header_constants::USER_AGENT, UPLOAD_BROWSER_LIKE)
+        .header("sec-ch-ua", header_constants::SEC_CH_UA)
+        .header("sec-ch-ua-mobile", header_constants::SEC_CH_UA_MOBILE)
+        .header("sec-ch-ua-platform", header_constants::SEC_CH_UA_PLATFORM)
+        .header("sec-fetch-dest", header_constants::SEC_FETCH_DEST)
+        .header("sec-fetch-mode", header_constants::SEC_FETCH_MODE)
+        .header(header_constants::SEC_FETCH_SITE, header_constants::SEC_FETCH_SITE_CROSS_SITE)
         .body(format!("File name: {filename}"))
         .send()
         .await
@@ -132,20 +128,17 @@ pub(crate) async fn finalize_upload(
         .header("x-goog-upload-offset", "0")
         .header(upload_constants::X_TENANT_ID, upload_constants::BARD_STORAGE_TENANT)
         .header(upload_constants::PUSH_ID_HEADER, push_id)
-        .header("Cookie", cookie_header)
-        .header("Origin", base_url)
-        .header("Referer", format!("{base_url}/"))
-        .header("User-Agent", USER_AGENT)
-        .header(
-            "sec-ch-ua",
-            "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"",
-        )
-        .header("sec-ch-ua-mobile", "?0")
-        .header("sec-ch-ua-platform", "\"Windows\"")
-        .header("sec-fetch-dest", "empty")
-        .header("sec-fetch-mode", "cors")
-        .header("sec-fetch-site", "cross-site")
-        .header("Content-Type", mime_type)
+        .header(header_constants::COOKIE, cookie_header)
+        .header(header_constants::ORIGIN, base_url)
+        .header(header_constants::REFERER, format!("{base_url}/"))
+        .header(header_constants::USER_AGENT, UPLOAD_BROWSER_LIKE)
+        .header("sec-ch-ua", header_constants::SEC_CH_UA)
+        .header("sec-ch-ua-mobile", header_constants::SEC_CH_UA_MOBILE)
+        .header("sec-ch-ua-platform", header_constants::SEC_CH_UA_PLATFORM)
+        .header("sec-fetch-dest", header_constants::SEC_FETCH_DEST)
+        .header("sec-fetch-mode", header_constants::SEC_FETCH_MODE)
+        .header(header_constants::SEC_FETCH_SITE, header_constants::SEC_FETCH_SITE_CROSS_SITE)
+        .header(header_constants::CONTENT_TYPE, mime_type)
         .body(bytes)
         .send()
         .await

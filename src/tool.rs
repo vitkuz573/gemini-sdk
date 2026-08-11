@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::constants::tool_schema::{NAME, PARAMETERS};
+
 /// A single tool call requested by the model.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolCall {
@@ -113,14 +115,15 @@ impl Tool for std::sync::Arc<dyn Tool> {
 #[must_use]
 pub fn tool_declaration(name: impl Into<String>, parameters: Value) -> Value {
     serde_json::json!({
-        "name": name.into(),
-        "parameters": parameters,
+        NAME: name.into(),
+        PARAMETERS: parameters,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::tool_schema::{OBJECT, PROPERTIES, REQUIRED, TYPE};
     use std::sync::Arc;
 
     struct Doubler;
@@ -132,9 +135,9 @@ mod tests {
 
         fn schema(&self) -> Value {
             serde_json::json!({
-                "type": "object",
-                "properties": { "n": { "type": "integer" } },
-                "required": ["n"]
+                TYPE: OBJECT,
+                PROPERTIES: { "n": { TYPE: "integer" } },
+                REQUIRED: ["n"]
             })
         }
 

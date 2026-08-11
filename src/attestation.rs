@@ -8,7 +8,6 @@
 //! for image uploads and true multi-turn conversation state.
 
 use std::process::Stdio;
-use std::time::Duration;
 
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -19,10 +18,11 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::debug;
 
 use crate::auth::{Cookies, Credentials};
+use crate::constants::attestation as attestation_constants;
 use crate::errors::{Error, Result};
 
-const NAVIGATE_TIMEOUT: Duration = Duration::from_secs(60);
-const CAPTURE_TIMEOUT: Duration = Duration::from_secs(60);
+const NAVIGATE_TIMEOUT: std::time::Duration = attestation_constants::navigate_timeout();
+const CAPTURE_TIMEOUT: std::time::Duration = attestation_constants::capture_timeout();
 
 /// A handle to a headless Chrome process used for attestation.
 pub struct BrowserAttestationClient {
@@ -74,20 +74,20 @@ impl BrowserAttestationClient {
         let (mut write, mut read) = ws_stream.split();
 
         // Enable required CDP domains.
-        send_cdp(&mut write, "Runtime.enable", json!({})).await?;
-        send_cdp(&mut write, "Network.enable", json!({})).await?;
-        send_cdp(&mut write, "Page.enable", json!({})).await?;
+        send_cdp(&mut write, attestation_constants::RUNTIME_ENABLE, json!({})).await?;
+        send_cdp(&mut write, attestation_constants::NETWORK_ENABLE, json!({})).await?;
+        send_cdp(&mut write, attestation_constants::PAGE_ENABLE, json!({})).await?;
 
         // Inject cookies before navigation so the page loads as an authenticated session.
         for (name, value) in cookies.iter() {
             send_cdp(
                 &mut write,
-                "Network.setCookie",
+                attestation_constants::NETWORK_SET_COOKIE,
                 json!({
                     "name": name,
                     "value": value,
-                    "domain": ".google.com",
-                    "path": "/",
+                    "domain": attestation_constants::CHROME_DOMAIN,
+                    "path": attestation_constants::CHROME_PATH,
                     "secure": true,
                 }),
             )
@@ -95,10 +95,14 @@ impl BrowserAttestationClient {
         }
 
         // Navigate to Gemini /app.
+        let navigate_url = format!(
+            attestation_constants::NAVIGATE_URL_TEMPLATE,
+            attestation_constants::LANGUAGE_FOR_ATTESTATION
+        );
         send_cdp(
             &mut write,
-            "Page.navigate",
-            json!({ "url": "https://gemini.google.com/app?hl=en" }),
+            attestation_constants::PAGE_NAVIGATE,
+            json!({ "url": navigate_url }),
         )
         .await?;
 
@@ -107,18 +111,25 @@ impl BrowserAttestationClient {
 
         // Inject the prompt and submit via JS.
         let escaped = prompt.replace('\\', "\\\\").replace('"', "\\\"");
+        let textarea_selector = attestation_constants::TEXTAREA_SELECTOR;
+        let send_button_selector = attestation_constants::SEND_BUTTON_SELECTOR;
+        let send_button_aria = attestation_constants::SEND_BUTTON_ARIA_LABEL;
         let js = format!(
             r#"
-            const area = document.querySelector('textarea');
+            const area = document.querySelector('{textarea_selector}');
             if (!area) throw new Error('prompt textarea not found');
-            area.value = "{}";
+            area.value = "{escaped}";
             area.dispatchEvent(new Event('input', {{ bubbles: true }}));
-            const btn = document.querySelector('[data-test-id="send-button"]') || document.querySelector('button[aria-label*="Send"]');
+            const btn = document.querySelector('{send_button_selector}') || document.querySelector('{send_button_aria}');
             if (btn) btn.click();
-            "#,
-            escaped
+            "#
         );
-        send_cdp(&mut write, "Runtime.evaluate", json!({ "expression": js })).await?;
+        send_cdp(
+            &mut write,
+            attestation_constants::RUNTIME_EVALUATE,
+            json!({ "expression": js }),
+        )
+        .await?;
 
         // Wait for the StreamGenerate request.
         let post_data = wait_for_stream_generate_post_data(&mut read, CAPTURE_TIMEOUT).await?;
@@ -135,13 +146,12 @@ impl BrowserAttestationClient {
             return Ok(());
         }
 
-        let mut child = Command::new(&self.chrome_path)
-            .arg("--headless=new")
-            .arg("--no-sandbox")
-            .arg("--disable-gpu")
-            .arg("--disable-dev-shm-usage")
-            .arg("--remote-debugging-port=0")
-            .arg("--user-data-dir=/tmp/gemini-sdk-chrome-profile")
+        let mut command = Command::new(&self.chrome_path);
+        for flag in attestation_constants::CHROME_FLAGS {
+            command.arg(flag);
+        }
+        let mut child = command
+            .arg(format!("--user-data-dir={}", attestation_constants::CHROME_PROFILE_PATH))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

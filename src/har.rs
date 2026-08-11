@@ -14,6 +14,8 @@ use reqwest::header::HeaderName;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
+use crate::constants::har as har_constants;
+use crate::constants::headers as header_constants;
 use crate::errors::{Error, Result};
 
 /// Writer for W3C HAR 1.2 audit files.
@@ -100,7 +102,7 @@ impl HarWriter {
             "cookies": redact_cookies_from_header(response_headers),
             "content": {
                 "size": response_body.len() as i64,
-                "mimeType": "application/json",
+                "mimeType": har_constants::RESPONSE_MIME_TYPE,
                 "text": String::from_utf8_lossy(response_body),
             },
             "redirectURL": "",
@@ -128,9 +130,9 @@ impl HarWriter {
     async fn flush(&self) -> Result<()> {
         let doc = json!({
             "log": {
-                "version": "1.2",
+                "version": har_constants::VERSION,
                 "creator": {
-                    "name": "gemini-sdk",
+                    "name": har_constants::CREATOR_NAME,
                     "version": env!("CARGO_PKG_VERSION"),
                 },
                 "entries": self.entries,
@@ -153,7 +155,7 @@ fn redact_headers(headers: &HeaderMap) -> Vec<Value> {
             let redacted = is_secret_header(name_str);
             json!({
                 "name": name_str,
-                "value": if redacted { "<redacted>".to_string() } else { value_to_string(value) },
+                "value": if redacted { har_constants::REDACTED_VALUE.to_string() } else { value_to_string(value) },
             })
         })
         .collect()
@@ -161,10 +163,10 @@ fn redact_headers(headers: &HeaderMap) -> Vec<Value> {
 
 fn is_secret_header(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    lower == "cookie"
-        || lower == "authorization"
-        || lower == "set-cookie"
-        || lower.starts_with("x-goog-ext-")
+    lower == header_constants::COOKIE.to_ascii_lowercase()
+        || lower == header_constants::AUTHORIZATION.to_ascii_lowercase()
+        || lower == header_constants::SET_COOKIE.to_ascii_lowercase()
+        || lower.starts_with(header_constants::X_GOOG_EXT_PREFIX)
 }
 
 fn value_to_string(value: &HeaderValue) -> String {
@@ -174,8 +176,8 @@ fn value_to_string(value: &HeaderValue) -> String {
 fn redact_cookies_from_header(headers: &HeaderMap) -> Vec<Value> {
     let mut result = Vec::new();
     for (name, value) in headers {
-        if name.as_str().eq_ignore_ascii_case("cookie")
-            || name.as_str().eq_ignore_ascii_case("set-cookie")
+        if name.as_str().eq_ignore_ascii_case(header_constants::COOKIE)
+            || name.as_str().eq_ignore_ascii_case(header_constants::SET_COOKIE)
         {
             if let Ok(text) = value.to_str() {
                 for cookie in text.split(';') {
@@ -187,7 +189,7 @@ fn redact_cookies_from_header(headers: &HeaderMap) -> Vec<Value> {
                     let cookie_name = parts.next().unwrap_or("").trim();
                     result.push(json!({
                         "name": cookie_name,
-                        "value": "<redacted>",
+                        "value": har_constants::REDACTED_VALUE,
                     }));
                 }
             }
@@ -200,7 +202,7 @@ fn redact_post_data(body: &[u8]) -> Value {
     let text = String::from_utf8_lossy(body);
     let redacted = redact_cookie_like_substrings(&text);
     json!({
-        "mimeType": "application/x-www-form-urlencoded;charset=UTF-8",
+        "mimeType": har_constants::REQUEST_MIME_TYPE,
         "text": redacted,
     })
 }
@@ -211,18 +213,18 @@ fn redact_cookie_like_substrings(text: &str) -> String {
     // auth cookie or bearer token.
     let mut out = text.to_string();
     let patterns: &[&str] = &[
-        "__Secure-1PSID",
-        "__Secure-1PSIDCC",
-        "__Secure-3PSID",
-        "__Secure-3PSIDCC",
-        "SAPISID",
-        "APISID",
-        "SSID",
-        "HSID",
-        "SID",
-        "SOCS",
-        "authorization=Bearer ",
-        "access_token=",
+        har_constants::SECURE_1_PSID,
+        har_constants::SECURE_1_PSIDCC,
+        har_constants::SECURE_3_PSID,
+        har_constants::SECURE_3_PSIDCC,
+        har_constants::SAPISID,
+        har_constants::APISID,
+        har_constants::SSID,
+        har_constants::HSID,
+        har_constants::SID,
+        har_constants::SOCS,
+        har_constants::AUTHORIZATION_BEARER_PREFIX,
+        har_constants::ACCESS_TOKEN_PREFIX,
     ];
     for pattern in patterns {
         out = redact_after_pattern(&out, pattern);
@@ -249,7 +251,8 @@ fn redact_after_pattern(text: &str, pattern: &str) -> String {
             (0, end)
         };
         if end > 0 {
-            result.push_str("=<redacted>");
+            result.push('=');
+            result.push_str(har_constants::REDACTED_VALUE);
         }
         start = abs + pattern.len() + skip + end;
     }
@@ -260,6 +263,10 @@ fn redact_after_pattern(text: &str, pattern: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TEST_BASE_URL: &str = "https://gemini.google.com";
+    const TEST_BATCHEXECUTE_URL: &str =
+        const_format::formatcp!("{TEST_BASE_URL}/_/BardChatUi/data/batchexecute");
 
     fn header_map(pairs: &[(&str, &str)]) -> HeaderMap {
         let mut map = HeaderMap::new();
@@ -282,7 +289,7 @@ mod tests {
         writer
             .record(
                 "POST",
-                "https://gemini.google.com/_/BardChatUi/data/batchexecute",
+                TEST_BATCHEXECUTE_URL,
                 &headers,
                 b"f.req=[[1]]",
                 200,
@@ -347,7 +354,7 @@ mod tests {
         writer
             .record(
                 "POST",
-                "https://gemini.google.com/_/BardChatUi/data/batchexecute",
+                TEST_BATCHEXECUTE_URL,
                 &HeaderMap::new(),
                 b"f.req=[[1]]",
                 400,

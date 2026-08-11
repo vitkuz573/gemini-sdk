@@ -125,30 +125,36 @@ mod tests {
 
     #[test]
     fn no_op_recorder_does_nothing() {
+        use crate::constants::tracing_names::{METRIC_REQUESTS, METRIC_REQUEST_LATENCY, STATUS};
+
         let recorder = NoOpMetricsRecorder;
-        recorder.increment_counter("gemini_sdk.requests", &[("status", "ok")]);
-        recorder.record_histogram("gemini_sdk.request_latency", Duration::from_millis(10), &[]);
+        recorder.increment_counter(METRIC_REQUESTS, &[(STATUS, "ok")]);
+        recorder.record_histogram(METRIC_REQUEST_LATENCY, Duration::from_millis(10), &[]);
     }
 
     #[test]
     fn counting_recorder_records_counters_and_histograms() {
+        use crate::constants::tracing_names::{
+            METRIC_REQUESTS, METRIC_REQUEST_LATENCY, OPERATION, STATUS,
+        };
+
         let recorder = CountingRecorder::default();
-        recorder.increment_counter("gemini_sdk.requests", &[("status", "ok")]);
+        recorder.increment_counter(METRIC_REQUESTS, &[(STATUS, "ok")]);
         recorder.record_histogram(
-            "gemini_sdk.request_latency",
+            METRIC_REQUEST_LATENCY,
             Duration::from_secs_f64(0.05),
-            &[("operation", "generate")],
+            &[(OPERATION, "generate")],
         );
 
         assert_eq!(recorder.counter_calls.load(Ordering::SeqCst), 1);
         assert_eq!(recorder.histogram_calls.load(Ordering::SeqCst), 1);
 
         let counters = recorder.counters.lock().unwrap();
-        assert_eq!(counters[0].0, "gemini_sdk.requests");
-        assert_eq!(counters[0].1, vec![("status".to_string(), "ok".to_string())]);
+        assert_eq!(counters[0].0, METRIC_REQUESTS);
+        assert_eq!(counters[0].1, vec![(STATUS.to_string(), "ok".to_string())]);
 
         let histograms = recorder.histograms.lock().unwrap();
-        assert_eq!(histograms[0].0, "gemini_sdk.request_latency");
+        assert_eq!(histograms[0].0, METRIC_REQUEST_LATENCY);
         assert!((histograms[0].1 - 0.05).abs() < f64::EPSILON);
     }
 }

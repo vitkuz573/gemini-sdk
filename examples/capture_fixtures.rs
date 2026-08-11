@@ -12,9 +12,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use gemini_sdk::{ChatMessage, GeminiClient, ImageSource, ModelCategory};
-
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
+use gemini_sdk::{
+    constants::{
+        headers::COOKIE,
+        mime::{FORM_URLENCODED, PNG},
+        query_keys::{HL, REQID, RT, RT_VALUE},
+        urls::{APP_PATH, BATCHEXECUTE_PATH, GEMINI_BASE_URL},
+        user_agents::UPLOAD_BROWSER_LIKE,
+    },
+    ChatMessage, GeminiClient, ImageSource, ModelCategory,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -49,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut image_msg = ChatMessage::user("Describe this image.");
     image_msg
         .parts
-        .push(gemini_sdk::ContentPart::Image(ImageSource::from_bytes("image/png", b"fake")));
+        .push(gemini_sdk::ContentPart::Image(ImageSource::from_bytes(PNG, b"fake")));
     let err1100 = client.generate_raw(&image_msg, None, ModelCategory::Auto, None).await;
 
     println!("Fetching 1096 session error...");
@@ -237,7 +244,7 @@ fn format_model_list(models: Vec<gemini_sdk::ModelInfo>) -> String {
 async fn trigger_1096(cookies: &str) -> Result<String, Box<dyn std::error::Error>> {
     // Send a StreamGenerate request with an invalid f.sid to naturally produce
     // a BardErrorInfo 1096 / session error.
-    let http = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
+    let http = reqwest::Client::builder().user_agent(UPLOAD_BROWSER_LIKE).build()?;
 
     let reqid = ((std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -252,20 +259,20 @@ async fn trigger_1096(cookies: &str) -> Result<String, Box<dyn std::error::Error
         serde_json::to_string(&[serde_json::Value::Null, serde_json::Value::Array(inner)]).unwrap();
     let body = format!("f.req={}", urlencoding::encode(&f_req));
 
-    let url = "https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate";
+    let url = format!("{GEMINI_BASE_URL}{BATCHEXECUTE_PATH}/assistant.lamda.BardFrontendService/StreamGenerate");
     let resp = http
-        .post(url)
+        .post(&url)
         .query(&[
-            ("hl", "en"),
-            ("_reqid", reqid.as_str()),
-            ("rt", "c"),
+            (HL, "en"),
+            (REQID, reqid.as_str()),
+            (RT, RT_VALUE),
             ("pageId", "none"),
             ("f.sid", "invalid-session-id"),
         ])
-        .header("Cookie", cookies)
-        .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-        .header("Origin", "https://gemini.google.com")
-        .header("Referer", "https://gemini.google.com/app")
+        .header(COOKIE, cookies)
+        .header("Content-Type", FORM_URLENCODED)
+        .header("Origin", GEMINI_BASE_URL)
+        .header("Referer", format!("{GEMINI_BASE_URL}{APP_PATH}"))
         .header("X-Same-Domain", "1")
         .body(body)
         .send()
@@ -280,10 +287,11 @@ async fn trigger_1096(cookies: &str) -> Result<String, Box<dyn std::error::Error
 }
 
 async fn fetch_app_html(cookies: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let http = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
+    let http = reqwest::Client::builder().user_agent(UPLOAD_BROWSER_LIKE).build()?;
+    let url = format!("{GEMINI_BASE_URL}{APP_PATH}?{HL}=en");
     let resp = http
-        .get("https://gemini.google.com/app?hl=en")
-        .header("Cookie", cookies)
+        .get(&url)
+        .header(COOKIE, cookies)
         .header("Accept", "text/html")
         .send()
         .await?;

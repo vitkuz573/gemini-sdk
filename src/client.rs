@@ -111,15 +111,26 @@ impl HttpHook for Arc<dyn HttpHook> {
     }
 }
 
+use crate::constants::auth::MISSING_LEGACY_COOKIES_ADVICE;
+use crate::constants::har as har_constants;
+use crate::constants::headers as header_constants;
+use crate::constants::http_methods::{GET, POST};
 use crate::constants::query_keys::{BL, F_SID, HL, REQID, RPCIDS, RT, RT_VALUE, SOURCE_PATH};
+use crate::constants::tracing_names::{
+    DELETE_TURN, DIAGNOSE_SIGNED_IN, GENERATE, GENERATE_RAW, GENERATE_STREAM,
+    GENERATE_WITH_CONVERSATION, GENERATE_WITH_TOOLS, GET_LAST_SELECTED_MODE, GET_LOCALE_CONFIG,
+    GET_LOCALE_TOOLS, GET_MODEL_CONFIG, GET_SCHEDULED_PROMPTS, GET_TOOLS_CONFIG, GET_USAGE_STATS,
+    GET_USER_INFO, INGEST_CONVERSATION_STATE, LIST_MODELS, METRIC_RETRIES, OPERATION,
+    PARSE_RESPONSE, RATE_TURN, REGENERATE_TURN, SET_LAST_SELECTED_MODE, UPLOAD_WITH_PROGRESS,
+    VERIFY_SIGNED_IN, WAA_INIT_CHAIN,
+};
 use crate::constants::urls::{BATCHEXECUTE_PATH, GEMINI_BASE_URL, OGADS_BASE_URL, WAA_BASE_URL};
 use crate::constants::urls::{
     CONVERSATION_ACTION_SOURCE_PATH_PREFIX, SCHEDULED_SOURCE_PATH, USAGE_SOURCE_PATH,
 };
+use crate::constants::user_agents::BROWSER_LIKE;
 use crate::constants::{rpc_ids, transport};
-const USER_AGENT: &str =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
-const X_CLIENT_DATA: &str = "CNeOywE=";
+
 /// Best-effort default fingerprint used when the live session does not yield
 /// one (e.g., ogads init failed). The captured `Pro` model id is reused as a
 /// stand-in but may not match the live model selection — see spike findings.
@@ -505,6 +516,16 @@ impl GeminiClient {
         &self.inner.session
     }
 
+    pub(crate) async fn build_headers_for_test(
+        &self,
+        reqid: Option<&str>,
+        waa_context: Option<&str>,
+        authorization: Option<&str>,
+        endpoint: Option<&str>,
+    ) -> Vec<(String, String)> {
+        self.build_headers(reqid, waa_context, authorization, endpoint).await
+    }
+
     /// Returns a builder for sending a single chat message.
     pub fn chat(&self) -> ChatBuilder<'_> {
         ChatBuilder {
@@ -631,7 +652,7 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.regenerate_turn", level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
+    #[tracing::instrument(name = REGENERATE_TURN, level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
     pub async fn regenerate_turn(
         &self,
         conversation_id: impl AsRef<str>,
@@ -655,7 +676,7 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.rate_turn", level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
+    #[tracing::instrument(name = RATE_TURN, level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
     pub async fn rate_turn(
         &self,
         conversation_id: impl AsRef<str>,
@@ -681,7 +702,7 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
-    #[tracing::instrument(name = "gemini.delete_turn", level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
+    #[tracing::instrument(name = DELETE_TURN, level = "info", skip_all, fields(response_id = %response_id.as_ref()))]
     pub async fn delete_turn(
         &self,
         conversation_id: impl AsRef<str>,
@@ -767,7 +788,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -796,10 +817,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_user_info",
+        name = GET_USER_INFO,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_user_info")
+        fields(operation = GET_USER_INFO)
     )]
     pub async fn get_user_info(&self) -> Result<UserInfo> {
         self.ensure_session().await?;
@@ -851,7 +872,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -876,10 +897,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_last_selected_mode",
+        name = GET_LAST_SELECTED_MODE,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_last_selected_mode")
+        fields(operation = GET_LAST_SELECTED_MODE)
     )]
     pub async fn get_last_selected_mode(&self) -> Result<LastSelectedMode> {
         self.ensure_session().await?;
@@ -931,7 +952,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -959,10 +980,10 @@ impl GeminiClient {
     ///
     /// Returns an error if the session is not initialized or the request fails.
     #[tracing::instrument(
-        name = "gemini.set_last_selected_mode",
+        name = SET_LAST_SELECTED_MODE,
         level = "info",
         skip_all,
-        fields(operation = "gemini.set_last_selected_mode")
+        fields(operation = SET_LAST_SELECTED_MODE)
     )]
     pub async fn set_last_selected_mode(&self, mode_id: impl AsRef<str>) -> Result<()> {
         self.ensure_session().await?;
@@ -1015,7 +1036,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1040,10 +1061,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_locale_tools",
+        name = GET_LOCALE_TOOLS,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_locale_tools")
+        fields(operation = GET_LOCALE_TOOLS)
     )]
     pub async fn get_locale_tools(&self) -> Result<LocaleTools> {
         self.ensure_session().await?;
@@ -1095,7 +1116,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1120,10 +1141,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_model_config",
+        name = GET_MODEL_CONFIG,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_model_config")
+        fields(operation = GET_MODEL_CONFIG)
     )]
     pub async fn get_model_config(&self) -> Result<ModelConfig> {
         self.ensure_session().await?;
@@ -1175,7 +1196,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1200,10 +1221,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_locale_config",
+        name = GET_LOCALE_CONFIG,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_locale_config")
+        fields(operation = GET_LOCALE_CONFIG)
     )]
     pub async fn get_locale_config(&self) -> Result<LocaleConfig> {
         self.ensure_session().await?;
@@ -1255,7 +1276,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1280,10 +1301,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_tools_config",
+        name = GET_TOOLS_CONFIG,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_tools_config")
+        fields(operation = GET_TOOLS_CONFIG)
     )]
     pub async fn get_tools_config(&self) -> Result<ToolsConfig> {
         self.ensure_session().await?;
@@ -1335,7 +1356,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1360,10 +1381,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_usage_stats",
+        name = GET_USAGE_STATS,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_usage_stats")
+        fields(operation = GET_USAGE_STATS)
     )]
     pub async fn get_usage_stats(&self) -> Result<UsageStats> {
         self.ensure_session().await?;
@@ -1415,7 +1436,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1440,10 +1461,10 @@ impl GeminiClient {
     /// Returns an error if the session is not initialized, the request fails,
     /// or the response cannot be parsed.
     #[tracing::instrument(
-        name = "gemini.get_scheduled_prompts",
+        name = GET_SCHEDULED_PROMPTS,
         level = "info",
         skip_all,
-        fields(operation = "gemini.get_scheduled_prompts")
+        fields(operation = GET_SCHEDULED_PROMPTS)
     )]
     pub async fn get_scheduled_prompts(&self) -> Result<ScheduledPrompts> {
         self.ensure_session().await?;
@@ -1495,7 +1516,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1534,10 +1555,10 @@ impl GeminiClient {
     /// Internally calls `BardFrontendService.GetUserStatus` through the
     /// batchexecute transport using the `otAQ7b` RPC id.
     #[tracing::instrument(
-        name = "gemini.list_models",
+        name = LIST_MODELS,
         level = "info",
         skip_all,
-        fields(operation = "gemini.list_models")
+        fields(operation = LIST_MODELS)
     )]
     pub async fn list_models(&self) -> Result<Vec<ModelInfo>> {
         self.ensure_session().await?;
@@ -1590,7 +1611,7 @@ impl GeminiClient {
                         for (key, value) in &headers {
                             req = req.header(key, value);
                         }
-                        req = req.header("Cookie", cookie_header);
+                        req = req.header(header_constants::COOKIE, cookie_header);
                         req.send().await
                     }
                 },
@@ -1608,7 +1629,7 @@ impl GeminiClient {
     ///
     /// Prefer using [`GeminiClient::chat`] for an ergonomic API. If you need to
     /// pass an existing [`Conversation`] use [`GeminiClient::generate_with_conversation`].
-    #[tracing::instrument(name = "gemini.generate", level = "info", skip_all, fields(operation = "gemini.generate", category = ?category))]
+    #[tracing::instrument(name = GENERATE, level = "info", skip_all, fields(operation = GENERATE, category = ?category))]
     pub async fn generate(
         &self,
         message: &ChatMessage,
@@ -1625,7 +1646,7 @@ impl GeminiClient {
     /// declarations, parses [`ContentPart::ToolCall`] parts from the response,
     /// invokes the matching registered tools, sends a follow-up turn containing
     /// the results, and repeats up to `max_tool_turns` (default 5).
-    #[tracing::instrument(name = "gemini.generate_with_tools", level = "info", skip_all, fields(operation = "gemini.generate_with_tools", category = ?category))]
+    #[tracing::instrument(name = GENERATE_WITH_TOOLS, level = "info", skip_all, fields(operation = GENERATE_WITH_TOOLS, category = ?category))]
     pub async fn generate_with_tools(
         &self,
         message: &ChatMessage,
@@ -1715,7 +1736,7 @@ impl GeminiClient {
     /// seen so far. After the upstream stream ends, the full response body is
     /// ingested into the client's conversation state so that multi-turn chats
     /// can continue.
-    #[tracing::instrument(name = "gemini.generate_stream", level = "info", skip_all, fields(operation = "gemini.generate_stream", category = ?category))]
+    #[tracing::instrument(name = GENERATE_STREAM, level = "info", skip_all, fields(operation = GENERATE_STREAM, category = ?category))]
     pub async fn generate_stream(
         &self,
         message: &ChatMessage,
@@ -1800,7 +1821,7 @@ impl GeminiClient {
     ///
     /// This is the public entry point for callers that manage a
     /// [`Conversation`] manually instead of using the builder API.
-    #[tracing::instrument(name = "gemini.generate_with_conversation", level = "info", skip_all, fields(operation = "gemini.generate_with_conversation", category = ?category))]
+    #[tracing::instrument(name = GENERATE_WITH_CONVERSATION, level = "info", skip_all, fields(operation = GENERATE_WITH_CONVERSATION, category = ?category))]
     pub async fn generate_with_conversation(
         &self,
         message: &ChatMessage,
@@ -1872,7 +1893,7 @@ impl GeminiClient {
         Ok(body)
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.parse_response", bytes = body.len()))]
+    #[tracing::instrument(level = "debug", skip_all, fields(operation = PARSE_RESPONSE, bytes = body.len()))]
     fn parse_response(&self, body: &str) -> Result<ChatResponse> {
         parse_chat_response(body)
     }
@@ -1888,7 +1909,7 @@ impl GeminiClient {
     /// Sends a generation request and returns the raw response body.
     ///
     /// This is useful when implementing custom streaming or logging.
-    #[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.generate_raw", category = ?category))]
+    #[tracing::instrument(level = "debug", skip_all, fields(operation = GENERATE_RAW, category = ?category))]
     pub async fn generate_raw(
         &self,
         message: &ChatMessage,
@@ -1918,7 +1939,7 @@ impl GeminiClient {
     /// The stream yields [`UploadEvent::Progress`] at least once and a final
     /// [`UploadEvent::Complete`] when the upload finishes. Dropping the stream
     /// before `Complete` leaves server-side upload state best-effort.
-    #[tracing::instrument(name = "gemini.upload_with_progress", level = "info", skip_all, fields(operation = "gemini.upload_with_progress", bytes = bytes.len()))]
+    #[tracing::instrument(name = UPLOAD_WITH_PROGRESS, level = "info", skip_all, fields(operation = UPLOAD_WITH_PROGRESS, bytes = bytes.len()))]
     pub async fn upload_with_progress(
         &self,
         filename: impl Into<String>,
@@ -2008,15 +2029,16 @@ impl GeminiClient {
                 let form_body = form_body.clone();
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
-                async move {
-                    let mut req = client.post(&url).query(&params).body(form_body);
-                    for (key, value) in &headers {
-                        req = req.header(key, value);
+                    async move {
+                        let mut req = client.post(&url).query(&params).body(form_body);
+                        for (key, value) in &headers {
+                            req = req.header(key, value);
+                        }
+                        req = req.header(header_constants::COOKIE, cookie_header);
+                        req.send().await
                     }
-                    req = req.header("Cookie", cookie_header);
-                    req.send().await
-                }
-            })
+                })
+
             .await?;
 
         let status = response.status();
@@ -2046,7 +2068,7 @@ impl GeminiClient {
         Ok(())
     }
 
-    #[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.ingest_conversation_state", bytes = body.len()))]
+    #[tracing::instrument(level = "debug", skip_all, fields(operation = INGEST_CONVERSATION_STATE, bytes = body.len()))]
     async fn ingest_conversation_state_inner(&self, body: &str) -> Result<()> {
         self.ingest_conversation_state(body).await
     }
@@ -2121,10 +2143,10 @@ impl GeminiClient {
     /// sign-in redirect and contains `window.WIZ_global_data` with a non-empty
     /// numeric `S06Grb` Gaia id and a present `oPEP7c` email address.
     #[tracing::instrument(
-        name = "gemini.verify_signed_in",
+        name = VERIFY_SIGNED_IN,
         level = "info",
         skip_all,
-        fields(operation = "gemini.verify_signed_in")
+        fields(operation = VERIFY_SIGNED_IN)
     )]
     pub async fn verify_signed_in(&self) -> Result<bool> {
         let body = self.fetch_app_page().await?;
@@ -2140,10 +2162,10 @@ impl GeminiClient {
     /// absent from the supplied header. This is useful for the live probe and
     /// integration tests when debugging cookie issues.
     #[tracing::instrument(
-        name = "gemini.diagnose_signed_in",
+        name = DIAGNOSE_SIGNED_IN,
         level = "info",
         skip_all,
-        fields(operation = "gemini.diagnose_signed_in")
+        fields(operation = DIAGNOSE_SIGNED_IN)
     )]
     pub async fn diagnose_signed_in(&self) -> Result<AppDiagnostics> {
         let body = self.fetch_app_page().await?;
@@ -2234,7 +2256,7 @@ impl GeminiClient {
     /// [`Error::AttestationFailed`]. Failures from the batchexecute warm-up
     /// RPCs and ogads `GetAsyncData` are tolerated and fall back to a synthetic
     /// context so the session can still be used.
-    #[tracing::instrument(level = "info", skip_all, fields(operation = "gemini.waa_init_chain"))]
+    #[tracing::instrument(level = "info", skip_all, fields(operation = WAA_INIT_CHAIN))]
     async fn run_waa_init_chain(&self) -> Result<()> {
         let (at, language, build_label, session_id, cookie_header, credentials) = {
             let (cookie_header, credentials) = {
@@ -2371,7 +2393,7 @@ impl GeminiClient {
                     for (key, value) in &headers {
                         req = req.header(key, value);
                     }
-                    req = req.header("Cookie", cookie_header);
+                    req = req.header(header_constants::COOKIE, cookie_header);
                     req.send().await
                 }
             })
@@ -2393,14 +2415,14 @@ impl GeminiClient {
             .inner
             .http
             .post(&url)
-            .header("Content-Type", "application/json+protobuf")
-            .header("x-goog-api-key", WAA_API_KEY)
-            .header("x-user-agent", "grpc-web-javascript/0.1")
-            .header("Cookie", cookie_header)
-            .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{base_url}/"))
-            .header("Origin", base_url.clone())
-            .header("x-client-data", X_CLIENT_DATA)
+            .header(header_constants::CONTENT_TYPE, crate::constants::mime::JSON_PROTOBUF)
+            .header(header_constants::X_GOOG_API_KEY, WAA_API_KEY)
+            .header(header_constants::X_USER_AGENT, crate::constants::headers::X_USER_AGENT_VALUE)
+            .header(header_constants::COOKIE, cookie_header)
+            .header(header_constants::USER_AGENT, BROWSER_LIKE)
+            .header(header_constants::REFERER, format!("{base_url}/"))
+            .header(header_constants::ORIGIN, base_url.clone())
+            .header(header_constants::X_CLIENT_DATA, crate::constants::headers::X_CLIENT_DATA_VALUE)
             .body(body.clone())
             .send()
             .await
@@ -2410,7 +2432,7 @@ impl GeminiClient {
         let response_headers = response.headers().clone();
         let text = response.text().await.map_err(Error::Request)?;
         self.maybe_record_har(
-            "POST",
+            POST,
             &url,
             &HeaderMap::new(),
             body.as_bytes(),
@@ -2453,15 +2475,15 @@ impl GeminiClient {
             .inner
             .http
             .post(&url)
-            .header("Content-Type", "application/json+protobuf")
-            .header("x-goog-api-key", OGADS_API_KEY)
-            .header("Cookie", cookie_header)
-            .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{base_url}/"))
-            .header("Origin", base_url.clone())
-            .header("x-client-data", X_CLIENT_DATA);
+            .header(header_constants::CONTENT_TYPE, crate::constants::mime::JSON_PROTOBUF)
+            .header(header_constants::X_GOOG_API_KEY, OGADS_API_KEY)
+            .header(header_constants::COOKIE, cookie_header)
+            .header(header_constants::USER_AGENT, BROWSER_LIKE)
+            .header(header_constants::REFERER, format!("{base_url}/"))
+            .header(header_constants::ORIGIN, base_url.clone())
+            .header(header_constants::X_CLIENT_DATA, crate::constants::headers::X_CLIENT_DATA_VALUE);
         if let Some(auth) = auth.clone() {
-            req = req.header("Authorization", auth);
+            req = req.header(header_constants::AUTHORIZATION, auth);
         }
         let started = std::time::Instant::now();
         let response = req
@@ -2474,7 +2496,7 @@ impl GeminiClient {
         let response_headers = response.headers().clone();
         let text = response.text().await.map_err(Error::Request)?;
         self.maybe_record_har(
-            "POST",
+            POST,
             &url,
             &HeaderMap::new(),
             body.as_bytes(),
@@ -2499,15 +2521,15 @@ impl GeminiClient {
             (session.language.clone(), cookie_header, config.base_url.clone())
         };
 
-        let url = format!("{base_url}/app?hl={language}");
+        let url = format!("{base_url}{}", crate::constants::urls::APP_LANGUAGE_PATH_TEMPLATE.replace("{}", &language));
         let started = std::time::Instant::now();
         let response = self
             .inner
             .http
             .get(&url)
-            .header("Cookie", &cookie_header)
-            .header("User-Agent", USER_AGENT)
-            .header("Accept", "text/html")
+            .header(header_constants::COOKIE, &cookie_header)
+            .header(header_constants::USER_AGENT, BROWSER_LIKE)
+            .header(header_constants::ACCEPT, "text/html")
             .send()
             .await
             .map_err(|e| Error::Transient(format!("failed to fetch Gemini /app: {e}")))?;
@@ -2523,7 +2545,7 @@ impl GeminiClient {
         self.merge_response_cookies_owned(cookies.into_iter()).await;
 
         self.maybe_record_har(
-            "GET",
+            GET,
             &url,
             &HeaderMap::new(),
             &[],
@@ -2565,7 +2587,7 @@ impl GeminiClient {
         if !missing_legacy.is_empty() {
             message.push_str(". Likely missing legacy cookies: ");
             message.push_str(&missing_legacy.join(", "));
-            message.push_str(". Copy the full signed-in cookie header from the browser, including SID, HSID, SSID, APISID, SAPISID, SIDCC, __Secure-ENID, and NID.");
+            message.push_str(MISSING_LEGACY_COOKIES_ADVICE);
         }
         Error::not_signed_in(message)
     }
@@ -2593,11 +2615,11 @@ impl GeminiClient {
             .inner
             .http
             .post(save_url)
-            .header("Cookie", &cookie_header)
-            .header("User-Agent", USER_AGENT)
-            .header("Referer", format!("{base_url}/app?hl={language}"))
-            .header("Origin", base_url)
-            .header("Content-Length", "0")
+            .header(header_constants::COOKIE, &cookie_header)
+            .header(header_constants::USER_AGENT, BROWSER_LIKE)
+            .header(header_constants::REFERER, format!("{base_url}{}", crate::constants::urls::APP_LANGUAGE_PATH_TEMPLATE.replace("{}", &language)))
+            .header(header_constants::ORIGIN, base_url)
+            .header(header_constants::CONTENT_LENGTH, "0")
             .body("")
             .send()
             .await
@@ -2624,26 +2646,52 @@ impl GeminiClient {
         let origin = self.inner.config.read().await.base_url.clone();
         let mut headers = vec![
             (
-                "Content-Type".to_string(),
-                "application/x-www-form-urlencoded;charset=UTF-8".to_string(),
+                header_constants::CONTENT_TYPE.to_string(),
+                har_constants::REQUEST_MIME_TYPE.to_string(),
             ),
-            ("User-Agent".to_string(), USER_AGENT.to_string()),
-            ("Origin".to_string(), origin.clone()),
-            ("Referer".to_string(), format!("{origin}/")),
-            ("X-Same-Domain".to_string(), "1".to_string()),
-            ("Cache-Control".to_string(), "no-cache".to_string()),
-            ("Pragma".to_string(), "no-cache".to_string()),
-            ("x-client-data".to_string(), X_CLIENT_DATA.to_string()),
+            (header_constants::USER_AGENT.to_string(), BROWSER_LIKE.to_string()),
+            (header_constants::ORIGIN.to_string(), origin.clone()),
+            (header_constants::REFERER.to_string(), format!("{origin}/")),
+            (
+                header_constants::X_SAME_DOMAIN.to_string(),
+                header_constants::X_SAME_DOMAIN_VALUE.to_string(),
+            ),
+            (
+                header_constants::CACHE_CONTROL.to_string(),
+                header_constants::CACHE_CONTROL_NO_CACHE.to_string(),
+            ),
+            (
+                header_constants::PRAGMA.to_string(),
+                header_constants::PRAGMA_NO_CACHE.to_string(),
+            ),
+            (
+                header_constants::X_CLIENT_DATA.to_string(),
+                crate::constants::headers::X_CLIENT_DATA_VALUE.to_string(),
+            ),
             (
                 "sec-ch-ua".to_string(),
-                "\"Not A(Brand\";v=\"99\", \"Google Chrome\";v=\"146\", \"Chromium\";v=\"146\""
-                    .to_string(),
+                header_constants::SEC_CH_UA.to_string(),
             ),
-            ("sec-ch-ua-mobile".to_string(), "?0".to_string()),
-            ("sec-ch-ua-platform".to_string(), "\"Windows\"".to_string()),
-            ("sec-fetch-dest".to_string(), "empty".to_string()),
-            ("sec-fetch-mode".to_string(), "cors".to_string()),
-            ("sec-fetch-site".to_string(), "same-origin".to_string()),
+            (
+                "sec-ch-ua-mobile".to_string(),
+                header_constants::SEC_CH_UA_MOBILE.to_string(),
+            ),
+            (
+                "sec-ch-ua-platform".to_string(),
+                header_constants::SEC_CH_UA_PLATFORM.to_string(),
+            ),
+            (
+                "sec-fetch-dest".to_string(),
+                header_constants::SEC_FETCH_DEST.to_string(),
+            ),
+            (
+                "sec-fetch-mode".to_string(),
+                header_constants::SEC_FETCH_MODE.to_string(),
+            ),
+            (
+                header_constants::SEC_FETCH_SITE.to_string(),
+                header_constants::SEC_FETCH_SITE_SAME_ORIGIN.to_string(),
+            ),
         ];
         if let Some(id) = reqid {
             let ext = serde_json::json!([id, 1]).to_string();
@@ -2659,7 +2707,7 @@ impl GeminiClient {
             headers.push(("x-goog-ext-73010990-jspb".to_string(), "[0,0,0]".to_string()));
         }
         if let Some(auth) = authorization {
-            headers.push(("Authorization".to_string(), auth.to_string()));
+            headers.push((header_constants::AUTHORIZATION.to_string(), auth.to_string()));
         }
         headers
     }
@@ -2741,7 +2789,10 @@ impl GeminiClient {
 
         if transient_body.load(std::sync::atomic::Ordering::SeqCst) {
             if let Some(recorder) = self.inner.config.read().await.metrics_recorder.clone() {
-                recorder.increment_counter("gemini_sdk.retries", &[("operation", "batchexecute")]);
+                recorder.increment_counter(
+                    METRIC_RETRIES,
+                    &[(OPERATION, "batchexecute")],
+                );
             }
         }
 

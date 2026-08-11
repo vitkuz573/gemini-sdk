@@ -8,6 +8,8 @@
 
 use reqwest::StatusCode;
 
+use crate::constants::transient::{DI_MARKER, ER_MARKER, HTTPRM_MARKER};
+
 /// Returns `true` when `status` is HTTP 400 and `body` contains the transient
 /// WIZ frame markers `er`, `di`, and `af.httprm`.
 ///
@@ -19,7 +21,7 @@ pub fn is_wiz_transient_400(status: StatusCode, body: &str) -> bool {
     if status != StatusCode::BAD_REQUEST {
         return false;
     }
-    body.contains("\"er\"") && body.contains("\"di\"") && body.contains("\"af.httprm\"")
+    body.contains(ER_MARKER) && body.contains(DI_MARKER) && body.contains(HTTPRM_MARKER)
 }
 
 #[cfg(test)]

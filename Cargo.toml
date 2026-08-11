@@ -51,6 +51,8 @@ rand = "0.8"
 sha1 = "0.10"
 opentelemetry = { version = "0.32", optional = true }
 
+const_format = "0.2"
+
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.6"

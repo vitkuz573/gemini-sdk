@@ -38,6 +38,9 @@ use base64::Engine;
 use futures::StreamExt;
 use gemini_sdk::{ChatMessage, GeminiClient, ImageSource, ModelCategory, TurnRating};
 
+mod common;
+use common::{default_test_timeout, MIME_PNG};
+
 fn load_env() {
     let path = PathBuf::from("/tmp/opencode/gemini_cookies.env");
     if path.exists() {
@@ -78,7 +81,10 @@ async fn list_models_works() {
     };
 
     let supplied_names = supplied_cookie_names(&cookies);
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let diag = client.diagnose_signed_in().await.expect("diagnose_signed_in should succeed");
     assert!(
         diag.signed_in,
@@ -111,7 +117,10 @@ async fn chat_send_message_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let response = client
         .chat()
         .send_message("Say a one-sentence hello in English.")
@@ -127,7 +136,10 @@ async fn stream_generate_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let message = ChatMessage::user("Say a one-sentence hello in English.");
     let response = client
         .stream_generate(&message, ModelCategory::Auto, None)
@@ -156,12 +168,15 @@ async fn upload_image_works() {
         return;
     }
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     // A minimal 1x1 transparent PNG.
     let png = base64::engine::general_purpose::STANDARD
         .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
         .expect("valid png");
-    let image = ImageSource::from_bytes("image/png", &png);
+    let image = ImageSource::from_bytes(MIME_PNG, &png);
     let response = client
         .chat()
         .send_message_with_images("Describe this image in one sentence.", vec![image])
@@ -177,7 +192,10 @@ async fn get_user_info_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let info = client.get_user_info().await.expect("get_user_info should succeed");
     // At least one profile field should be present in a signed-in session.
     assert!(
@@ -193,7 +211,10 @@ async fn get_last_selected_mode_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     client
         .get_last_selected_mode()
         .await
@@ -207,7 +228,10 @@ async fn set_last_selected_mode_round_trips() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let original = client
         .get_last_selected_mode()
         .await
@@ -226,7 +250,10 @@ async fn get_locale_tools_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let result = client.get_locale_tools().await.expect("get_locale_tools should succeed");
     assert!(!result.value().is_null());
 }
@@ -238,7 +265,10 @@ async fn get_model_config_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let result = client.get_model_config().await.expect("get_model_config should succeed");
     assert!(!result.value().is_null());
 }
@@ -250,7 +280,10 @@ async fn get_locale_config_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let result = client.get_locale_config().await.expect("get_locale_config should succeed");
     assert!(!result.value().is_null());
 }
@@ -262,7 +295,10 @@ async fn get_tools_config_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let result = client.get_tools_config().await.expect("get_tools_config should succeed");
     assert!(!result.value().is_null());
 }
@@ -274,7 +310,10 @@ async fn get_usage_stats_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let result = client.get_usage_stats().await.expect("get_usage_stats should succeed");
     assert!(!result.value().is_null());
 }
@@ -286,7 +325,10 @@ async fn get_scheduled_prompts_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let result = client
         .get_scheduled_prompts()
         .await
@@ -301,7 +343,10 @@ async fn conversation_actions_works() {
         return;
     };
 
-    let client = GeminiClient::from_cookie_header(&cookies).expect("valid client");
+    let client = GeminiClient::from_cookie_header(&cookies)
+        .expect("valid client")
+        .with_timeout(default_test_timeout())
+        .await;
     let response = client
         .chat()
         .send_message("Say a one-sentence hello in English.")
