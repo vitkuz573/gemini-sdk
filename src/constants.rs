@@ -244,6 +244,15 @@ pub mod headers {
     pub(crate) const X_CLIENT_DATA_VALUE: &str = "CNeOywE=";
     /// Common prefix for `x-goog-ext-*` extension headers.
     pub(crate) const X_GOOG_EXT_PREFIX: &str = "x-goog-ext-";
+    /// `x-goog-authuser` header name.
+    ///
+    /// Observed on browser `jSf9Qc` (usage stats) batchexecute requests.
+    pub(crate) const X_GOOG_AUTHUSER: &str = "x-goog-authuser";
+    /// `x-goog-authuser` header value.
+    ///
+    /// Browser usage-stats requests consistently send `0` for the default
+    /// signed-in account.
+    pub(crate) const X_GOOG_AUTHUSER_VALUE: &str = "0";
 
     /// `X-Same-Domain` header value.
     pub(crate) const X_SAME_DOMAIN_VALUE: &str = "1";

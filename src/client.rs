@@ -521,9 +521,10 @@ impl GeminiClient {
         reqid: Option<&str>,
         waa_context: Option<&str>,
         authorization: Option<&str>,
+        auth_user: Option<&str>,
         endpoint: Option<&str>,
     ) -> Vec<(String, String)> {
-        self.build_headers(reqid, waa_context, authorization, endpoint).await
+        self.build_headers(reqid, waa_context, authorization, auth_user, endpoint).await
     }
 
     /// Returns a builder for sending a single chat message.
@@ -770,7 +771,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -854,7 +855,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -934,7 +935,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1018,7 +1019,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1098,7 +1099,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1178,7 +1179,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1258,7 +1259,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1338,7 +1339,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1418,7 +1419,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1498,7 +1499,7 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
 
         let response = self
@@ -1588,6 +1589,7 @@ impl GeminiClient {
                 .build_headers(
                     None,
                     waa_context.as_deref(),
+                    None,
                     None,
                     Some(transport::BATCHEXECUTE_ENDPOINT),
                 )
@@ -2018,7 +2020,7 @@ impl GeminiClient {
             &request_uuid,
         );
         let headers = self
-            .build_headers(Some(&request_uuid), Some(&waa_header), None, Some("stream_generate"))
+            .build_headers(Some(&request_uuid), Some(&waa_header), None, None, Some("stream_generate"))
             .await;
 
         let response = self
@@ -2119,7 +2121,7 @@ impl GeminiClient {
             &request_uuid,
         );
         let headers = self
-            .build_headers(Some(&request_uuid), Some(&waa_header), None, Some("stream_generate"))
+            .build_headers(Some(&request_uuid), Some(&waa_header), None, None, Some("stream_generate"))
             .await;
         let cookie_header = cookies.to_header_value();
 
@@ -2378,7 +2380,7 @@ impl GeminiClient {
         }
 
         let headers = self
-            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
             .await;
         let response = self
             .send_with_retry(|| {
@@ -2641,6 +2643,7 @@ impl GeminiClient {
         reqid: Option<&str>,
         waa_context: Option<&str>,
         authorization: Option<&str>,
+        auth_user: Option<&str>,
         endpoint: Option<&str>,
     ) -> Vec<(String, String)> {
         let origin = self.inner.config.read().await.base_url.clone();
@@ -2708,6 +2711,9 @@ impl GeminiClient {
         }
         if let Some(auth) = authorization {
             headers.push((header_constants::AUTHORIZATION.to_string(), auth.to_string()));
+        }
+        if let Some(user) = auth_user {
+            headers.push((header_constants::X_GOOG_AUTHUSER.to_string(), user.to_string()));
         }
         headers
     }
