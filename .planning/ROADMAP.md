@@ -39,12 +39,12 @@
 
 ### 🚧 v0.3 Magic String Elimination (Planned)
 
-- [ ] Phase 13: Core Protocol Constants
-  - [ ] 13-01-PLAN.md — Centralize URL paths, batchexecute query keys, transport markers, WIZ/session keys, and RPC IDs.
-- [ ] Phase 14: Model, Chat & Upload Constants
-  - [ ] 14-01-PLAN.md — Centralize model/category strings, chat roles, MIME types, and upload headers/endpoints.
-- [ ] Phase 15: Infrastructure Constants
-  - [ ] 15-01-PLAN.md — Centralize headers/base URLs, HAR/redaction strings, transient markers, tracing/metrics, CDP/attestation, and tool schema keys.
+- [x] Phase 13: Core Protocol Constants (completed 2026-08-11)
+  - [x] 13-01-PLAN.md — Centralize URL paths, batchexecute query keys, transport markers, WIZ/session keys, and RPC IDs.
+- [x] Phase 14: Model, Chat & Upload Constants (completed 2026-08-11)
+  - [x] 14-01-PLAN.md — Centralize model/category strings, chat roles, MIME types, and upload headers/endpoints.
+- [x] Phase 15: Infrastructure Constants
+  - [x] 15-01-PLAN.md — Centralize headers/base URLs, HAR/redaction strings, transient markers, tracing/metrics, CDP/attestation, and tool schema keys.
 - [ ] Phase 16: Test & Example Cleanup + Regression Guard
   - [ ] 16-01-PLAN.md — Clean up tests/examples and add a regression gate for eliminated magic strings.
 
@@ -70,9 +70,9 @@
 | 10. Settings Pages | v0.2 | 1/1 | Complete | 2026-08-10 |
 | 11. Protocol Drift & Integration | v0.2 | 1/1 | Complete | 2026-08-10 |
 | 12. Live Testing & Backend Resilience | v0.2 | 1/1 | Complete | 2026-08-11 |
-| 13. Core Protocol Constants | v0.3 | 0/TBD | Not started | - |
-| 14. Model, Chat & Upload Constants | v0.3 | 0/TBD | Not started | - |
-| 15. Infrastructure Constants | v0.3 | 0/TBD | Not started | - |
+| 13. Core Protocol Constants | v0.3 | 1/1 | Complete    | 2026-08-11 |
+| 14. Model, Chat & Upload Constants | v0.3 | 1/1 | Complete    | 2026-08-11 |
+| 15. Infrastructure Constants | v0.3 | 1/1 | Complete    | 2026-08-11 |
 | 16. Test & Example Cleanup + Regression Guard | v0.3 | 0/TBD | Not started | - |
 | 17. API Audit & Deprecation Cleanup | v1.0 | 0/TBD | Not started | - |
 | 18. MSRV Policy & Documentation Polish | v1.0 | 0/TBD | Not started | - |
