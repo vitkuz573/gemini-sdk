@@ -1,21 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.4
-milestone_name: StreamGenerate Slot Hardening
-current_phase: 17
-current_phase_name: StreamGenerate Slot Hardening
-current_plan: Not started
-status: complete
-stopped_at: Completed phase 17 plan P01
-last_updated: "2026-08-11T11:55:26.522Z"
+milestone: v0.5
+milestone_name: Usage Stats Reliability
+status: planning
+last_updated: "2026-08-11T13:37:17.581Z"
 last_activity: 2026-08-11
-last_activity_desc: completed phase 17 StreamGenerate Slot Hardening
 progress:
-  total_phases: 20
-  completed_phases: 17
-  total_plans: 30
-  completed_plans: 30
-  percent: 85
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -119,10 +114,10 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 
 ## Current Position
 
-Phase: 17 — StreamGenerate Slot Hardening
-Plan: P01 — complete
-Status: Complete
-Last activity: 2026-08-11 — completed phase 17 StreamGenerate Slot Hardening
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-08-11 — Milestone v0.5 started
 
 ## Operator Next Steps
 

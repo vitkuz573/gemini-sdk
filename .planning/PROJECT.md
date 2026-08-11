@@ -123,19 +123,23 @@ This document evolves at phase transitions and milestone boundaries.
 
 **Shipped:** v0.4 StreamGenerate Slot Hardening (2026-08-11)
 **Phases completed:** 17 of 17 (100%)
-**Current focus:** Preparing for v1.0 Stable Release.
+**Current focus:** Fix `GeminiClient::get_usage_stats` auth/payload mismatch so it returns real usage statistics.
 
-v0.3 delivered a single cross-cutting `src/constants.rs` module that centralizes protocol literals across the SDK. All production modules now consume named constants for URL paths, batchexecute query/transport markers, WIZ/session keys, RPC identifiers, model/category strings, chat roles, MIME types, upload headers, static headers, HAR/redaction values, transient WIZ markers, tracing/metric names, CDP attestation strings, and tool schema keys. Tests and examples were refactored to reuse these constants, and a regression gate prevents reintroduction of high-risk magic strings in `src/`. All quality gates (`cargo test --all-targets`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps`) pass.
+Live testing shows `get_usage_stats` currently returns `{}` even though the captured HAR `/home/vitaly/mitm.har` shows RPC `jSf9Qc` returns a non-empty payload `[2,[[999999,0,5,...]],false]`. Preliminary investigation points to two SDK deviations from the browser: (1) the SDK does not send `Authorization: SAPISIDHASH ...` plus `x-goog-authuser: 0`, which the live frontend uses for the ogads/GetAsyncData path, and (2) the inner request payload may be incomplete. The minimal modern cookie set is `__Secure-1PSID`, `__Secure-1PSIDCC`, `__Secure-1PSIDTS`, `__Secure-1PAPISID`, `__Secure-3PAPISID`.
 
-## Current Milestone: v1.0 Stable Release
+v0.5 will harden a single settings-page RPC (`jSf9Qc`) whose implementation in v0.2 returned an opaque but empty `serde_json::Value`. Companion CLI testing and live HAR analysis reveal the SDK request is missing frontend-matching auth headers and possibly an incomplete inner payload, causing the server to return an empty payload. The milestone will update `src/auth.rs`/`src/client.rs` to send `Authorization: SAPISIDHASH` and `x-goog-authuser: 0` where required, reconcile the `jSf9Qc` request shape against `/home/vitaly/mitm.har`, and return a typed `UsageStats` value with documented accessors while keeping a raw `Value` fallback for protocol drift. Live-cookie integration tests and the `gemini-cli usage` subcommand will be used as acceptance gates.
 
-**Goal:** Polish documentation, verify semver, and publish v1.0 to crates.io.
+## Current Milestone: v0.5 Usage Stats Reliability
+
+**Goal:** Fix `GeminiClient::get_usage_stats` so it returns real usage statistics instead of an empty object, matching the live Gemini frontend request shape and auth requirements.
 
 **Target features:**
-- Final API audit and deprecation cleanup
-- MSRV policy documented and verified
-- crates.io publication with changelog and release notes
-- Migration guide from v0.x to v1.0
+- Correct the auth header / cookie mismatch that causes `jSf9Qc` to return an empty payload (SAPISIDHASH + `x-goog-authuser` parity with browser).
+- Reconcile the `jSf9Qc` inner payload against the live HAR at `/home/vitaly/mitm.har` and the documented response shape `[2,[[999999,0,5,...]],false]`.
+- Return a typed `UsageStats` value with documented accessors instead of an opaque empty object, preserving a fallback `Value` escape hatch.
+- Add fixture and live-cookie tests that verify non-empty stats parsing and auth header correctness.
+- Update the companion CLI (`gemini-cli`) contract so its `usage` subcommand surfaces real counts.
+- Keep all quality gates green (`cargo test`, `cargo clippy`, `cargo doc`).
 
 ## Previous Milestone: v0.4 StreamGenerate Slot Hardening
 
@@ -157,6 +161,8 @@ v0.3 delivered a single cross-cutting `src/constants.rs` module that centralizes
 - MSRV policy documented and verified
 - crates.io publication with changelog and release notes
 - Migration guide from v0.x to v1.0
+- OAuth / refresh-token flow as an alternative to cookie strings (post-v1.0)
+- Resumable upload with explicit chunk size control (post-v1.0)
 
 ---
-*Last updated: 2026-08-11 — started v0.4 StreamGenerate Slot Hardening before v1.0 Stable Release*
+*Last updated: 2026-08-11 — started v0.5 Usage Stats Reliability before v1.0 Stable Release*
