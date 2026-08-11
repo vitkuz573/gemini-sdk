@@ -51,6 +51,8 @@ Developers can reliably integrate Gemini into Rust applications using a stable, 
 
 ### Active
 
+- [ ] Eliminate raw numeric slot indices in `src/proto/slots.rs` and centralize HAR-backed constants — v0.4
+- [ ] Add regression gate preventing raw `inner[\d+]` assignments in StreamGenerate builder — v0.4
 - [ ] Final API audit and deprecation cleanup for v1.0
 - [ ] Document and verify MSRV policy
 - [ ] crates.io publication with changelog and release notes
@@ -117,10 +119,22 @@ This document evolves at phase transitions and milestone boundaries.
 ## Current State
 
 **Shipped:** v0.3 Magic String Elimination (2026-08-11)
+**Current milestone:** v0.4 StreamGenerate Slot Hardening (started 2026-08-11)
 **Phases completed:** 16 of 16 (100%)
-**Current focus:** Planning v1.0 Stable Release
+**Current focus:** Hardening the 97-slot StreamGenerate builder so every slot index is a named, HAR-backed constant.
 
 v0.3 delivered a single cross-cutting `src/constants.rs` module that centralizes protocol literals across the SDK. All production modules now consume named constants for URL paths, batchexecute query/transport markers, WIZ/session keys, RPC identifiers, model/category strings, chat roles, MIME types, upload headers, static headers, HAR/redaction values, transient WIZ markers, tracing/metric names, CDP attestation strings, and tool schema keys. Tests and examples were refactored to reuse these constants, and a regression gate prevents reintroduction of high-risk magic strings in `src/`. All quality gates (`cargo test --all-targets`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps`) pass.
+
+## Current Milestone: v0.4 StreamGenerate Slot Hardening
+
+**Goal:** Eliminate every raw numeric index in the 97-slot `StreamGenerate` request builder by introducing HAR-backed named constants for all actively used slots, closing the magic-number gap left after v0.3.
+
+**Target features:**
+- Rename misleading slot constants (e.g., `SLOT_REQUEST_UUID` for slot 10) to names that match HAR-observed values.
+- Add named constants for all remaining raw indices in `src/proto/slots.rs` (slots 17, 18, 27, 53, 59, 61, 66, 68, 79, 91).
+- Refactor `build_inner_req_list` and `build_fallback_base` to use only named constants.
+- Add a regression gate that forbids raw `inner[\d+]` assignments in production request-building code.
+- Keep all quality gates green: tests, clippy, docs.
 
 ## Next Milestone: v1.0 Stable Release
 
@@ -133,4 +147,4 @@ v0.3 delivered a single cross-cutting `src/constants.rs` module that centralizes
 - Migration guide from v0.x to v1.0
 
 ---
-*Last updated: 2026-08-11 after v0.3 milestone completion*
+*Last updated: 2026-08-11 — started v0.4 StreamGenerate Slot Hardening before v1.0 Stable Release*

@@ -34,6 +34,20 @@
 
 ---
 
+## v0.4 StreamGenerate Slot Hardening (In Progress)
+
+**Goal:** Eliminate every raw numeric slot index in the 97-slot `StreamGenerate` request builder by introducing semantically named, HAR-backed constants.
+
+**Key target features:**
+
+- Rename misleading legacy constants to match HAR-observed semantics.
+- Add named constants for all remaining raw indices used in `src/proto/slots.rs`.
+- Refactor builder and fallback base to use only named constants.
+- Add a regression gate that fails if raw `inner[\d+]` assignments reappear in production builder code.
+- Keep all quality gates green.
+
+---
+
 ## v0.1 Core (Shipped: 2026-08-10)
 
 **Phases completed:** 6 phases (1-6), 19 plans, 12 tasks
