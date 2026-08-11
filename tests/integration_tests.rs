@@ -835,6 +835,66 @@ async fn get_usage_stats_returns_value() {
 }
 
 #[tokio::test]
+async fn get_usage_stats_sends_auth_headers() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path(BATCHEXECUTE_PATH))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/jSf9Qc_usage_stats.txt")),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let result = client.get_usage_stats().await;
+    assert!(result.is_ok(), "get_usage_stats failed: {:?}", result);
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let request = &requests[0];
+    let headers = &request.headers;
+
+    let auth = headers
+        .get("Authorization")
+        .expect("missing Authorization header");
+    let auth = auth.to_str().expect("Authorization header not ASCII");
+    assert!(
+        auth.starts_with("SAPISIDHASH "),
+        "Authorization does not start with SAPISIDHASH: {auth}"
+    );
+    assert!(
+        auth.contains('_'),
+        "Authorization missing timestamp/hash separator: {auth}"
+    );
+
+    let auth_user = headers
+        .get("x-goog-authuser")
+        .expect("missing x-goog-authuser header");
+    assert_eq!(
+        auth_user.to_str().expect("x-goog-authuser not ASCII"),
+        "0"
+    );
+}
+
+#[tokio::test]
 async fn get_scheduled_prompts_returns_value() {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
