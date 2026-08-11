@@ -2,20 +2,20 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Usage Stats Reliability
-current_phase: 19
-current_phase_name: Payload & Parser Alignment
-current_plan: P01 — not started
+current_phase: 20
+current_phase_name: Live Verification & CLI Contract
+current_plan: Not started
 status: planning
-stopped_at: Planning phase 19
-last_updated: "2026-08-11T15:40:00.000Z"
+stopped_at: Planning phase 20
+last_updated: "2026-08-11T15:55:00.000Z"
 last_activity: 2026-08-11
-last_activity_desc: Planned phase 19 payload parser alignment
+last_activity_desc: Completed phase 19 parser alignment
 progress:
   total_phases: 20
-  completed_phases: 18
+  completed_phases: 19
   total_plans: 1
-  completed_plans: 0
-  percent: 90
+  completed_plans: 1
+  percent: 95
 ---
 
 # Project State
@@ -58,7 +58,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 16 — Test & Example Cleanup + Regression Guard | ✓ Complete | 1/1 | 100% |
 | 17 — StreamGenerate Slot Hardening | ✓ Complete | 1/1 | 100% |
 | 18 — Auth Header Parity for Usage Stats | ✓ Complete | 3/3 | 100% |
-| 19 — Payload & Parser Alignment | 🔄 In progress | 0/1 | 0% |
+| 19 — Payload & Parser Alignment | ✓ Complete | 1/1 | 100% |
 | 20 — Live Verification & CLI Contract | ⏳ Not started | 0/TBD | 0% |
 
 ## Active Decisions
@@ -120,11 +120,11 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 
 ## Current Position
 
-Phase: 19 — Payload & Parser Alignment
-Plan: P01 — not started
-Status: Planning complete; ready to execute
-Last activity: 2026-08-11 — Planned phase 19 payload parser alignment
+Phase: 20 — Live Verification & CLI Contract
+Plan: Not started
+Status: Planning in progress
+Last activity: 2026-08-11 — Completed phase 19 parser alignment
 
 ## Operator Next Steps
 
-- Execute plan 19-01 (TDD: align parser and expose typed accessors).
+- Plan phase 20 (Live Verification & CLI Contract).
