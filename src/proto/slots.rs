@@ -406,4 +406,91 @@ mod tests {
         let inner = build_inner_req_list(&req, None, None, &[], "UUID", "en", None, "nonce");
         assert_eq!(inner[SLOT_TOOL_DECLARATIONS], Value::Null);
     }
+
+    /// Regression gate: fail the test suite if raw numeric slot indices are
+    /// reintroduced in production code outside `#[cfg(test)]` blocks.
+    #[test]
+    fn no_raw_slot_indices_in_production_code() {
+        let source = include_str!("slots.rs");
+
+        let mut inside_test = false;
+        let mut brace_depth: usize = 0;
+        let mut offenses: Vec<(usize, String)> = Vec::new();
+
+        for (line_no, line) in source.lines().enumerate() {
+            let trimmed = line.trim();
+
+            // Track entry into a `#[cfg(test)]` module.
+            if trimmed.starts_with("#[cfg(test)]") {
+                inside_test = true;
+                continue;
+            }
+
+            // Brace counting inside the test module.
+            if inside_test {
+                for ch in line.chars() {
+                    match ch {
+                        '{' => brace_depth += 1,
+                        '}' => {
+                            if brace_depth == 0 {
+                                inside_test = false;
+                            } else {
+                                brace_depth -= 1;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                continue;
+            }
+
+            // Skip lines that are entirely comments.
+            if trimmed.starts_with("//") {
+                continue;
+            }
+
+            // Only consider code up to the first inline comment.
+            let code_part = line.split("//").next().unwrap_or(line);
+
+            // Match `inner[N]` or `slots[N]` where N is a numeric literal.
+            if code_part
+                .split(|c: char| !c.is_alphanumeric() && c != '[' && c != ']' && c != '_')
+                .any(|token| token.starts_with("inner[") || token.starts_with("slots["))
+                && has_raw_numeric_index(code_part)
+            {
+                offenses.push((line_no + 1, line.to_string()));
+            }
+        }
+
+        assert!(
+            offenses.is_empty(),
+            "raw numeric slot indices found in production code:\n{}",
+            offenses
+                .iter()
+                .map(|(n, l)| format!("  line {n}: {l}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+
+    /// Returns true if the code snippet contains `inner[N]` or `slots[N]` with a
+    /// numeric literal index.
+    fn has_raw_numeric_index(code: &str) -> bool {
+        for prefix in ["inner[", "slots["] {
+            let mut rest = code;
+            while let Some(start) = rest.find(prefix) {
+                let after = &rest[start + prefix.len()..];
+                if let Some(close) = after.find(']') {
+                    let idx = &after[..close];
+                    if idx.trim().parse::<usize>().is_ok() {
+                        return true;
+                    }
+                    rest = &after[close + 1..];
+                } else {
+                    break;
+                }
+            }
+        }
+        false
+    }
 }
