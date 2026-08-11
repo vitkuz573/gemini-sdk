@@ -2,20 +2,20 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Usage Stats Reliability
-current_phase: 17
-current_phase_name: defining requirements
-current_plan: P01 — complete
+current_phase: 18
+current_phase_name: Auth Header Parity for Usage Stats
+current_plan: P01 — not started
 status: planning
 stopped_at: Completed phase 17 plan P01
-last_updated: "2026-08-11T13:42:17.060Z"
+last_updated: "2026-08-11T13:45:08.323Z"
 last_activity: 2026-08-11
-last_activity_desc: Milestone v0.5 started
+last_activity_desc: Milestone v0.5 planned
 progress:
-  total_phases: 20
-  completed_phases: 17
-  total_plans: 3
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
   completed_plans: 0
-  percent: 85
+  percent: 0
 ---
 
 # Project State
@@ -24,8 +24,8 @@ progress:
 **Initialized:** 2026-08-08
 **Current milestone:** v0.5 — Usage Stats Reliability
 **Current phase:** 18
-**Current Plan:** Not started
-**Total Plans in Phase:** 0/TBD
+**Current Plan:** P01 — not started
+**Total Plans in Phase:** 1/1
 
 milestone: v0.5
 
@@ -114,7 +114,7 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 
 ## Session
 
-**Last session:** 2026-08-11T13:42:17.060Z
+**Last session:** 2026-08-11T13:44:32.929Z
 **Stopped at:** Completed milestone v0.5 planning
 **Resume file:** None
 
