@@ -345,6 +345,17 @@ mod tests {
         assert!(!redacted.contains("xyz"), "redacted: {redacted}");
     }
 
+    #[test]
+    fn authorization_header_is_redacted() {
+        let headers = header_map(&[("Authorization", "SAPISIDHASH 123_abc")]);
+        let redacted = redact_headers(&headers);
+        let entry = redacted
+            .iter()
+            .find(|v| v["name"].as_str().unwrap().eq_ignore_ascii_case("Authorization"))
+            .expect("missing Authorization entry");
+        assert_eq!(entry["value"].as_str().unwrap(), har_constants::REDACTED_VALUE);
+    }
+
     #[tokio::test]
     async fn har_entry_shape_matches_spec() {
         let dir = tempfile::tempdir().unwrap();
