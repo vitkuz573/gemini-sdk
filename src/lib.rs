@@ -72,6 +72,7 @@ pub mod har;
 pub mod metrics;
 pub mod models;
 pub mod proto;
+pub mod constants;
 pub mod conversation_actions;
 pub mod locale_model_config;
 pub mod settings;

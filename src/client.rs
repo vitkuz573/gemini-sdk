@@ -111,9 +111,10 @@ impl HttpHook for Arc<dyn HttpHook> {
     }
 }
 
-const WEB_BASE_URL: &str = "https://gemini.google.com";
-const WAA_BASE_URL: &str = "https://waa-pa.clients6.google.com";
-const OGADS_BASE_URL: &str = "https://ogads-pa.clients6.google.com";
+use crate::constants::query_keys::{BL, F_SID, HL, REQID, RPCIDS, RT, RT_VALUE, SOURCE_PATH};
+use crate::constants::urls::{BATCHEXECUTE_PATH, GEMINI_BASE_URL, OGADS_BASE_URL, WAA_BASE_URL};
+use crate::constants::{rpc_ids, transport};
+use crate::constants::urls::{CONVERSATION_ACTION_SOURCE_PATH_PREFIX, SCHEDULED_SOURCE_PATH, USAGE_SOURCE_PATH};
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
 const X_CLIENT_DATA: &str = "CNeOywE=";
@@ -182,7 +183,7 @@ impl Default for ClientConfig {
             http_hook: None,
             fatal_hook_errors: false,
             metrics_recorder: None,
-            base_url: WEB_BASE_URL.to_string(),
+            base_url: GEMINI_BASE_URL.to_string(),
             har_path: None,
         }
     }
@@ -717,24 +718,24 @@ impl GeminiClient {
         }
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
-            let source_path = format!("/app/{conversation_id}");
+            let source_path = format!("{CONVERSATION_ACTION_SOURCE_PATH_PREFIX}{conversation_id}");
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", PCCK7E_RPC_ID.to_string()),
-                ("source-path", source_path),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, PCCK7E_RPC_ID.to_string()),
+                (SOURCE_PATH, source_path),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_payload(response_id);
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -745,7 +746,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -800,23 +801,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", O30O0E_RPC_ID.to_string()),
-                ("source-path", "/".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, O30O0E_RPC_ID.to_string()),
+                (SOURCE_PATH, "/".to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_user_info_payload();
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -827,7 +828,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -878,23 +879,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", L5ADHE_RPC_ID.to_string()),
-                ("source-path", "/".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, L5ADHE_RPC_ID.to_string()),
+                (SOURCE_PATH, "/".to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_last_selected_mode_payload(None);
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -905,7 +906,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -959,24 +960,24 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let mode_id = mode_id.as_ref();
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", L5ADHE_RPC_ID.to_string()),
-                ("source-path", "/".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, L5ADHE_RPC_ID.to_string()),
+                (SOURCE_PATH, "/".to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_set_last_selected_mode_payload(mode_id);
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -987,7 +988,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1038,23 +1039,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", CYRIKD_RPC_ID.to_string()),
-                ("source-path", "/".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, CYRIKD_RPC_ID.to_string()),
+                (SOURCE_PATH, "/".to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_locale_tools_payload(&session.language);
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -1065,7 +1066,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1116,23 +1117,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", WHPPME_RPC_ID.to_string()),
-                ("source-path", "/".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, WHPPME_RPC_ID.to_string()),
+                (SOURCE_PATH, "/".to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_model_config_payload(&session.language);
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -1143,7 +1144,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1194,23 +1195,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", TE6DCF_RPC_ID.to_string()),
-                ("source-path", "/".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, TE6DCF_RPC_ID.to_string()),
+                (SOURCE_PATH, "/".to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_locale_config_payload(&session.language);
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -1221,7 +1222,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1272,23 +1273,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", KU4JYF_RPC_ID.to_string()),
-                ("source-path", "/".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, KU4JYF_RPC_ID.to_string()),
+                (SOURCE_PATH, "/".to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_tools_config_payload(&session.language);
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -1299,7 +1300,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1350,23 +1351,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", JSF9QC_RPC_ID.to_string()),
-                ("source-path", "/usage".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, JSF9QC_RPC_ID.to_string()),
+                (SOURCE_PATH, USAGE_SOURCE_PATH.to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_usage_stats_payload();
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -1377,7 +1378,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1428,23 +1429,23 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", XPSWPD_RPC_ID.to_string()),
-                ("source-path", "/scheduled".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, XPSWPD_RPC_ID.to_string()),
+                (SOURCE_PATH, SCHEDULED_SOURCE_PATH.to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let inner_payload = build_get_scheduled_prompts_payload();
             let body = crate::proto::build_batchexecute_body_for_rpc(
@@ -1455,7 +1456,7 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1520,34 +1521,34 @@ impl GeminiClient {
         self.ensure_session().await?;
 
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
         let (params, body, headers, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
             let mut params: Vec<(&str, String)> = vec![
-                ("rpcids", "otAQ7b".to_string()),
-                ("source-path", "/app".to_string()),
-                ("hl", session.language.clone()),
-                ("_reqid", reqid),
-                ("rt", "c".to_string()),
+                (RPCIDS, rpc_ids::OTAQ7B_RPC_ID.to_string()),
+                (SOURCE_PATH, crate::constants::urls::APP_PATH.to_string()),
+                (HL, session.language.clone()),
+                (REQID, reqid),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             let body = build_batchexecute_body(session.access_token.as_deref());
             let waa_context = session.waa_context.clone();
-            let headers = self.build_headers(None, waa_context.as_deref(), None, Some("batchexecute")).await;
+            let headers = self.build_headers(None, waa_context.as_deref(), None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
             let cookie_header = cookies.to_header_value();
             (params, body, headers, cookie_header)
         };
 
         let response = self
             .send_batchexecute_with_retry(
-                || async { SessionState::generate_reqid(Some("otAQ7b")) },
+                || async { SessionState::generate_reqid(Some(rpc_ids::OTAQ7B_RPC_ID)) },
                 || {
                     let client = self.inner.http.clone();
                     let url = url.clone();
@@ -1942,15 +1943,15 @@ impl GeminiClient {
         let (params, at, waa_context, waa_fingerprint) = {
             let session = self.inner.session.lock().await;
             let mut params: Vec<(&str, String)> = vec![
-                ("hl", session.language.clone()),
-                ("_reqid", request_uuid.clone()),
-                ("rt", "c".to_string()),
+                (HL, session.language.clone()),
+                (REQID, request_uuid.clone()),
+                (RT, RT_VALUE.to_string()),
             ];
             if let Some(bl) = session.build_label.as_deref() {
-                params.push(("bl", bl.to_string()));
+                params.push((BL, bl.to_string()));
             }
             if let Some(sid) = session.session_id.as_deref() {
-                params.push(("f.sid", sid.to_string()));
+                params.push((F_SID, sid.to_string()));
             }
             (
                 params,
@@ -2225,13 +2226,13 @@ impl GeminiClient {
         // 1. otAQ7b warm-up / model list.
         let models_response = self
             .batchexecute_rpc(
-                "otAQ7b",
+                rpc_ids::OTAQ7B_RPC_ID,
                 build_batchexecute_body(at.as_deref()),
                 &language,
                 build_label.as_deref(),
                 session_id.as_deref(),
                 &cookie_header,
-                Some("/"),
+                Some(crate::constants::urls::DEFAULT_SOURCE_PATH),
             )
             .await
             .unwrap_or_default();
@@ -2309,23 +2310,23 @@ impl GeminiClient {
         source_path_override: Option<&str>,
     ) -> Result<String> {
         let base_url = self.inner.config.read().await.base_url.clone();
-        let url = format!("{base_url}/_/BardChatUi/data/batchexecute");
+        let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let reqid = SessionState::generate_reqid(None);
         let mut params: Vec<(&str, String)> = vec![
-            ("rpcids", rpcids.to_string()),
-            ("source-path", source_path_override.unwrap_or("/app").to_string()),
-            ("hl", language.to_string()),
-            ("_reqid", reqid),
-            ("rt", "c".to_string()),
+            (RPCIDS, rpcids.to_string()),
+            (SOURCE_PATH, source_path_override.unwrap_or("/app").to_string()),
+            (HL, language.to_string()),
+            (REQID, reqid),
+            (RT, RT_VALUE.to_string()),
         ];
         if let Some(bl) = build_label {
-            params.push(("bl", bl.to_string()));
+            params.push((BL, bl.to_string()));
         }
         if let Some(sid) = session_id {
-            params.push(("f.sid", sid.to_string()));
+            params.push((F_SID, sid.to_string()));
         }
 
-        let headers = self.build_headers(None, None, None, Some("batchexecute")).await;
+        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
         let response = self
             .send_with_retry(|| {
                 let client = self.inner.http.clone();
@@ -2620,7 +2621,7 @@ impl GeminiClient {
         if let Some(ctx) = waa_context {
             headers.push(("x-goog-ext-525001261-jspb".to_string(), ctx.to_string()));
         }
-        if endpoint == Some("batchexecute") {
+        if endpoint == Some(transport::BATCHEXECUTE_ENDPOINT) {
             headers.push(("x-goog-ext-73010989-jspb".to_string(), "[]".to_string()));
         } else {
             headers.push(("x-goog-ext-73010989-jspb".to_string(), "[0]".to_string()));

@@ -54,13 +54,19 @@ pub mod parser {
     /// Index of the `[conversation_id, response_id]` array in the main entry.
     pub const CONVERSATION_IDS: usize = 1;
 
-    /// JSON object key that holds the continuation token in meta responses.
+        /// JSON object key that holds the continuation token in meta responses.
+    ///
+    /// This is a WIZ map key, not a semantic identifier, so it remains a
+    /// numeric string literal.
     pub const META_TOKEN_KEY_26: &str = "26";
     /// Alternate JSON object key for the continuation token.
+    ///
+    /// This is a WIZ map key, not a semantic identifier, so it remains a
+    /// numeric string literal.
     pub const META_TOKEN_KEY_21: &str = "21";
 
     /// RPC id string marker for batchexecute / StreamGenerate entries.
-    pub const RPC_ID: &str = "wrb.fr";
+    pub use crate::constants::transport::RPC_FRAME_MARKER as RPC_ID;
 
     /// Index of the inner payload string in a batchexecute entry.
     pub const PAYLOAD: usize = 2;

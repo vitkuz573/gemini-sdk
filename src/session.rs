@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::Credentials;
 use crate::chat::Conversation;
+use crate::constants::rpc_ids::OTAQ7B_RPC_ID;
+use crate::constants::wiz_keys::{CFB2H, FDR_FJE, F_SID, OPEP_7C, SESSION_ID, S06_GRB};
 use crate::proto::slots::ConversationState as ProtoConversationState;
 
 const DEFAULT_PUSH_ID: &str = "feeds/mcudyrk2a4khkz";
@@ -114,7 +116,7 @@ impl SessionState {
     /// browser digit lengths for specific RPC families.
     pub(crate) fn generate_reqid(rpcid: Option<&str>) -> String {
         let base = match rpcid {
-            Some("otAQ7b") => REQID_BASE_OTAQ7B,
+            Some(OTAQ7B_RPC_ID) => REQID_BASE_OTAQ7B,
             Some("PCck7e") => REQID_BASE_PCCK7E,
             _ => REQID_BASE_OTHER,
         };
@@ -203,10 +205,10 @@ pub(crate) fn looks_like_app_session_html(body: &str) -> bool {
     let Some(block) = extract_wiz_global_data_block_safe(body) else {
         return false;
     };
-    extract_quoted_value(block, "cfb2h")
+    extract_quoted_value(block, CFB2H)
         .as_deref()
         .is_some_and(|v| v.starts_with("boq_assistant-bard-web-"))
-        && extract_quoted_value(block, "FdrFJe")
+        && extract_quoted_value(block, FDR_FJE)
             .as_deref()
             .is_some_and(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_digit() || c == '-'))
 }
@@ -225,12 +227,12 @@ pub(crate) fn diagnose_signed_in_html(body: &str) -> Result<(String, String), Si
     let block =
         extract_wiz_global_data_block_safe(body).ok_or(SignedInFailure::MissingWizGlobalData)?;
 
-    let s06grb = extract_quoted_value(block, "S06Grb").unwrap_or_default();
+    let s06grb = extract_quoted_value(block, S06_GRB).unwrap_or_default();
     if s06grb.is_empty() || !s06grb.chars().all(|c| c.is_ascii_digit()) {
         return Err(SignedInFailure::EmptyS06Grb);
     }
 
-    let opep7c = extract_quoted_value(block, "oPEP7c").ok_or(SignedInFailure::MissingOpep7c)?;
+    let opep7c = extract_quoted_value(block, OPEP_7C).ok_or(SignedInFailure::MissingOpep7c)?;
     if !looks_like_email(&opep7c) {
         return Err(SignedInFailure::InvalidEmailShape);
     }
@@ -355,7 +357,7 @@ fn is_valid_build_label(label: &str) -> Option<String> {
 fn extract_build_label(body: &str) -> Option<String> {
     // Primary: Google stores the build label under `cfb2h` inside
     // window.WIZ_global_data. Fallback keys: `build_label`.
-    if let Some(value) = try_extract_value(body, &["cfb2h", "build_label"], is_valid_build_label) {
+    if let Some(value) = try_extract_value(body, &[CFB2H, "build_label"], is_valid_build_label) {
         return Some(value);
     }
 
@@ -385,7 +387,7 @@ fn looks_like_session_id(sid: &str) -> bool {
 fn extract_session_id(body: &str) -> Option<String> {
     // Canonical key `FdrFJe` is sent as `f.sid`. Older/consent pages may use
     // `session_id`.
-    try_extract_value(body, &["FdrFJe", "f.sid", "session_id"], |value| {
+    try_extract_value(body, &[FDR_FJE, F_SID, SESSION_ID], |value| {
         looks_like_session_id(value).then(|| value.to_string())
     })
 }
@@ -653,7 +655,7 @@ mod tests {
     #[test]
     fn generate_reqid_otaq7b_base_matches_browser_digit_length() {
         let _saved = REQID_COUNTER.swap(REQID_BASE_OTAQ7B, std::sync::atomic::Ordering::SeqCst);
-        let reqid = SessionState::generate_reqid(Some("otAQ7b"));
+        let reqid = SessionState::generate_reqid(Some(OTAQ7B_RPC_ID));
         assert_eq!(reqid.len(), 6, "otAQ7b reqid must be 6 digits");
         let n: u64 = reqid.parse().unwrap();
         assert!((100_000..1_000_000).contains(&n));

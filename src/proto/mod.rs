@@ -25,8 +25,7 @@ pub use parser::{
     parse_response_parts,
 };
 
-/// WIZ anti-XSSI prefix used by `batchexecute` and `StreamGenerate` responses.
-pub const ANTI_XSSI_PREFIX: &str = ")] } ' \n\n";
+pub use crate::constants::transport::ANTI_XSSI_PREFIX;
 
 /// Strips the anti-XSSI prefix and returns the first JSON line from a response.
 pub fn strip_xssi_prefix(body: &str) -> Option<&str> {
@@ -41,7 +40,11 @@ pub fn build_stream_generate_body(inner_req_list: &[Value], at: Option<&str>) ->
     let inner_json = serde_json::to_string(inner_req_list).unwrap_or_default();
     let f_req = json!([null, inner_json]);
     let f_req_str = serde_json::to_string(&f_req).unwrap_or_default();
-    let mut form = vec![format!("f.req={}", urlencoding::encode(&f_req_str))];
+    let mut form = vec![format!(
+        "{}={}",
+        crate::constants::transport::F_REQ_KEY,
+        urlencoding::encode(&f_req_str)
+    )];
     if let Some(token) = at {
         if !token.is_empty() {
             form.push(format!("at={}", urlencoding::encode(token)));
@@ -52,16 +55,24 @@ pub fn build_stream_generate_body(inner_req_list: &[Value], at: Option<&str>) ->
 
 /// Builds the URL-encoded `f.req` form body for batchexecute `GetUserStatus`.
 pub fn build_batchexecute_body(at: Option<&str>) -> String {
-    build_batchexecute_body_for_rpc("otAQ7b", "[]", at)
+    build_batchexecute_body_for_rpc(
+        crate::constants::rpc_ids::OTAQ7B_RPC_ID,
+        "[]",
+        at,
+    )
 }
 
 /// Builds a batchexecute body for an arbitrary RPC id and inner payload.
 pub fn build_batchexecute_body_for_rpc(rpcid: &str, inner: &str, at: Option<&str>) -> String {
     // The batchexecute transport expects a triple-wrapped array:
-    // [[[rpcid, inner, null, "generic"]]].
+    // [[[rpcid, inner, null, "generic"]].
     let payload = json!([[[rpcid, inner, null, "generic"]]]);
     let payload_str = serde_json::to_string(&payload).unwrap_or_default();
-    let mut form = vec![format!("f.req={}", urlencoding::encode(&payload_str))];
+    let mut form = vec![format!(
+        "{}={}",
+        crate::constants::transport::F_REQ_KEY,
+        urlencoding::encode(&payload_str)
+    )];
     if let Some(token) = at {
         if !token.is_empty() {
             form.push(format!("at={}", urlencoding::encode(token)));
@@ -87,7 +98,11 @@ pub fn build_sjbwce_body(at: Option<&str>) -> String {
     // batchexecute RPCs.
     let payload = json!([[[1, 2]]]);
     let payload_str = serde_json::to_string(&payload).unwrap_or_default();
-    let mut form = vec![format!("f.req={}", urlencoding::encode(&payload_str))];
+    let mut form = vec![format!(
+        "{}={}",
+        crate::constants::transport::F_REQ_KEY,
+        urlencoding::encode(&payload_str)
+    )];
     if let Some(token) = at {
         if !token.is_empty() {
             form.push(format!("at={}", urlencoding::encode(token)));
@@ -143,7 +158,11 @@ pub fn build_ogads_body(waa_token: &str, language: &str) -> String {
 pub fn build_esy5d_body(at: Option<&str>) -> String {
     let payload = json!([["ESY5D", "[null,[5]]", null, "generic"]]);
     let payload_str = serde_json::to_string(&payload).unwrap_or_default();
-    let mut form = vec![format!("f.req={}", urlencoding::encode(&payload_str))];
+    let mut form = vec![format!(
+        "{}={}",
+        crate::constants::transport::F_REQ_KEY,
+        urlencoding::encode(&payload_str)
+    )];
     if let Some(token) = at {
         if !token.is_empty() {
             form.push(format!("at={}", urlencoding::encode(token)));
@@ -155,7 +174,11 @@ pub fn build_esy5d_body(at: Option<&str>) -> String {
 /// Builds the JSON body for the `K4WWud` batchexecute RPC.
 pub fn build_k4wwud_body(language: &str, at: Option<&str>) -> String {
     let inner = json!([[1], [language]]);
-    build_batchexecute_body_for_rpc("K4WWud", &inner.to_string(), at)
+    build_batchexecute_body_for_rpc(
+        crate::constants::rpc_ids::K4WWUD_RPC_ID,
+        &inner.to_string(),
+        at,
+    )
 }
 
 /// Generates the current UTC timestamp used in legacy slot 66.
