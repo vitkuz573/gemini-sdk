@@ -1627,12 +1627,12 @@ impl GeminiClient {
         for turn in 0..max_turns {
             let prepared = prepare_request(None, &current_message, config.clone(), category)?;
             self.run_request_hook(&prepared).await?;
-            let body = self.generate_raw_with_prepared(&prepared).await?;
-            let response = self.parse_response(&body)?;
-            self.run_response_hook(&response).await?;
+        let body = self.generate_raw_with_prepared(&prepared).await?;
+        let response = self.parse_response_with_conversation_id(&body)?;
+        self.run_response_hook(&response).await?;
 
-            let parsed_parts =
-                crate::proto::parser::parse_response_parts(&body).unwrap_or_default();
+        let parsed_parts =
+            crate::proto::parser::parse_response_parts(&body).unwrap_or_default();
             let mut tool_calls = Vec::new();
             for part in &parsed_parts {
                 if let ContentPart::ToolCall(call) = part {
@@ -1731,7 +1731,10 @@ impl GeminiClient {
                     if !line.trim().is_empty() {
                         if let Ok(parts) = parse_response_parts(line) {
                             if !parts.is_empty() {
-                                let response = build_chat_response_from_parts(&parts)?;
+                                let mut response = build_chat_response_from_parts(&parts)?;
+                                if let Some(id) = Self::extract_conversation_id_from_body(&full_body) {
+                                    response = response.with_conversation_id(id);
+                                }
                                 client.run_response_hook(&response).await?;
                                 yield response;
                             }
@@ -1744,7 +1747,10 @@ impl GeminiClient {
             if !line_buffer.trim().is_empty() {
                 if let Ok(parts) = parse_response_parts(&line_buffer) {
                     if !parts.is_empty() {
-                        let response = build_chat_response_from_parts(&parts)?;
+                        let mut response = build_chat_response_from_parts(&parts)?;
+                        if let Some(id) = Self::extract_conversation_id_from_body(&full_body) {
+                            response = response.with_conversation_id(id);
+                        }
                         client.run_response_hook(&response).await?;
                         yield response;
                     }
@@ -1753,6 +1759,10 @@ impl GeminiClient {
 
             client.ingest_conversation_state(&full_body).await?;
         })
+    }
+
+    fn extract_conversation_id_from_body(body: &str) -> Option<String> {
+        crate::proto::parser::extract_conversation_id(body)
     }
 
     /// Sends a generation request with optional conversation state and returns
@@ -1797,7 +1807,7 @@ impl GeminiClient {
         self.run_request_hook(&prepared).await?;
         match self.generate_raw_with_prepared(&prepared).await {
             Ok(body) => {
-                let response = self.parse_response(&body)?;
+                let response = self.parse_response_with_conversation_id(&body)?;
                 self.run_response_hook(&response).await?;
                 Ok(response)
             }
@@ -1805,8 +1815,9 @@ impl GeminiClient {
                 if let Some(provider) = self.inner.provider.lock().await.clone() {
                     self.refresh_credentials(provider).await?;
                     let body = self.generate_raw_with_prepared(&prepared).await?;
-                    let response = self.parse_response(&body)?;
+                    let response = self.parse_response_with_conversation_id(&body)?;
                     self.run_response_hook(&response).await?;
+
                     return Ok(response);
                 }
                 Err(Error::NotSignedIn(
@@ -1816,7 +1827,6 @@ impl GeminiClient {
             Err(other) => Err(other),
         }
     }
-
     /// Sends an already prepared request and returns the raw response body.
     async fn generate_raw_with_prepared(&self, prepared: &PreparedRequest) -> Result<String> {
         let mut response = self.stream_generate_raw_with_prepared(prepared).await?;
@@ -1835,6 +1845,14 @@ impl GeminiClient {
     #[tracing::instrument(level = "debug", skip_all, fields(operation = "gemini.parse_response", bytes = body.len()))]
     fn parse_response(&self, body: &str) -> Result<ChatResponse> {
         parse_chat_response(body)
+    }
+
+    fn parse_response_with_conversation_id(&self, body: &str) -> Result<ChatResponse> {
+        let mut response = parse_chat_response(body)?;
+        if let Some(id) = Self::extract_conversation_id_from_body(body) {
+            response = response.with_conversation_id(id);
+        }
+        Ok(response)
     }
 
     /// Sends a generation request and returns the raw response body.

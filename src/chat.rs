@@ -296,6 +296,8 @@ pub struct ChatResponse {
     /// Model reasoning / thinking content (empty when the model does not
     /// expose its reasoning, e.g. for models without thinking enabled).
     pub(crate) thinking: String,
+    /// Conversation id extracted from the response state, if available.
+    pub(crate) conversation_id: Option<String>,
 }
 
 impl ChatResponse {
@@ -325,6 +327,18 @@ impl ChatResponse {
         self
     }
 
+    /// Sets the conversation id extracted from the response state.
+    pub fn with_conversation_id(mut self, conversation_id: impl Into<String>) -> Self {
+        self.conversation_id = Some(conversation_id.into());
+        self
+    }
+
+    /// Sets an optional conversation id.
+    pub(crate) fn with_conversation_id_opt(mut self, conversation_id: Option<String>) -> Self {
+        self.conversation_id = conversation_id;
+        self
+    }
+
     /// Returns the conversation id extracted from the response state, if any.
     ///
     /// This is a best-effort accessor intended for integration tests and the
@@ -332,7 +346,7 @@ impl ChatResponse {
     /// parseable conversation state.
     #[must_use]
     pub fn conversation_id(&self) -> Option<&str> {
-        None
+        self.conversation_id.as_deref()
     }
 }
 

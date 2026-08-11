@@ -57,6 +57,7 @@ fn parse_simple_text_response() {
     let body = include_str!("fixtures/chat_response_minimal.json");
     let response = parse_chat_response(body).unwrap();
     assert_eq!(response.text(), "Hello, world!");
+    assert!(response.conversation_id().is_none());
 }
 
 #[test]
@@ -64,6 +65,7 @@ fn parse_concatenated_text_response() {
     let body = include_str!("fixtures/chat_response_concatenated.json");
     let response = parse_chat_response(body).unwrap();
     assert_eq!(response.text(), "Hello, world!");
+    assert!(response.conversation_id().is_none());
 }
 
 #[test]
@@ -72,6 +74,23 @@ fn parse_thinking_response() {
     let response = parse_chat_response(body).unwrap();
     assert_eq!(response.text(), "hello ");
     assert_eq!(response.thinking(), "think step 1");
+    assert_eq!(response.conversation_id(), Some("c_a"));
+}
+
+#[test]
+fn parse_real_response_fixture_has_conversation_id() {
+    let body = include_str!("fixtures/turn1_response_raw.txt");
+    let response = parse_chat_response(body).unwrap();
+    assert!(!response.text().is_empty());
+    let id = response.conversation_id().expect("conversation_id should be present");
+    assert!(id.starts_with("c_"));
+}
+
+#[test]
+fn parse_first_turn_meta_response_has_conversation_id() {
+    let body = include_str!("fixtures/conversation_state_first_turn.json");
+    let response = parse_chat_response(body).unwrap();
+    assert_eq!(response.conversation_id(), Some("c_abc"));
 }
 
 #[test]

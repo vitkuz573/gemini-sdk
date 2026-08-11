@@ -233,7 +233,86 @@ pub fn parse_chat_response(body: &str) -> Result<ChatResponse> {
         }
     }
 
-    Ok(ChatResponse::new(text).with_thinking(thinking))
+    let conversation_id = extract_conversation_id(body);
+    Ok(ChatResponse::new(text)
+        .with_thinking(thinking)
+        .with_conversation_id_opt(conversation_id))
+}
+
+/// Extracts the conversation id from a `StreamGenerate` response body.
+///
+/// This is a lightweight helper that scans the same WIZ frames used by
+/// [`extract_conversation_state`] and returns the first valid `c_*` id it
+/// finds. It returns `None` when no id can be located.
+pub fn extract_conversation_id(body: &str) -> Option<String> {
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+            continue;
+        }
+        let entry: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let mut entry_arr = match entry.as_array() {
+            Some(a) => a,
+            None => continue,
+        };
+        if entry_arr.len() == 1 {
+            if let Some(inner) = entry_arr.first().and_then(|v| v.as_array()) {
+                entry_arr = inner;
+            } else {
+                continue;
+            }
+        }
+        let rpc_id = match entry_arr.first().and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => continue,
+        };
+        if rpc_id != RPC_ID {
+            continue;
+        }
+        let payload_str = match entry_arr.get(PAYLOAD).and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => continue,
+        };
+        let payload: Value = match serde_json::from_str(payload_str) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let payload_arr = match payload.as_array() {
+            Some(a) => a,
+            None => continue,
+        };
+
+        // Main entry: [<something>, [<conversation_id>, <response_id>], ...]
+        if payload_arr.len() >= MAIN_ENTRY_MIN_LEN {
+            if let Some(id) = payload_arr
+                .get(CONVERSATION_IDS)
+                .and_then(|v| v.as_array())
+                .and_then(|a| a.first())
+                .and_then(|v| v.as_str())
+                .filter(|s| s.starts_with("c_"))
+            {
+                return Some(id.to_string());
+            }
+            continue;
+        }
+
+        // First-turn meta entry: [null, [<conversation_id>, <response_id>], {...}]
+        if payload_arr.len() == 3 {
+            if let Some(id) = payload_arr
+                .get(CONVERSATION_IDS)
+                .and_then(|v| v.as_array())
+                .and_then(|a| a.first())
+                .and_then(|v| v.as_str())
+                .filter(|s| s.starts_with("c_"))
+            {
+                return Some(id.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Extracts multi-turn conversation state from a raw `StreamGenerate` response.
