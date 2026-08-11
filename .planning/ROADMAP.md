@@ -9,7 +9,8 @@
 - ✅ **v0.1 Core** — Phases 1-6 (shipped 2026-08-10) — see [archive](milestones/v0.1-ROADMAP.md)
 - ✅ **v0.2 API Expansion** — Phases 7-12 (shipped 2026-08-11) — see [archive](milestones/v0.2-ROADMAP.md)
 - ✅ **v0.3 Magic String Elimination** — Phases 13-16 (shipped 2026-08-11) — see [archive](milestones/v0.3-ROADMAP.md)
-- 🚧 **v1.0 Stable Release** — Phases 17+ (in progress)
+- 🚧 **v0.4 StreamGenerate Slot Hardening** — Phase 17 (in progress)
+- 📋 **v1.0 Stable Release** — Phases 18+ (planned)
 
 ## Phases
 
@@ -47,11 +48,27 @@
 
 </details>
 
-### 🚧 v1.0 Stable Release (In Progress)
+### 🚧 v0.4 StreamGenerate Slot Hardening (In Progress)
 
-- [ ] Phase 17: API Audit & Deprecation Cleanup
-- [ ] Phase 18: MSRV Policy & Documentation Polish
-- [ ] Phase 19: crates.io Publication
+- [ ] Phase 17: StreamGenerate Slot Hardening
+  - Goal: Replace all raw numeric slot indices in `src/proto/slots.rs` with HAR-backed named constants and add a regression gate.
+  - Requirements: SLOT-01 — SLOT-04, QUAL-01 — QUAL-06
+  - **Plans:** 1 plan
+  - Plans:
+    - [ ] `17-01-PLAN.md` — Rename legacy slot constants, add missing named constants, refactor builder to use constants only, and add regression gate.
+  - Success criteria:
+    1. No raw `inner[\d+]` assignments remain in production builder code.
+    2. All new constants have HAR-cited doc comments.
+    3. `cargo test --all-targets` passes.
+    4. `cargo clippy --all-targets -- -D warnings` passes.
+    5. `cargo doc --no-deps` passes.
+    6. Regression gate fails if raw numeric slot assignments are reintroduced.
+
+### 📋 v1.0 Stable Release (Planned)
+
+- [ ] Phase 18: API Audit & Deprecation Cleanup
+- [ ] Phase 19: MSRV Policy & Documentation Polish
+- [ ] Phase 20: crates.io Publication
 
 ## Progress
 
@@ -69,14 +86,15 @@
 | 10. Settings Pages | v0.2 | 1/1 | Complete | 2026-08-10 |
 | 11. Protocol Drift & Integration | v0.2 | 1/1 | Complete | 2026-08-10 |
 | 12. Live Testing & Backend Resilience | v0.2 | 1/1 | Complete | 2026-08-11 |
-| 13. Core Protocol Constants | v0.3 | 1/1 | Complete    | 2026-08-11 |
-| 14. Model, Chat & Upload Constants | v0.3 | 1/1 | Complete    | 2026-08-11 |
-| 15. Infrastructure Constants | v0.3 | 1/1 | Complete    | 2026-08-11 |
-| 16. Test & Example Cleanup + Regression Guard | v0.3 | 1/1 | Complete    | 2026-08-11 |
-| 17. API Audit & Deprecation Cleanup | v1.0 | 0/TBD | Not started | - |
-| 18. MSRV Policy & Documentation Polish | v1.0 | 0/TBD | Not started | - |
-| 19. crates.io Publication | v1.0 | 0/TBD | Not started | - |
+| 13. Core Protocol Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
+| 14. Model, Chat & Upload Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
+| 15. Infrastructure Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
+| 16. Test & Example Cleanup + Regression Guard | v0.3 | 1/1 | Complete | 2026-08-11 |
+| 17. StreamGenerate Slot Hardening | v0.4 | 0/TBD | In Progress | - |
+| 18. API Audit & Deprecation Cleanup | v1.0 | 0/TBD | Not started | - |
+| 19. MSRV Policy & Documentation Polish | v1.0 | 0/TBD | Not started | - |
+| 20. crates.io Publication | v1.0 | 0/TBD | Not started | - |
 
 ---
 
-*Last updated: 2026-08-11 — completed v0.3 milestone, archived to milestones/v0.3-ROADMAP.md*
+*Last updated: 2026-08-11 — inserted v0.4 StreamGenerate Slot Hardening before v1.0 Stable Release*
