@@ -96,9 +96,10 @@ async fn refresh_credentials_replaces_cookies_and_clears_session() {
 
     // The public refresh path replaces cookies. Since it calls init_session
     // which fetches /app, this test exercises the wiring rather than a live
-    // round-trip.
+    // round-trip. Warm-up RPC failures are now tolerated, so a signed-in /app
+    // response lets refresh succeed even if WAA/ogads cannot be completed.
     let result = client.refresh_credentials(refreshed_provider).await;
-    assert!(result.is_err());
+    assert!(result.is_ok(), "refresh_credentials failed: {:?}", result);
 
     // Verify the snapshot was updated by save/restore, which reflects the new
     // cookies stored in the client.

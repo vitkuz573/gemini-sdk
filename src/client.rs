@@ -1539,8 +1539,8 @@ impl GeminiClient {
                 params.push(("f.sid", sid.to_string()));
             }
             let body = build_batchexecute_body(session.access_token.as_deref());
-        let waa_context = self.inner.session.lock().await.waa_context.clone();
-        let headers = self.build_headers(None, waa_context.as_deref(), None, Some("batchexecute")).await;
+            let waa_context = session.waa_context.clone();
+            let headers = self.build_headers(None, waa_context.as_deref(), None, Some("batchexecute")).await;
             let cookie_header = cookies.to_header_value();
             (params, body, headers, cookie_header)
         };
@@ -2171,8 +2171,9 @@ impl GeminiClient {
             session.push_id = extracted.push_id.or_else(|| session.push_id.clone());
         }
 
-        // Run the WAA / warm-up chain. Failures are now surfaced so callers can
-        // decide whether to proceed without attestation context.
+        // Run the WAA / warm-up chain. WAA Create failures are surfaced as
+        // AttestationFailed; batchexecute warm-up failures are tolerated so the
+        // session can still be used without attestation context.
         self.run_waa_init_chain().await?;
 
         Ok(())
@@ -2181,9 +2182,10 @@ impl GeminiClient {
     /// Performs the warm-up/WAA RPC chain captured from the Gemini frontend.
     ///
     /// Stores the resulting WAA token and `x-goog-ext-525001261-jspb` context in
-    /// the session state. Failures from the WAA `Create` and ogads
-    /// `GetAsyncData` steps are surfaced as [`Error::AttestationFailed`]
-    /// instead of being silently replaced with a synthetic context.
+    /// the session state. Failures from the WAA `Create` step are surfaced as
+    /// [`Error::AttestationFailed`]. Failures from the batchexecute warm-up
+    /// RPCs and ogads `GetAsyncData` are tolerated and fall back to a synthetic
+    /// context so the session can still be used.
     #[tracing::instrument(level = "info", skip_all, fields(operation = "gemini.waa_init_chain"))]
     async fn run_waa_init_chain(&self) -> Result<()> {
         let (at, language, build_label, session_id, cookie_header, credentials) = {
@@ -2213,12 +2215,13 @@ impl GeminiClient {
                 &cookie_header,
                 Some("/"),
             )
-            .await?;
+            .await
+            .unwrap_or_default();
         let fingerprint = extract_waa_fingerprint_from_model_list(&models_response);
         let default_fingerprint = self.inner.session.lock().await.waa_fingerprint.clone();
 
         // 2. sJBwce [[1,2]] prerequisite.
-        let _ = self
+        if let Err(e) = self
             .batchexecute_rpc(
                 "sJBwce",
                 build_sjbwce_body(at.as_deref()),
@@ -2228,7 +2231,10 @@ impl GeminiClient {
                 &cookie_header,
                 Some("/"),
             )
-            .await?;
+            .await
+        {
+            debug!(error = %e, "sJBwce warm-up failed; continuing without WAA context");
+        }
 
         // 3. WAA Create.
         let waa_token =
@@ -2240,12 +2246,13 @@ impl GeminiClient {
         let waa_context = self
             .ogads_get_async_data(&cookie_header, &credentials, &waa_token)
             .await
-            .map_err(|e| Error::AttestationFailed {
-                reason: format!("ogads GetAsyncData failed: {e}"),
-            })?;
+            .unwrap_or_else(|e| {
+                debug!(error = %e, "ogads GetAsyncData failed; using synthetic WAA context");
+                build_default_waa_context()
+            });
 
         // 5. ESY5D feature flags.
-        let _ = self
+        if let Err(e) = self
             .batchexecute_rpc(
                 "ESY5D",
                 build_esy5d_body(at.as_deref()),
@@ -2255,7 +2262,10 @@ impl GeminiClient {
                 &cookie_header,
                 None,
             )
-            .await?;
+            .await
+        {
+            debug!(error = %e, "ESY5D feature flags warm-up failed; continuing without WAA context");
+        }
 
         {
             let mut session = self.inner.session.lock().await;

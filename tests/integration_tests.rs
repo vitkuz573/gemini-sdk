@@ -139,8 +139,10 @@ async fn generate_stream_handles_empty_body() {
         .generate_stream(&message, ModelCategory::Auto, None)
         .await;
 
-    // Without a reachable mock, the streaming request fails at network time.
-    assert!(result.is_err());
+    // Warm-up RPC failures are tolerated, so the stream is built successfully
+    // even with invalid cookies. The actual generate request may fail when the
+    // stream is consumed; here we only verify the wiring returns a stream.
+    assert!(result.is_ok());
 }
 
 #[tokio::test]
@@ -317,9 +319,16 @@ async fn generate_with_tools_round_trip() {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
 
     Mock::given(method("POST"))
         .and(path("/upload"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/_/BardChatUi/data/batchexecute"))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
@@ -328,6 +337,8 @@ async fn generate_with_tools_round_trip() {
         "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s",
     )
     .unwrap()
+    .with_base_url(&mock_uri)
+    .await
     .with_max_retries(0)
     .await;
 
