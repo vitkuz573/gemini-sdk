@@ -81,30 +81,30 @@ pub fn build_inner_req_list(
     inner[SLOT_LANGUAGE] = json!([language]);
     inner[SLOT_WAA_TOKEN] = waa_token.map_or_else(|| Value::Null, |t| json!(t));
     inner[SLOT_NONCE] = json!(nonce);
-    inner[SLOT_CATEGORY] = json!(1);
-    inner[SLOT_REQUEST_UUID] = json!(1);
-    inner[SLOT_FRESH_FLAG] = json!(0);
-    inner[18] = json!(0);
-    inner[27] = json!(1);
+    inner[SLOT_REQUEST_MODE] = json!(1);
+    inner[SLOT_PROTOCOL_VERSION] = json!(1);
+    inner[SLOT_PROTOCOL_SUBVERSION] = json!(0);
+    inner[SLOT_TURN_COUNTER_MODE] = json!(0);
+    inner[SLOT_STREAMING_FLAG] = json!(1);
     inner[SLOT_REQUEST_CATEGORY] = json!([request.category.as_enum_value()]);
-    inner[SLOT_THINKING_FLAG] = json!([1]);
-    inner[53] = json!(0);
-    inner[59] = json!(request_uuid);
-    inner[61] = json!([]);
-    inner[66] = Value::Null;
-    inner[68] = json!(2);
-    inner[79] = json!(3);
+    inner[SLOT_MODE_PICKER] = json!([1]);
+    inner[SLOT_TOOL_EXECUTION_MODE] = json!(0);
+    inner[SLOT_REQUEST_UUID] = json!(request_uuid);
+    inner[SLOT_EMPTY_CONTEXT_LIST] = json!([]);
+    inner[SLOT_UNUSED_PLACEHOLDER] = Value::Null;
+    inner[SLOT_RESPONSE_VERSION] = json!(2);
+    inner[SLOT_CANDIDATE_COUNT] = json!(3);
     inner[SLOT_THINKING_LEVEL] = json!(ThinkingLevel::Standard.as_enum_value().unwrap_or(1));
-    inner[91] = json!(0);
+    inner[SLOT_SAFETY_FILTER_LEVEL] = json!(0);
     // Slot 96 is 1 for a fresh conversation and 0 when continuing an existing one.
-    inner[SLOT_CONVERSATION_TYPE] = json!(if conversation_state.is_some() { 0 } else { 1 });
+    inner[SLOT_FRESH_CONVERSATION_FLAG] = json!(if conversation_state.is_some() { 0 } else { 1 });
 
     if let Some(tools) = &request.tools {
         inner[SLOT_TOOL_DECLARATIONS] = build_tool_declarations(tools);
     }
 
     if browser_payload.is_none() {
-        inner[SLOT_CONTINUATION_FLAG] = json!([1]);
+        inner[SLOT_NEW_DIALOG_FLAG] = json!([1]);
     }
 
     if let Some(level) = request
@@ -148,7 +148,7 @@ fn build_fallback_base(conversation_state: Option<&ConversationState>) -> Vec<Va
     };
     slots[SLOT_WAA_TOKEN] = Value::Null;
     slots[SLOT_NONCE] = json!("");
-    slots[17] = if conversation_state.is_some() {
+    slots[SLOT_TURN_COUNTER] = if conversation_state.is_some() {
         json!([[1]])
     } else {
         json!([[0]])
