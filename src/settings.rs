@@ -23,6 +23,13 @@ pub(crate) const JSF9QC_RPC_ID: &str = "jSf9Qc";
 /// RPC id used for retrieving scheduled prompts.
 pub(crate) const XPSWPD_RPC_ID: &str = "XPSWpd";
 
+/// Index of the data array within the array-shaped `jSf9Qc` response.
+const USAGE_STATS_DATA_INDEX: usize = 1;
+/// Index of the bucket whose first element is the total request count.
+const USAGE_STATS_TOTAL_BUCKET: usize = 1;
+/// Index of the bucket whose first element is the today's request count.
+const USAGE_STATS_TODAY_BUCKET: usize = 2;
+
 /// Usage statistics returned by the `jSf9Qc` batchexecute RPC.
 ///
 /// The inner payload is intentionally exposed as a raw [`serde_json::Value`]
@@ -37,6 +44,24 @@ impl UsageStats {
     #[must_use]
     pub fn value(&self) -> &Value {
         &self.value
+    }
+
+    /// Returns the total number of requests, if the response shape is recognized.
+    #[must_use]
+    pub fn requests_total(&self) -> Option<u64> {
+        Self::extract_count(&self.value, USAGE_STATS_TOTAL_BUCKET)
+    }
+
+    /// Returns the number of requests today, if the response shape is recognized.
+    #[must_use]
+    pub fn requests_today(&self) -> Option<u64> {
+        Self::extract_count(&self.value, USAGE_STATS_TODAY_BUCKET)
+    }
+
+    fn extract_count(value: &Value, bucket_index: usize) -> Option<u64> {
+        let data = value.as_array()?.get(USAGE_STATS_DATA_INDEX)?.as_array()?;
+        let bucket = data.get(bucket_index)?.as_array()?;
+        bucket.first()?.as_u64()
     }
 }
 
