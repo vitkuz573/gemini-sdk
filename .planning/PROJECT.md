@@ -48,6 +48,7 @@ Developers can reliably integrate Gemini into Rust applications using a stable, 
 
 ### Active
 
+- [ ] Eliminate magic strings across SDK source, tests, and examples (v0.3)
 - [ ] Final API audit and deprecation cleanup for v1.0
 - [ ] Document and verify MSRV policy
 - [ ] crates.io publication with changelog and release notes
@@ -109,7 +110,23 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-## Current Milestone: v1.0 Stable Release
+## Current Milestone: v0.3 Magic String Elimination
+
+**Goal:** Centralize all literal protocol, transport, model, MIME, header, HAR, tracing, attestation, and tool-schema strings as named constants, clean up tests/examples, and add a regression gate so the codebase stays maintainable as the protocol surface grows.
+
+**Target features:**
+- Centralized URL paths, query keys, batchexecute markers, WIZ/session keys, and RPC identifiers.
+- Centralized model/category strings, chat roles, MIME types, and upload headers.
+- Centralized base URLs, static headers, HAR/redaction strings, transient WIZ markers, tracing/metrics names, CDP strings, and tool schema keys.
+- Tests and examples reference constants instead of duplicating literals.
+- Regression gate (clippy or test) preventing re-introduction of eliminated magic strings.
+
+**Key constraints:**
+- No public API breakage; constants remain `pub(crate)` unless already public.
+- All quality gates (`cargo test`, `cargo clippy`, `cargo doc`) must remain green.
+- Phase plans are deliberately small (2-3 tasks each) to keep review focused.
+
+## Next Milestone: v1.0 Stable Release
 
 **Goal:** Polish documentation, verify semver, and publish v1.0 to crates.io.
 
@@ -119,10 +136,5 @@ This document evolves at phase transitions and milestone boundaries.
 - crates.io publication with changelog and release notes
 - Migration guide from v0.x to v1.0
 
-**Key constraints:**
-- No breaking API changes beyond pre-v1.0 deprecation cleanup.
-- All quality gates (`cargo test`, `cargo clippy`, `cargo doc`) must remain green.
-- Documentation and examples must reflect the complete v0.2 surface.
-
 ---
-*Last updated: 2026-08-11 after v0.2 milestone archived*
+*Last updated: 2026-08-11 — inserted v0.3 milestone plan*

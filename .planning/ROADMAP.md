@@ -8,7 +8,8 @@
 
 - ✅ **v0.1 Core** — Phases 1-6 (shipped 2026-08-10) — see [archive](milestones/v0.1-ROADMAP.md)
 - ✅ **v0.2 API Expansion** — Phases 7-12 (shipped 2026-08-11) — see [archive](milestones/v0.2-ROADMAP.md)
-- 🚧 **v1.0 Stable Release** — Phases 13+ (planned)
+- 🚧 **v0.3 Magic String Elimination** — Phases 13-16 (planned)
+- ⏳ **v1.0 Stable Release** — Phases 17+ (planned)
 
 ## Phases
 
@@ -36,11 +37,22 @@
 
 </details>
 
-### 🚧 v1.0 Stable Release (Planned)
+### 🚧 v0.3 Magic String Elimination (Planned)
 
-- [ ] Phase 13: API Audit & Deprecation Cleanup
-- [ ] Phase 14: MSRV Policy & Documentation Polish
-- [ ] Phase 15: crates.io Publication
+- [ ] Phase 13: Core Protocol Constants
+  - [ ] 13-01-PLAN.md — Centralize URL paths, batchexecute query keys, transport markers, WIZ/session keys, and RPC IDs.
+- [ ] Phase 14: Model, Chat & Upload Constants
+  - [ ] 14-01-PLAN.md — Centralize model/category strings, chat roles, MIME types, and upload headers/endpoints.
+- [ ] Phase 15: Infrastructure Constants
+  - [ ] 15-01-PLAN.md — Centralize headers/base URLs, HAR/redaction strings, transient markers, tracing/metrics, CDP/attestation, and tool schema keys.
+- [ ] Phase 16: Test & Example Cleanup + Regression Guard
+  - [ ] 16-01-PLAN.md — Clean up tests/examples and add a regression gate for eliminated magic strings.
+
+### ⏳ v1.0 Stable Release (Planned)
+
+- [ ] Phase 17: API Audit & Deprecation Cleanup
+- [ ] Phase 18: MSRV Policy & Documentation Polish
+- [ ] Phase 19: crates.io Publication
 
 ## Progress
 
@@ -58,10 +70,14 @@
 | 10. Settings Pages | v0.2 | 1/1 | Complete | 2026-08-10 |
 | 11. Protocol Drift & Integration | v0.2 | 1/1 | Complete | 2026-08-10 |
 | 12. Live Testing & Backend Resilience | v0.2 | 1/1 | Complete | 2026-08-11 |
-| 13. API Audit & Deprecation Cleanup | v1.0 | 0/TBD | Not started | - |
-| 14. MSRV Policy & Documentation Polish | v1.0 | 0/TBD | Not started | - |
-| 15. crates.io Publication | v1.0 | 0/TBD | Not started | - |
+| 13. Core Protocol Constants | v0.3 | 0/TBD | Not started | - |
+| 14. Model, Chat & Upload Constants | v0.3 | 0/TBD | Not started | - |
+| 15. Infrastructure Constants | v0.3 | 0/TBD | Not started | - |
+| 16. Test & Example Cleanup + Regression Guard | v0.3 | 0/TBD | Not started | - |
+| 17. API Audit & Deprecation Cleanup | v1.0 | 0/TBD | Not started | - |
+| 18. MSRV Policy & Documentation Polish | v1.0 | 0/TBD | Not started | - |
+| 19. crates.io Publication | v1.0 | 0/TBD | Not started | - |
 
 ---
 
-*Last updated: 2026-08-11 after v0.2 milestone archived*
+*Last updated: 2026-08-11 — inserted v0.3 milestone between v0.2 and v1.0*
