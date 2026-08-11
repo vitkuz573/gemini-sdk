@@ -172,6 +172,16 @@ mod tests {
     }
 
     #[test]
+    fn parse_usage_stats_array_response_returns_typed_counts() {
+        let body = r#")] } '
+
+[["wrb.fr","jSf9Qc","[2,[[999999,0,5,null,null,[[1786440269,701531000],2]],[47284,0.02271571,2,[[1786440269,701531000]]],[2333,0.03,1,[[1786220669,701297000]]]],false]",null,null,null,"generic"]]"#;
+        let result = parse_usage_stats_response(body).unwrap();
+        assert_eq!(result.requests_total(), Some(47284));
+        assert_eq!(result.requests_today(), Some(2333));
+    }
+
+    #[test]
     fn parse_scheduled_prompts_null_payload_returns_empty_object() {
         let body = r#")] } '\n\n[["wrb.fr","XPSWpd",null,null,null,[7],"generic"]]"#;
         let result = parse_scheduled_prompts_response(body).unwrap();

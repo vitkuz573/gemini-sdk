@@ -870,10 +870,9 @@ async fn get_usage_stats_returns_value() {
 
     let result = client.get_usage_stats().await;
     assert!(result.is_ok(), "get_usage_stats failed: {:?}", result);
-    assert_eq!(
-        result.unwrap().value(),
-        &serde_json::json!({"requests_today": 12, "requests_total": 345})
-    );
+    let stats = result.unwrap();
+    assert_eq!(stats.requests_total(), Some(47284));
+    assert_eq!(stats.requests_today(), Some(2333));
 
     let requests = mock_server.received_requests().await.unwrap();
     let body = std::str::from_utf8(&requests[0].body).unwrap();
