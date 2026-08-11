@@ -34,6 +34,21 @@
 
 ---
 
+## v0.4 StreamGenerate Slot Hardening (Shipped: 2026-08-11)
+
+**Phases completed:** 1 phase (17), 1 plan, 3 tasks
+**Closeout type:** verified_closeout
+
+**Key accomplishments:**
+
+- Renamed misleading `src/proto/indices.rs` constants to match HAR-observed semantics: `SLOT_REQUEST_UUID` (slot 10) → `SLOT_PROTOCOL_VERSION`, `SLOT_CATEGORY` (slot 7) → `SLOT_REQUEST_MODE`, `SLOT_CONTINUATION_FLAG` (slot 6) → `SLOT_NEW_DIALOG_FLAG`, `SLOT_FRESH_FLAG` (slot 11) → `SLOT_PROTOCOL_SUBVERSION`, `SLOT_THINKING_FLAG` (slot 41) → `SLOT_MODE_PICKER`, `SLOT_CONVERSATION_TYPE` (slot 96) → `SLOT_FRESH_CONVERSATION_FLAG`.
+- Added named constants for all previously raw slot indices used by the SDK: 17, 18, 27, 53, 59, 61, 66, 68, 79, 91.
+- Refactored `src/proto/slots.rs` so `build_inner_req_list` and `build_fallback_base` use only named constants.
+- Added `no_raw_slot_indices_in_production_code` regression gate in the `src/proto/slots.rs` test module.
+- Kept all quality gates green: `cargo test --all-targets` (279 passed, 2 ignored), `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`.
+
+---
+
 ## v0.1 Core (Shipped: 2026-08-10)
 
 **Phases completed:** 6 phases (1-6), 19 plans, 12 tasks
