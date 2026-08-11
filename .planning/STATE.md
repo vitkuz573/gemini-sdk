@@ -4,18 +4,18 @@ milestone: v0.5
 milestone_name: Usage Stats Reliability
 current_phase: 18
 current_phase_name: Auth Header Parity for Usage Stats
-current_plan: P02 — not started
+current_plan: Completed
 status: executing
-stopped_at: Completed 18-01 plan
-last_updated: "2026-08-11T15:10:00.000Z"
+stopped_at: Completed phase 18
+last_updated: "2026-08-11T15:35:00.000Z"
 last_activity: 2026-08-11
-last_activity_desc: Completed 18-01 auth header plumbing
+last_activity_desc: Completed phase 18 auth header parity
 progress:
   total_phases: 20
-  completed_phases: 17
+  completed_phases: 18
   total_plans: 3
-  completed_plans: 1
-  percent: 85
+  completed_plans: 3
+  percent: 90
 ---
 
 # Project State
@@ -57,7 +57,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 15 — Infrastructure Constants | ✓ Complete | 1/1 | 100% |
 | 16 — Test & Example Cleanup + Regression Guard | ✓ Complete | 1/1 | 100% |
 | 17 — StreamGenerate Slot Hardening | ✓ Complete | 1/1 | 100% |
-| 18 — Auth Header Parity for Usage Stats | 🔄 In progress | 1/3 | 33% |
+| 18 — Auth Header Parity for Usage Stats | ✓ Complete | 3/3 | 100% |
 | 19 — Payload & Parser Alignment | ⏳ Not started | 0/TBD | 0% |
 | 20 — Live Verification & CLI Contract | ⏳ Not started | 0/TBD | 0% |
 
@@ -120,11 +120,11 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 
 ## Current Position
 
-Phase: 18 — Auth Header Parity for Usage Stats
-Plan: P02 — not started
-Status: Executing; 18-01 complete
-Last activity: 2026-08-11 — Completed 18-01 auth header plumbing
+Phase: 19 — Payload & Parser Alignment
+Plan: Not started
+Status: Planning complete; ready to execute
+Last activity: 2026-08-11 — Completed phase 18 auth header parity
 
 ## Operator Next Steps
 
-- Execute plan 18-02 (TDD: wire auth headers into get_usage_stats).
+- Execute phase 19 plans (Payload & Parser Alignment).
