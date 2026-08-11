@@ -5,17 +5,17 @@ milestone_name: StreamGenerate Slot Hardening
 current_phase: 17
 current_phase_name: StreamGenerate Slot Hardening
 current_plan: Not started
-status: planning
-stopped_at: Started milestone v0.4
-last_updated: "2026-08-11T11:45:55.285Z"
+status: complete
+stopped_at: Completed phase 17 plan P01
+last_updated: "2026-08-11T11:55:26.522Z"
 last_activity: 2026-08-11
-last_activity_desc: v0.4 milestone initialized
+last_activity_desc: completed phase 17 StreamGenerate Slot Hardening
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 26
-  completed_plans: 26
-  percent: 100
+  total_phases: 20
+  completed_phases: 17
+  total_plans: 30
+  completed_plans: 30
+  percent: 85
 ---
 
 # Project State
@@ -24,8 +24,8 @@ progress:
 **Initialized:** 2026-08-08
 **Current milestone:** v0.4 — StreamGenerate Slot Hardening
 **Current phase:** 17
-**Current Plan:** Not started
-**Total Plans in Phase:** 0/TBD
+**Current Plan:** P01 — complete
+**Total Plans in Phase:** 1/1
 
 milestone: v0.4
 
@@ -56,7 +56,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 14 — Model/Chat/Upload Constants | ✓ Complete | 1/1 | 100% |
 | 15 — Infrastructure Constants | ✓ Complete | 1/1 | 100% |
 | 16 — Test & Example Cleanup + Regression Guard | ✓ Complete | 1/1 | 100% |
-| 17 — StreamGenerate Slot Hardening | ⏳ Not started | 0/TBD | 0% |
+| 17 — StreamGenerate Slot Hardening | ✓ Complete | 1/1 | 100% |
 | 18 — API Audit & Deprecation Cleanup | ⏳ Not started | 0/TBD | 0% |
 | 19 — MSRV Policy & Documentation Polish | ⏳ Not started | 0/TBD | 0% |
 | 20 — crates.io Publication | ⏳ Not started | 0/TBD | 0% |
@@ -96,6 +96,7 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 | Phase 11-protocol-drift-integration P01 | 20 min | 3 tasks | 5 files |
 | Phase 09-locale-model-config P01 | 11 min | 4 tasks | 8 files |
 | Phase 08-user-profile-preferences P01 | 6 min | 3 tasks | 8 files |
+| Phase 17 PP01 | 22m | 3 tasks | 2 files |
 
 ## Decisions
 
@@ -112,18 +113,18 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 
 ## Session
 
-**Last session:** 2026-08-11T11:45:55.270Z
-**Stopped at:** v0.4 milestone initialized
+**Last session:** 2026-08-11T11:55:26.503Z
+**Stopped at:** Completed phase 17 plan P01
 **Resume file:** None
 
 ## Current Position
 
 Phase: 17 — StreamGenerate Slot Hardening
-Plan: —
-Status: Planning
-Last activity: 2026-08-11 — v0.4 milestone initialized
+Plan: P01 — complete
+Status: Complete
+Last activity: 2026-08-11 — completed phase 17 StreamGenerate Slot Hardening
 
 ## Operator Next Steps
 
-- Run `/gsd-discuss-phase 17` to gather context and clarify approach.
-- Or run `/gsd-plan-phase 17` to skip discussion and plan directly.
+- Run `/gsd-verify-work 17` to verify the phase.
+- Or run `/gsd-complete-milestone` to close v0.4 if no more phases are planned.
