@@ -74,10 +74,7 @@ impl LastSelectedMode {
 /// [["me"], [[["person.photo", "person.name", "person.email"], null, [1, 7]]]]
 /// ```
 pub fn build_get_user_info_payload() -> Value {
-    serde_json::json!([
-        ["me"],
-        [[["person.photo", "person.name", "person.email"], null, [1, 7]]]
-    ])
+    serde_json::json!([["me"], [[["person.photo", "person.name", "person.email"], null, [1, 7]]]])
 }
 
 /// Builds the inner payload for a `get_last_selected_mode()` request.
@@ -131,11 +128,7 @@ pub fn parse_user_info_response(body: &str) -> Result<UserInfo> {
     let photo_url = read_optional_string(&inner, &["photoUrl", "photo_url"]);
     let email = read_optional_string(&inner, &["email"]);
 
-    Ok(UserInfo {
-        name,
-        photo_url,
-        email,
-    })
+    Ok(UserInfo { name, photo_url, email })
 }
 
 /// Parses the batchexecute response body returned by the `L5adhe` RPC.
@@ -178,32 +171,16 @@ fn extract_rpc_entry(body: &str, rpc_id: &str) -> Result<Value> {
 fn find_rpc_entry<'a>(value: &'a Value, rpc_id: &str) -> Option<&'a Value> {
     let arr = value.as_array()?;
     let direct = arr.iter().find(|entry| {
-        entry
-            .get(0)
-            .and_then(|v| v.as_str())
-            .map(|s| s == RPC_ID)
-            .unwrap_or(false)
-            && entry
-                .get(1)
-                .and_then(|v| v.as_str())
-                .map(|s| s == rpc_id)
-                .unwrap_or(false)
+        entry.get(0).and_then(|v| v.as_str()).map(|s| s == RPC_ID).unwrap_or(false)
+            && entry.get(1).and_then(|v| v.as_str()).map(|s| s == rpc_id).unwrap_or(false)
     });
     if direct.is_some() {
         return direct;
     }
     let first = arr.first().and_then(|v| v.as_array())?;
     first.iter().find(|entry| {
-        entry
-            .get(0)
-            .and_then(|v| v.as_str())
-            .map(|s| s == RPC_ID)
-            .unwrap_or(false)
-            && entry
-                .get(1)
-                .and_then(|v| v.as_str())
-                .map(|s| s == rpc_id)
-                .unwrap_or(false)
+        entry.get(0).and_then(|v| v.as_str()).map(|s| s == RPC_ID).unwrap_or(false)
+            && entry.get(1).and_then(|v| v.as_str()).map(|s| s == rpc_id).unwrap_or(false)
     })
 }
 
@@ -212,12 +189,7 @@ fn extract_payload_str(entry: &Value) -> Result<&str> {
         .get(PAYLOAD)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            entry
-                .get(PAYLOAD_ALT)
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-        })
+        .or_else(|| entry.get(PAYLOAD_ALT).and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
         .ok_or_else(|| Error::parse("response payload missing"))
 }
 

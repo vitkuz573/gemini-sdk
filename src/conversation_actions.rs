@@ -193,11 +193,7 @@ pub fn parse_conversation_action_response(
 fn find_rpc_entry(value: &Value) -> Option<&Value> {
     let arr = value.as_array()?;
     let direct = arr.iter().find(|entry| {
-        entry
-            .get(0)
-            .and_then(|v| v.as_str())
-            .map(|s| s == RPC_ID)
-            .unwrap_or(false)
+        entry.get(0).and_then(|v| v.as_str()).map(|s| s == RPC_ID).unwrap_or(false)
             && entry
                 .get(1)
                 .and_then(|v| v.as_str())
@@ -209,11 +205,7 @@ fn find_rpc_entry(value: &Value) -> Option<&Value> {
     }
     let first = arr.first().and_then(|v| v.as_array())?;
     first.iter().find(|entry| {
-        entry
-            .get(0)
-            .and_then(|v| v.as_str())
-            .map(|s| s == RPC_ID)
-            .unwrap_or(false)
+        entry.get(0).and_then(|v| v.as_str()).map(|s| s == RPC_ID).unwrap_or(false)
             && entry
                 .get(1)
                 .and_then(|v| v.as_str())
@@ -249,14 +241,8 @@ mod tests {
     #[test]
     fn payload_builders_match_expected_shape() {
         assert_eq!(build_regenerate_payload("abc"), serde_json::json!(["r_abc"]));
-        assert_eq!(
-            build_rate_payload("abc", TurnRating::Good),
-            serde_json::json!(["r_abc", 1])
-        );
-        assert_eq!(
-            build_rate_payload("abc", TurnRating::Bad),
-            serde_json::json!(["r_abc", 0])
-        );
+        assert_eq!(build_rate_payload("abc", TurnRating::Good), serde_json::json!(["r_abc", 1]));
+        assert_eq!(build_rate_payload("abc", TurnRating::Bad), serde_json::json!(["r_abc", 0]));
         assert_eq!(
             build_rate_payload("abc", TurnRating::Neutral),
             serde_json::json!(["r_abc", null])
@@ -267,8 +253,12 @@ mod tests {
     #[test]
     fn parse_success_response() {
         let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]";
-        let result = parse_conversation_action_response(body, ConversationAction::Regenerate, "r_abc".into())
-            .unwrap();
+        let result = parse_conversation_action_response(
+            body,
+            ConversationAction::Regenerate,
+            "r_abc".into(),
+        )
+        .unwrap();
         assert!(result.success());
         assert_eq!(result.action(), ConversationAction::Regenerate);
         assert_eq!(result.response_id(), "r_abc");
@@ -277,48 +267,66 @@ mod tests {
     #[test]
     fn parse_error_response() {
         let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"{\\\"error\\\":\\\"turn not found\\\"}\",null,null,null,\"generic\"]]";
-        let result = parse_conversation_action_response(body, ConversationAction::Delete, "r_abc".into())
-            .unwrap();
+        let result =
+            parse_conversation_action_response(body, ConversationAction::Delete, "r_abc".into())
+                .unwrap();
         assert!(!result.success());
     }
 
     #[test]
     fn parse_wrapped_array() {
         let body = ")] } ' \n\n[[[\"wrb.fr\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]]";
-        let result = parse_conversation_action_response(body, ConversationAction::Rate(TurnRating::Good), "r_abc".into())
-            .unwrap();
+        let result = parse_conversation_action_response(
+            body,
+            ConversationAction::Rate(TurnRating::Good),
+            "r_abc".into(),
+        )
+        .unwrap();
         assert!(result.success());
     }
 
     #[test]
     fn parse_null_payload_as_success() {
         let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",null,null,null,null,\"generic\"]]";
-        let result = parse_conversation_action_response(body, ConversationAction::Regenerate, "r_abc".into())
-            .unwrap();
+        let result = parse_conversation_action_response(
+            body,
+            ConversationAction::Regenerate,
+            "r_abc".into(),
+        )
+        .unwrap();
         assert!(result.success());
     }
 
     #[test]
     fn parse_empty_array_payload_as_success() {
         let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"[]\",null,null,null,\"generic\"]]";
-        let result = parse_conversation_action_response(body, ConversationAction::Delete, "r_abc".into())
-            .unwrap();
+        let result =
+            parse_conversation_action_response(body, ConversationAction::Delete, "r_abc".into())
+                .unwrap();
         assert!(result.success());
     }
 
     #[test]
     fn parse_quoted_empty_array_payload_as_success() {
         let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"\\\"[]\\\"\",null,null,null,\"generic\"]]";
-        let result = parse_conversation_action_response(body, ConversationAction::Rate(TurnRating::Neutral), "r_abc".into())
-            .unwrap();
+        let result = parse_conversation_action_response(
+            body,
+            ConversationAction::Rate(TurnRating::Neutral),
+            "r_abc".into(),
+        )
+        .unwrap();
         assert!(result.success());
     }
 
     #[test]
     fn parse_string_null_payload_as_success() {
         let body = ")] } ' \n\n[[\"wrb.fr\",\"PCck7e\",\"null\",null,null,null,\"generic\"]]";
-        let result = parse_conversation_action_response(body, ConversationAction::Regenerate, "r_abc".into())
-            .unwrap();
+        let result = parse_conversation_action_response(
+            body,
+            ConversationAction::Regenerate,
+            "r_abc".into(),
+        )
+        .unwrap();
         assert!(result.success());
     }
 }

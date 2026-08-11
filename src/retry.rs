@@ -26,10 +26,8 @@ where
     F: Fn() -> Fut,
     Fut: Future<Output = std::result::Result<T, reqwest::Error>>,
 {
-    with_backoff_generic(|| async {
-        operation().await.map_err(crate::errors::Error::Request)
-    })
-    .await
+    with_backoff_generic(|| async { operation().await.map_err(crate::errors::Error::Request) })
+        .await
 }
 
 /// Generic retry helper that accepts any error type convertible to
@@ -97,10 +95,7 @@ mod tests {
 
     fn build_reqwest_error(status: StatusCode) -> reqwest::Error {
         // Build a reqwest error carrying the desired HTTP status.
-        let response = http::Response::builder()
-            .status(status)
-            .body("")
-            .expect("valid response");
+        let response = http::Response::builder().status(status).body("").expect("valid response");
         let response: reqwest::Response = response.into();
         response.error_for_status().expect_err("status is an error")
     }

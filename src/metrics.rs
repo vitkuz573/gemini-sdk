@@ -67,10 +67,7 @@ impl MetricsRecorder for OpenTelemetryRecorder {
             .iter()
             .map(|(k, v)| opentelemetry::KeyValue::new(k.to_string(), v.to_string()))
             .collect();
-        self.meter
-            .u64_counter(name.to_string())
-            .build()
-            .add(1, &kv);
+        self.meter.u64_counter(name.to_string()).build().add(1, &kv);
     }
 
     fn record_histogram(&self, name: &str, value: Duration, attributes: &[(&str, &str)]) {
@@ -112,20 +109,17 @@ mod tests {
     impl MetricsRecorder for CountingRecorder {
         fn increment_counter(&self, name: &str, attributes: &[(&str, &str)]) {
             self.counter_calls.fetch_add(1, Ordering::SeqCst);
-            let attrs = attributes
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect();
+            let attrs = attributes.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
             self.counters.lock().unwrap().push((name.to_string(), attrs));
         }
 
         fn record_histogram(&self, name: &str, value: Duration, attributes: &[(&str, &str)]) {
             self.histogram_calls.fetch_add(1, Ordering::SeqCst);
-            let attrs = attributes
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect();
-            self.histograms.lock().unwrap().push((name.to_string(), value.as_secs_f64(), attrs));
+            let attrs = attributes.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+            self.histograms
+                .lock()
+                .unwrap()
+                .push((name.to_string(), value.as_secs_f64(), attrs));
         }
     }
 
@@ -133,11 +127,7 @@ mod tests {
     fn no_op_recorder_does_nothing() {
         let recorder = NoOpMetricsRecorder;
         recorder.increment_counter("gemini_sdk.requests", &[("status", "ok")]);
-        recorder.record_histogram(
-            "gemini_sdk.request_latency",
-            Duration::from_millis(10),
-            &[],
-        );
+        recorder.record_histogram("gemini_sdk.request_latency", Duration::from_millis(10), &[]);
     }
 
     #[test]

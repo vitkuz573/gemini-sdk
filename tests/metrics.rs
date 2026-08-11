@@ -20,19 +20,13 @@ struct CountingRecorder {
 impl MetricsRecorder for CountingRecorder {
     fn increment_counter(&self, name: &str, attributes: &[(&str, &str)]) {
         self.counter_calls.fetch_add(1, Ordering::SeqCst);
-        let attrs = attributes
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
+        let attrs = attributes.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         self.counters.lock().unwrap().push((name.to_string(), attrs));
     }
 
     fn record_histogram(&self, name: &str, value: Duration, attributes: &[(&str, &str)]) {
         self.histogram_calls.fetch_add(1, Ordering::SeqCst);
-        let attrs = attributes
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect();
+        let attrs = attributes.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         self.histograms
             .lock()
             .unwrap()

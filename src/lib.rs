@@ -67,14 +67,14 @@
 pub mod auth;
 pub mod chat;
 pub mod client;
+pub mod constants;
+pub mod conversation_actions;
 pub mod errors;
 pub mod har;
+pub mod locale_model_config;
 pub mod metrics;
 pub mod models;
 pub mod proto;
-pub mod constants;
-pub mod conversation_actions;
-pub mod locale_model_config;
 pub mod settings;
 pub mod tool;
 pub mod upload;
@@ -88,22 +88,22 @@ mod retry;
 mod session;
 mod transient_400;
 
-pub use auth::{Cookies, CookieHeaderProvider, Credentials, CredentialsError, CredentialsProvider};
+pub use auth::{CookieHeaderProvider, Cookies, Credentials, CredentialsError, CredentialsProvider};
 pub use chat::{
     AudioSource, ChatMessage, ChatResponse, ContentPart, Conversation, GenerationConfig,
     ImageSource, ThinkingLevel, VideoSource,
 };
 pub use conversation_actions::{ConversationAction, ConversationActionResult, TurnRating};
-pub use metrics::{MetricsRecorder, NoOpMetricsRecorder};
 #[cfg(feature = "metrics")]
 pub use metrics::OpenTelemetryRecorder;
+pub use metrics::{MetricsRecorder, NoOpMetricsRecorder};
 pub use session::Snapshot;
 // PreparedRequest is intentionally public for benchmarks and advanced use.
-pub use client::{GeminiClient, HttpHook};
 pub use chat::PreparedRequest;
+pub use client::{GeminiClient, HttpHook};
 pub use errors::{Error, Result};
-pub use models::{ModelCategory, ModelInfo};
 pub use locale_model_config::{LocaleConfig, LocaleTools, ModelConfig, ToolsConfig};
+pub use models::{ModelCategory, ModelInfo};
 pub use settings::{ScheduledPrompts, UsageStats};
 pub use user_profile::{LastSelectedMode, UserInfo};
 // Re-export parsing helpers so consumers can convert streaming responses.

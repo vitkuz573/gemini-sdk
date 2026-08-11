@@ -55,11 +55,7 @@ pub fn build_stream_generate_body(inner_req_list: &[Value], at: Option<&str>) ->
 
 /// Builds the URL-encoded `f.req` form body for batchexecute `GetUserStatus`.
 pub fn build_batchexecute_body(at: Option<&str>) -> String {
-    build_batchexecute_body_for_rpc(
-        crate::constants::rpc_ids::OTAQ7B_RPC_ID,
-        "[]",
-        at,
-    )
+    build_batchexecute_body_for_rpc(crate::constants::rpc_ids::OTAQ7B_RPC_ID, "[]", at)
 }
 
 /// Builds a batchexecute body for an arbitrary RPC id and inner payload.

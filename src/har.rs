@@ -52,10 +52,7 @@ impl HarWriter {
             .await
             .map_err(|e| Error::Config(format!("failed to open HAR file: {e}")))?;
 
-        Ok(Self {
-            path,
-            entries: Vec::new(),
-        })
+        Ok(Self { path, entries: Vec::new() })
     }
 
     /// Records a single HTTP transaction.
@@ -281,10 +278,7 @@ mod tests {
         let path = dir.path().join("test.har");
         let mut writer = HarWriter::new(&path).await.unwrap();
 
-        let headers = header_map(&[(
-            "Cookie",
-            "__Secure-1PSID=a; __Secure-1PSIDCC=b; SAPISID=c",
-        )]);
+        let headers = header_map(&[("Cookie", "__Secure-1PSID=a; __Secure-1PSIDCC=b; SAPISID=c")]);
         writer
             .record(
                 "POST",

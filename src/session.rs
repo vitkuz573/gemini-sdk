@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth::Credentials;
 use crate::chat::Conversation;
 use crate::constants::rpc_ids::OTAQ7B_RPC_ID;
-use crate::constants::wiz_keys::{CFB2H, FDR_FJE, F_SID, OPEP_7C, SESSION_ID, S06_GRB};
+use crate::constants::wiz_keys::{CFB2H, FDR_FJE, F_SID, OPEP_7C, S06_GRB, SESSION_ID};
 use crate::proto::slots::ConversationState as ProtoConversationState;
 
 const DEFAULT_PUSH_ID: &str = "feeds/mcudyrk2a4khkz";
@@ -28,7 +28,8 @@ pub(crate) const REQID_BASE_OTHER: u64 = 200_000;
 /// the SDK emits the same monotonic sequence the browser does. It starts at a
 /// base that gives the right digit length for the RPC family and increments on
 /// every batchexecute call.
-pub(crate) static REQID_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(REQID_BASE_OTHER);
+pub(crate) static REQID_COUNTER: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(REQID_BASE_OTHER);
 
 /// Current snapshot format version for forward compatibility.
 pub(crate) const SNAPSHOT_FORMAT_VERSION: u32 = 1;
@@ -764,7 +765,8 @@ mod tests {
 
     #[test]
     fn looks_like_app_session_html_rejects_without_session_id() {
-        let body = r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260807.00_p0"};"#;
+        let body =
+            r#"window.WIZ_global_data = {"cfb2h":"boq_assistant-bard-web-server_20260807.00_p0"};"#;
         assert!(!looks_like_app_session_html(body));
     }
 }

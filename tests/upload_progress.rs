@@ -6,7 +6,8 @@ use std::sync::Arc;
 use futures::StreamExt;
 use gemini_sdk::{Cookies, GeminiClient, UploadEvent};
 
-const COOKIE_HEADER: &str = "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s";
+const COOKIE_HEADER: &str =
+    "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s";
 
 /// A custom resolver that records how many times it is asked to resolve a name.
 #[derive(Clone, Default)]
@@ -39,9 +40,8 @@ async fn upload_progress_yields_progress_before_network() {
     let cookies = Cookies::from_header(COOKIE_HEADER);
     let client = GeminiClient::from_http_client(http_client, cookies).unwrap();
 
-    let mut stream = client
-        .upload_with_progress("image.png", "image/png", vec![1, 2, 3, 4, 5])
-        .await;
+    let mut stream =
+        client.upload_with_progress("image.png", "image/png", vec![1, 2, 3, 4, 5]).await;
 
     let first = stream.next().await.expect("stream should yield an event");
     let event = first.expect("first event should be Ok");
@@ -75,9 +75,7 @@ async fn upload_progress_reports_total_size() {
     let client = GeminiClient::from_http_client(http_client, cookies).unwrap();
 
     let bytes: Vec<u8> = (0..1024).map(|i| (i % 256) as u8).collect();
-    let mut stream = client
-        .upload_with_progress("image.png", "image/png", bytes.clone())
-        .await;
+    let mut stream = client.upload_with_progress("image.png", "image/png", bytes.clone()).await;
 
     let first = stream.next().await.unwrap().unwrap();
     match first {
@@ -93,9 +91,7 @@ async fn upload_progress_reports_total_size() {
 #[tokio::test]
 async fn upload_progress_is_send() {
     let client = GeminiClient::from_cookie_header(COOKIE_HEADER).unwrap();
-    let stream = client
-        .upload_with_progress("image.png", "image/png", vec![1, 2, 3])
-        .await;
+    let stream = client.upload_with_progress("image.png", "image/png", vec![1, 2, 3]).await;
 
     fn assert_send<T: Send>(_t: T) {}
     assert_send(stream);

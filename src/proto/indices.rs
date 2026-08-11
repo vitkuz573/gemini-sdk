@@ -54,7 +54,7 @@ pub mod parser {
     /// Index of the `[conversation_id, response_id]` array in the main entry.
     pub const CONVERSATION_IDS: usize = 1;
 
-        /// JSON object key that holds the continuation token in meta responses.
+    /// JSON object key that holds the continuation token in meta responses.
     ///
     /// This is a WIZ map key, not a semantic identifier, so it remains a
     /// numeric string literal.

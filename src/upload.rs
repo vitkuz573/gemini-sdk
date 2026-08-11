@@ -47,16 +47,8 @@ pub(crate) async fn upload_file(
 ) -> Result<String> {
     let (upload_url, push_id_str, cookie_header) =
         start_upload(client, cookies, session, filename, bytes.len(), base_url).await?;
-    finalize_upload(
-        client,
-        &upload_url,
-        &push_id_str,
-        &cookie_header,
-        mime_type,
-        bytes,
-        base_url,
-    )
-    .await
+    finalize_upload(client, &upload_url, &push_id_str, &cookie_header, mime_type, bytes, base_url)
+        .await
 }
 
 /// Initiates a resumable upload and returns the upload URL, push id, and cookie header.
@@ -263,13 +255,12 @@ pub(crate) async fn upload_attachments(
         .enumerate()
     {
         if !is_allowed_media_type(mime_type) {
-            return Err(Error::bad_request(format!(
-                "unsupported media type: {mime_type}"
-            )));
+            return Err(Error::bad_request(format!("unsupported media type: {mime_type}")));
         }
         let bytes = crate::proto::slots::base64_decode(data)?;
         let filename = crate::proto::slots::derive_attachment_filename(mime_type, idx);
-        let reference = upload_file(client, cookies, session, &filename, mime_type, bytes, base_url).await?;
+        let reference =
+            upload_file(client, cookies, session, &filename, mime_type, bytes, base_url).await?;
         attachments.push(WebAttachment {
             reference,
             mime_type: mime_type.clone(),

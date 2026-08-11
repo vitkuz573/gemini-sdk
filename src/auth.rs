@@ -539,14 +539,16 @@ impl Cookies {
         cookies: impl Iterator<Item = reqwest::cookie::Cookie<'a>>,
     ) {
         for cookie in cookies {
-            self.inner
-                .insert(cookie.name().to_string(), cookie.value().to_string());
+            self.inner.insert(cookie.name().to_string(), cookie.value().to_string());
         }
     }
 
     /// Merges cookies from owned name/value pairs (useful when the source
     /// `reqwest::cookie::Cookie` cannot outlive the borrow).
-    pub(crate) fn merge_response_cookie_pairs(&mut self, cookies: impl Iterator<Item = (String, String)>) {
+    pub(crate) fn merge_response_cookie_pairs(
+        &mut self,
+        cookies: impl Iterator<Item = (String, String)>,
+    ) {
         for (name, value) in cookies {
             self.inner.insert(name, value);
         }

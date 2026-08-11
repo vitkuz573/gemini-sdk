@@ -15,9 +15,8 @@ async fn main() -> gemini_sdk::Result<()> {
 
     let cookies = std::env::var("GEMINI_COOKIES").expect("GEMINI_COOKIES env var required");
     let first_prompt = std::env::args().nth(1).unwrap_or_else(|| "Hello, Gemini!".to_string());
-    let follow_up_prompt = std::env::args()
-        .nth(2)
-        .unwrap_or_else(|| "Can you tell me more?".to_string());
+    let follow_up_prompt =
+        std::env::args().nth(2).unwrap_or_else(|| "Can you tell me more?".to_string());
 
     let client = GeminiClient::from_cookie_header(&cookies)?;
 
@@ -28,8 +27,7 @@ async fn main() -> gemini_sdk::Result<()> {
         .await?;
     println!("Gemini: {}", first_response.text());
 
-    let mut conversation = gemini_sdk::Conversation::new()
-        .with_model_category(ModelCategory::Auto);
+    let mut conversation = gemini_sdk::Conversation::new().with_model_category(ModelCategory::Auto);
     conversation.add_user_text(first_prompt);
     conversation.add_model_text(first_response.text().to_string());
 

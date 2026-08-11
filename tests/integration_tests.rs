@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gemini_sdk::{
-    ChatMessage, ContentPart, Conversation, Error, GenerationConfig, GeminiClient, ImageSource,
+    ChatMessage, ContentPart, Conversation, Error, GeminiClient, GenerationConfig, ImageSource,
     ModelCategory, Tool, ToolError, TurnRating,
 };
 
@@ -73,10 +73,8 @@ fn conversation_preserves_category_across_clone() {
 fn continue_conversation_uses_conversation_category() {
     // Build a client only to obtain a ChatBuilder; the test never makes a
     // network call because `send_message` is not invoked.
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
-    )
-    .unwrap();
+    let client =
+        GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def").unwrap();
 
     let conv = Conversation::new().with_model_category(ModelCategory::Thinking);
     let builder = client.continue_conversation(conv);
@@ -85,16 +83,14 @@ fn continue_conversation_uses_conversation_category() {
 
 #[tokio::test]
 async fn config_builder_async_sets_language_retries_and_timeout() {
-    let client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
-    )
-    .unwrap()
-    .with_language("es")
-    .await
-    .with_max_retries(5)
-    .await
-    .with_timeout(Duration::from_secs(60))
-    .await;
+    let client = GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def")
+        .unwrap()
+        .with_language("es")
+        .await
+        .with_max_retries(5)
+        .await
+        .with_timeout(Duration::from_secs(60))
+        .await;
 
     // The async builder methods must run inside a Tokio runtime without
     // panicking and must persist the values. We verify language by exercising
@@ -129,15 +125,11 @@ async fn generate_stream_yields_response_chunks() {
 
 #[tokio::test]
 async fn generate_stream_handles_empty_body() {
-    let _client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
-    )
-    .unwrap();
+    let _client =
+        GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def").unwrap();
 
     let message = ChatMessage::user("hi");
-    let result = _client
-        .generate_stream(&message, ModelCategory::Auto, None)
-        .await;
+    let result = _client.generate_stream(&message, ModelCategory::Auto, None).await;
 
     // Warm-up RPC failures are tolerated, so the stream is built successfully
     // even with invalid cookies. The actual generate request may fail when the
@@ -149,12 +141,10 @@ async fn generate_stream_handles_empty_body() {
 async fn client_default_system_instruction_reaches_request() {
     use gemini_sdk::proto::slots::build_inner_req_list;
 
-    let _client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
-    )
-    .unwrap()
-    .with_system_instruction("You are a Rust expert")
-    .await;
+    let _client = GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def")
+        .unwrap()
+        .with_system_instruction("You are a Rust expert")
+        .await;
 
     let prepared = gemini_sdk::chat::PreparedRequest {
         prompt: "hello".to_string(),
@@ -177,12 +167,10 @@ async fn client_default_system_instruction_reaches_request() {
 async fn system_instruction_override_wins() {
     use gemini_sdk::proto::slots::build_inner_req_list;
 
-    let _client = GeminiClient::from_cookie_header(
-        "__Secure-1PSID=abc; __Secure-1PSIDCC=def",
-    )
-    .unwrap()
-    .with_system_instruction("You are a Rust expert")
-    .await;
+    let _client = GeminiClient::from_cookie_header("__Secure-1PSID=abc; __Secure-1PSIDCC=def")
+        .unwrap()
+        .with_system_instruction("You are a Rust expert")
+        .await;
 
     let config = gemini_sdk::chat::GenerationConfig::default()
         .with_system_instruction("You are a Python expert");
@@ -223,15 +211,9 @@ async fn consent_cookie_merge_persists_socs_cookie() {
     // Simulate what `accept_consent_and_refresh` does after the consent save:
     // obtain a mutable lock on the shared cookies and merge the response
     // cookies directly into it.
-    let cookies = Cookies::from_header(
-        &format!("{PSID}=psid-value; {PSIDCC}=psidcc-value"),
-    );
+    let cookies = Cookies::from_header(&format!("{PSID}=psid-value; {PSIDCC}=psidcc-value"));
 
-    let response = reqwest::Client::new()
-        .post(&save_url)
-        .send()
-        .await
-        .unwrap();
+    let response = reqwest::Client::new().post(&save_url).send().await.unwrap();
 
     let mut merged: std::collections::HashMap<String, String> = cookies.into();
     for cookie in response.cookies() {
@@ -240,7 +222,11 @@ async fn consent_cookie_merge_persists_socs_cookie() {
     let persisted = Cookies::from(merged);
 
     // The response carried a SOCS cookie, so the merged jar must contain it.
-    assert_eq!(persisted.get(SOCS), Some("saved-consent-value"), "SOCS cookie from consent response was not persisted");
+    assert_eq!(
+        persisted.get(SOCS),
+        Some("saved-consent-value"),
+        "SOCS cookie from consent response was not persisted"
+    );
 
     // The merged jar is the same value the client writes back to
     // `self.inner.cookies`; assert the SOCS value persists.
@@ -266,11 +252,7 @@ impl Tool for DoublerTool {
         &self,
         args: serde_json::Value,
     ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = Result<serde_json::Value, ToolError>>
-                + Send
-                + '_,
-        >,
+        Box<dyn std::future::Future<Output = Result<serde_json::Value, ToolError>> + Send + '_>,
     > {
         let n = args["n"].as_i64().unwrap_or(0);
         Box::pin(async move { Ok(serde_json::json!({ "result": n * 2 })) })
@@ -375,9 +357,9 @@ async fn regenerate_turn_sends_pcck7e_payload() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/pcck7e_success.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(include_str!("fixtures/pcck7e_success.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -414,9 +396,9 @@ async fn rate_turn_sends_rating_value() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/pcck7e_success.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(include_str!("fixtures/pcck7e_success.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -451,9 +433,9 @@ async fn delete_turn_reports_failure_on_error_payload() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/pcck7e_error.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string(include_str!("fixtures/pcck7e_error.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -516,9 +498,10 @@ async fn get_user_info_parses_full_profile() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/o30O0e_user_info.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/o30O0e_user_info.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -556,9 +539,10 @@ async fn get_user_info_tolerates_missing_and_null_fields() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/o30O0e_user_info_partial.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/o30O0e_user_info_partial.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -594,9 +578,10 @@ async fn get_last_selected_mode_returns_mode_id() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/L5adhe_last_mode.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/L5adhe_last_mode.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -616,10 +601,7 @@ async fn get_last_selected_mode_returns_mode_id() {
         session.access_token = Some("token".to_string());
     }
 
-    let mode = client
-        .get_last_selected_mode()
-        .await
-        .expect("get_last_selected_mode failed");
+    let mode = client.get_last_selected_mode().await.expect("get_last_selected_mode failed");
     assert_eq!(mode.mode_id(), Some("cf41b0e0dd7d53e5"));
 }
 
@@ -633,9 +615,10 @@ async fn get_last_selected_mode_returns_none_for_null() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/L5adhe_null_mode.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/L5adhe_null_mode.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -655,10 +638,7 @@ async fn get_last_selected_mode_returns_none_for_null() {
         session.access_token = Some("token".to_string());
     }
 
-    let mode = client
-        .get_last_selected_mode()
-        .await
-        .expect("get_last_selected_mode failed");
+    let mode = client.get_last_selected_mode().await.expect("get_last_selected_mode failed");
     assert_eq!(mode.mode_id(), None);
 }
 
@@ -672,9 +652,10 @@ async fn get_locale_tools_returns_value() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/cYRIkd_locale_tools.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/cYRIkd_locale_tools.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -696,10 +677,7 @@ async fn get_locale_tools_returns_value() {
 
     let result = client.get_locale_tools().await;
     assert!(result.is_ok(), "get_locale_tools failed: {:?}", result);
-    assert_eq!(
-        result.unwrap().value(),
-        &serde_json::json!({"tools": ["tool1", "tool2"]})
-    );
+    assert_eq!(result.unwrap().value(), &serde_json::json!({"tools": ["tool1", "tool2"]}));
 
     let requests = mock_server.received_requests().await.unwrap();
     let body = std::str::from_utf8(&requests[0].body).unwrap();
@@ -716,9 +694,10 @@ async fn get_model_config_returns_value() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/whPPme_model_config.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/whPPme_model_config.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -740,10 +719,7 @@ async fn get_model_config_returns_value() {
 
     let result = client.get_model_config().await;
     assert!(result.is_ok(), "get_model_config failed: {:?}", result);
-    assert_eq!(
-        result.unwrap().value(),
-        &serde_json::json!({"models": [{"id": "pro"}]})
-    );
+    assert_eq!(result.unwrap().value(), &serde_json::json!({"models": [{"id": "pro"}]}));
 
     let requests = mock_server.received_requests().await.unwrap();
     let body = std::str::from_utf8(&requests[0].body).unwrap();
@@ -760,9 +736,10 @@ async fn get_locale_config_returns_value() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/Te6DCf_locale_config.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/Te6DCf_locale_config.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -801,9 +778,10 @@ async fn get_tools_config_returns_value() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/ku4Jyf_tools_config.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/ku4Jyf_tools_config.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -825,10 +803,7 @@ async fn get_tools_config_returns_value() {
 
     let result = client.get_tools_config().await;
     assert!(result.is_ok(), "get_tools_config failed: {:?}", result);
-    assert_eq!(
-        result.unwrap().value(),
-        &serde_json::json!({"enabled": [1, 3, 7, 17]})
-    );
+    assert_eq!(result.unwrap().value(), &serde_json::json!({"enabled": [1, 3, 7, 17]}));
 
     let requests = mock_server.received_requests().await.unwrap();
     let body = std::str::from_utf8(&requests[0].body).unwrap();
@@ -845,9 +820,10 @@ async fn get_usage_stats_returns_value() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/jSf9Qc_usage_stats.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/jSf9Qc_usage_stats.txt")),
+        )
         .mount(&mock_server)
         .await;
 
@@ -889,9 +865,10 @@ async fn get_scheduled_prompts_returns_value() {
 
     Mock::given(method("POST"))
         .and(path("/_/BardChatUi/data/batchexecute"))
-        .respond_with(ResponseTemplate::new(200).set_body_string(include_str!(
-            "fixtures/XPSWpd_scheduled_prompts.txt"
-        )))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/XPSWpd_scheduled_prompts.txt")),
+        )
         .mount(&mock_server)
         .await;
 

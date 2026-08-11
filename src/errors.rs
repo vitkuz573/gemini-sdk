@@ -143,11 +143,9 @@ mod tests {
         assert!(Error::Transient("network".to_string()).is_transient());
         assert!(Error::RateLimited("too many".to_string()).is_transient());
         assert!(Error::Timeout("deadline".to_string()).is_transient());
-        assert!(Error::api(
-            reqwest::StatusCode::INTERNAL_SERVER_ERROR,
-            "server error"
-        )
-        .is_transient());
+        assert!(
+            Error::api(reqwest::StatusCode::INTERNAL_SERVER_ERROR, "server error").is_transient()
+        );
         assert!(Error::api(reqwest::StatusCode::TOO_MANY_REQUESTS, "rate limited").is_transient());
     }
 

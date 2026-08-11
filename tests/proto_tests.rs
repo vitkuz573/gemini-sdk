@@ -107,7 +107,10 @@ fn parse_chat_response_detects_bard_error_wrapper() {
     assert!(result.is_err());
     let err = result.unwrap_err();
     let message = err.to_string();
-    assert!(message.contains("BardErrorInfo"), "error should mention BardErrorInfo: {message}");
+    assert!(
+        message.contains("BardErrorInfo"),
+        "error should mention BardErrorInfo: {message}"
+    );
     assert!(message.contains("1101"), "error should include the Bard error code: {message}");
 }
 

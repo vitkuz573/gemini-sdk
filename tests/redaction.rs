@@ -14,7 +14,9 @@ fn credentials_with_secrets() -> Credentials {
     creds.sapisid = Some("secret-sapisid-value".to_string());
     creds.apisid = Some("secret-apisid-value".to_string());
     creds.socs = Some("secret-socs-value".to_string());
-    creds.extra.insert("extra-secret-name".to_string(), "extra-secret-value".to_string());
+    creds
+        .extra
+        .insert("extra-secret-name".to_string(), "extra-secret-value".to_string());
     creds
 }
 

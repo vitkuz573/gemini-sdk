@@ -73,17 +73,15 @@ async fn mock_tool_invokes_with_boxed_future() {
 
 #[test]
 fn box_dyn_tool_is_object_safe() {
-    let tool: Box<dyn Tool> = Box::new(MockTool::new("x", serde_json::json!({}), |_| {
-        Ok(Value::Null)
-    }));
+    let tool: Box<dyn Tool> =
+        Box::new(MockTool::new("x", serde_json::json!({}), |_| Ok(Value::Null)));
     assert_eq!(tool.name(), "x");
 }
 
 #[test]
 fn arc_dyn_tool_is_object_safe() {
-    let tool: Arc<dyn Tool> = Arc::new(MockTool::new("x", serde_json::json!({}), |_| {
-        Ok(Value::Null)
-    }));
+    let tool: Arc<dyn Tool> =
+        Arc::new(MockTool::new("x", serde_json::json!({}), |_| Ok(Value::Null)));
     assert_eq!(tool.name(), "x");
 }
 

@@ -15,8 +15,9 @@ struct CustomProvider {
 impl CredentialsProvider for CustomProvider {
     fn credentials(
         &self,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = gemini_sdk::Result<Credentials>> + Send + '_>>
-    {
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = gemini_sdk::Result<Credentials>> + Send + '_>,
+    > {
         let psid = self.psid.clone();
         let psidcc = self.psidcc.clone();
         Box::pin(async move {
@@ -89,9 +90,8 @@ async fn refresh_credentials_replaces_cookies_and_clears_session() {
     let provider = CookieHeaderProvider::new(&header).unwrap();
     let client = GeminiClient::from_provider(provider).await.unwrap();
 
-    let refreshed_header = format!(
-        "{PSID}=new; {PSIDCC}=new; {PAPISID}=papi; {PSIDTS}=ts; SID=s; HSID=h; SSID=s"
-    );
+    let refreshed_header =
+        format!("{PSID}=new; {PSIDCC}=new; {PAPISID}=papi; {PSIDTS}=ts; SID=s; HSID=h; SSID=s");
     let refreshed_provider = CookieHeaderProvider::new(&refreshed_header).unwrap();
 
     // The public refresh path replaces cookies. Since it calls init_session

@@ -4,11 +4,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::chat::{ChatResponse, ContentPart};
-use crate::tool::ToolCall;
 use crate::errors::{Error, Result};
 use crate::models::ModelInfo;
 use crate::proto::indices::parser::*;
 use crate::proto::slots::ConversationState;
+use crate::tool::ToolCall;
 
 /// Re-export of [`parse_chat_response`] for the crate root.
 pub use parse_chat_response as parse_chat_response_fn;
@@ -88,11 +88,7 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
     fn find_rpc_entry(value: &Value) -> Option<&Value> {
         if let Some(arr) = value.as_array() {
             if let Some(entry) = arr.iter().find(|entry| {
-                entry
-                    .get(1)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s == "otAQ7b")
-                    .unwrap_or(false)
+                entry.get(1).and_then(|v| v.as_str()).map(|s| s == "otAQ7b").unwrap_or(false)
             }) {
                 return Some(entry);
             }
@@ -100,11 +96,7 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
             // array (extra wrapping level).
             if let Some(first) = arr.first().and_then(|v| v.as_array()) {
                 return first.iter().find(|entry| {
-                    entry
-                        .get(1)
-                        .and_then(|v| v.as_str())
-                        .map(|s| s == "otAQ7b")
-                        .unwrap_or(false)
+                    entry.get(1).and_then(|v| v.as_str()).map(|s| s == "otAQ7b").unwrap_or(false)
                 });
             }
         }
@@ -121,12 +113,7 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
         .get(PAYLOAD)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
-        .or_else(|| {
-            rpc_entry
-                .get(PAYLOAD_ALT)
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-        })
+        .or_else(|| rpc_entry.get(PAYLOAD_ALT).and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
         .ok_or_else(|| Error::parse("GetUserStatus response payload missing"))?;
 
     let inner: Value = serde_json::from_str(payload_str)
@@ -146,36 +133,19 @@ pub fn parse_model_list(body: &str) -> Result<Vec<ModelInfo>> {
             continue;
         }
 
-        let id = mode_arr
-            .first()
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let id = mode_arr.first().and_then(|v| v.as_str()).unwrap_or("").to_string();
         if id.is_empty() {
             continue;
         }
 
-        let title = mode_arr
-            .get(1)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let description = mode_arr
-            .get(2)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let title = mode_arr.get(1).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let description = mode_arr.get(2).and_then(|v| v.as_str()).unwrap_or("").to_string();
 
         let versioned_name = mode_arr
             .get(11)
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .or_else(|| {
-                mode_arr
-                    .get(19)
-                    .and_then(|v| v.as_str())
-                    .filter(|s| !s.is_empty())
-            })
+            .or_else(|| mode_arr.get(19).and_then(|v| v.as_str()).filter(|s| !s.is_empty()))
             .map(|s| s.to_string());
 
         let category_enum = mode_arr
@@ -399,10 +369,7 @@ pub fn extract_conversation_state(body: &str) -> Result<ConversationState> {
         }
 
         if payload_arr.len() >= MAIN_ENTRY_MIN_LEN
-            && payload_arr
-                .get(CANDIDATE_PARTS)
-                .and_then(|v| v.as_array())
-                .is_some()
+            && payload_arr.get(CANDIDATE_PARTS).and_then(|v| v.as_array()).is_some()
         {
             main_entry = Some(payload);
         }
@@ -551,9 +518,8 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                     continue;
                 }
             };
-            let parts_json = if let Some(parts) = inner_arr
-                .get(CANDIDATE_PARTS)
-                .and_then(|v| v.as_array())
+            let parts_json = if let Some(parts) =
+                inner_arr.get(CANDIDATE_PARTS).and_then(|v| v.as_array())
             {
                 parts
             } else if let Some(first) = inner_arr.first().and_then(|v| v.as_array()) {
@@ -578,13 +544,12 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
                         continue;
                     }
                 };
-                let id = part_arr
-                    .get(PART_ID)
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
+                let id = part_arr.get(PART_ID).and_then(|v| v.as_str()).unwrap_or("").to_string();
                 let content = extract_part_content(part_arr);
-                if content.text.is_empty() && content.thinking.is_empty() && content.tool_calls.is_empty() {
+                if content.text.is_empty()
+                    && content.thinking.is_empty()
+                    && content.tool_calls.is_empty()
+                {
                     continue;
                 }
 
@@ -643,11 +608,7 @@ pub fn parse_response_parts(body: &str) -> Result<Vec<ContentPart>> {
 
 /// Returns a short, redacted prefix of a response body for diagnostics.
 fn redact_body_snippet(body: &str, max_len: usize) -> String {
-    let end = body
-        .char_indices()
-        .map(|(i, _)| i)
-        .nth(max_len)
-        .unwrap_or(body.len());
+    let end = body.char_indices().map(|(i, _)| i).nth(max_len).unwrap_or(body.len());
     let snippet = &body[..end];
     // Redact values that look like cookie values or long tokens.
     let mut out = String::with_capacity(snippet.len());
@@ -784,8 +745,7 @@ mod tests {
     #[test]
     fn parse_text_response_with_concatenated_strings() {
         let body = include_str!("../../tests/fixtures/chat_response_concatenated.json");
-        let response = parse_chat_response(body)
-            .expect("concatenated text fixture should parse");
+        let response = parse_chat_response(body).expect("concatenated text fixture should parse");
         assert_eq!(response.text(), "Hello, world!");
     }
 
@@ -798,10 +758,7 @@ mod tests {
     #[test]
     fn extract_bard_error_code_preserves_non_numeric_code() {
         let body = r#"[["wrb.fr","BardErrorInfo",null,null,["AUTHENTICATION_ERROR"],null]]"#;
-        assert_eq!(
-            extract_bard_error_code(body),
-            Some("\"AUTHENTICATION_ERROR\"".to_string())
-        );
+        assert_eq!(extract_bard_error_code(body), Some("\"AUTHENTICATION_ERROR\"".to_string()));
     }
 
     #[test]
@@ -872,15 +829,10 @@ mod tests {
             .and_then(|a| a.first())
             .and_then(|v| v.as_array())
             .expect("fixture entry is an array");
-        let payload: Value = serde_json::from_str(
-            entry[PAYLOAD]
-                .as_str()
-                .expect("fixture payload is a string"),
-        )
-        .expect("fixture payload is valid JSON");
-        let part = payload[CANDIDATE_PARTS][0]
-            .as_array()
-            .expect("fixture part is an array");
+        let payload: Value =
+            serde_json::from_str(entry[PAYLOAD].as_str().expect("fixture payload is a string"))
+                .expect("fixture payload is valid JSON");
+        let part = payload[CANDIDATE_PARTS][0].as_array().expect("fixture part is an array");
         let content = extract_part_content(part);
         assert_eq!(content.text, "hello ");
         assert_eq!(content.thinking, "think step 1");
@@ -897,15 +849,10 @@ mod tests {
             .expect("fixture has at least one element")
             .as_array()
             .expect("fixture entry is an array");
-        let payload: Value = serde_json::from_str(
-            entry[PAYLOAD]
-                .as_str()
-                .expect("fixture payload is a string"),
-        )
-        .expect("fixture payload is valid JSON");
-        let part = payload[CANDIDATE_PARTS][0]
-            .as_array()
-            .expect("fixture part is an array");
+        let payload: Value =
+            serde_json::from_str(entry[PAYLOAD].as_str().expect("fixture payload is a string"))
+                .expect("fixture payload is valid JSON");
+        let part = payload[CANDIDATE_PARTS][0].as_array().expect("fixture part is an array");
         let content = extract_part_content(part);
         assert_eq!(content.text, "real");
         assert_eq!(content.thinking, "thought");
@@ -915,14 +862,8 @@ mod tests {
     fn parsed_helpers_extract_text_and_thinking() {
         let body = include_str!("../../tests/fixtures/thinking_single_part.json");
         let parsed: Value = serde_json::from_str(body).expect("fixture is valid JSON");
-        assert_eq!(
-            extract_text_from_parsed_response(&parsed).as_deref(),
-            Some("hello ")
-        );
-        assert_eq!(
-            extract_thinking_from_parsed_response(&parsed).as_deref(),
-            Some("think step 1")
-        );
+        assert_eq!(extract_text_from_parsed_response(&parsed).as_deref(), Some("hello "));
+        assert_eq!(extract_thinking_from_parsed_response(&parsed).as_deref(), Some("think step 1"));
     }
 
     #[test]
@@ -942,8 +883,8 @@ mod tests {
     #[test]
     fn parse_response_parts_handles_thinking_before_text() {
         let body = include_str!("../../tests/fixtures/thinking_before_text.txt");
-        let parts = parse_response_parts(body)
-            .expect("thinking-before-text fixture should yield parts");
+        let parts =
+            parse_response_parts(body).expect("thinking-before-text fixture should yield parts");
         assert_eq!(parts.len(), 2);
         match (&parts[0], &parts[1]) {
             (ContentPart::Text(t), ContentPart::Thinking(tk)) => {

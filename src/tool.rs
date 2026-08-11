@@ -26,10 +26,7 @@ impl ToolCall {
     /// Creates a new tool call.
     #[must_use]
     pub fn new(name: impl Into<String>, args: Value) -> Self {
-        Self {
-            name: name.into(),
-            args,
-        }
+        Self { name: name.into(), args }
     }
 }
 
@@ -46,10 +43,7 @@ impl ToolResult {
     /// Creates a new tool result.
     #[must_use]
     pub fn new(name: impl Into<String>, result: Value) -> Self {
-        Self {
-            name: name.into(),
-            result,
-        }
+        Self { name: name.into(), result }
     }
 }
 
@@ -147,7 +141,8 @@ mod tests {
         fn invoke(
             &self,
             args: Value,
-        ) -> Pin<Box<dyn Future<Output = std::result::Result<Value, ToolError>> + Send + '_>> {
+        ) -> Pin<Box<dyn Future<Output = std::result::Result<Value, ToolError>> + Send + '_>>
+        {
             Box::pin(async move {
                 let n = args
                     .get("n")

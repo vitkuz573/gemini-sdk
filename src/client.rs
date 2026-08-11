@@ -113,8 +113,10 @@ impl HttpHook for Arc<dyn HttpHook> {
 
 use crate::constants::query_keys::{BL, F_SID, HL, REQID, RPCIDS, RT, RT_VALUE, SOURCE_PATH};
 use crate::constants::urls::{BATCHEXECUTE_PATH, GEMINI_BASE_URL, OGADS_BASE_URL, WAA_BASE_URL};
+use crate::constants::urls::{
+    CONVERSATION_ACTION_SOURCE_PATH_PREFIX, SCHEDULED_SOURCE_PATH, USAGE_SOURCE_PATH,
+};
 use crate::constants::{rpc_ids, transport};
-use crate::constants::urls::{CONVERSATION_ACTION_SOURCE_PATH_PREFIX, SCHEDULED_SOURCE_PATH, USAGE_SOURCE_PATH};
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
 const X_CLIENT_DATA: &str = "CNeOywE=";
@@ -746,7 +748,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -828,7 +832,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -906,7 +912,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -988,7 +996,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1066,7 +1076,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1144,7 +1156,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1222,7 +1236,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1300,7 +1316,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1378,7 +1396,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1456,7 +1476,9 @@ impl GeminiClient {
             let cookie_header = cookies.to_header_value();
             (params, body, cookie_header)
         };
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
 
         let response = self
             .send_batchexecute_with_retry(
@@ -1541,7 +1563,14 @@ impl GeminiClient {
             }
             let body = build_batchexecute_body(session.access_token.as_deref());
             let waa_context = session.waa_context.clone();
-            let headers = self.build_headers(None, waa_context.as_deref(), None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+            let headers = self
+                .build_headers(
+                    None,
+                    waa_context.as_deref(),
+                    None,
+                    Some(transport::BATCHEXECUTE_ENDPOINT),
+                )
+                .await;
             let cookie_header = cookies.to_header_value();
             (params, body, headers, cookie_header)
         };
@@ -1628,12 +1657,12 @@ impl GeminiClient {
         for turn in 0..max_turns {
             let prepared = prepare_request(None, &current_message, config.clone(), category)?;
             self.run_request_hook(&prepared).await?;
-        let body = self.generate_raw_with_prepared(&prepared).await?;
-        let response = self.parse_response_with_conversation_id(&body)?;
-        self.run_response_hook(&response).await?;
+            let body = self.generate_raw_with_prepared(&prepared).await?;
+            let response = self.parse_response_with_conversation_id(&body)?;
+            self.run_response_hook(&response).await?;
 
-        let parsed_parts =
-            crate::proto::parser::parse_response_parts(&body).unwrap_or_default();
+            let parsed_parts =
+                crate::proto::parser::parse_response_parts(&body).unwrap_or_default();
             let mut tool_calls = Vec::new();
             for part in &parsed_parts {
                 if let ContentPart::ToolCall(call) = part {
@@ -2326,7 +2355,9 @@ impl GeminiClient {
             params.push((F_SID, sid.to_string()));
         }
 
-        let headers = self.build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT)).await;
+        let headers = self
+            .build_headers(None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .await;
         let response = self
             .send_with_retry(|| {
                 let client = self.inner.http.clone();
@@ -2637,16 +2668,12 @@ impl GeminiClient {
         &self,
         cookies: impl Iterator<Item = reqwest::cookie::Cookie<'a>>,
     ) {
-        let owned: Vec<(String, String)> = cookies
-            .map(|c| (c.name().to_string(), c.value().to_string()))
-            .collect();
+        let owned: Vec<(String, String)> =
+            cookies.map(|c| (c.name().to_string(), c.value().to_string())).collect();
         self.merge_response_cookies_owned(owned.into_iter()).await;
     }
 
-    async fn merge_response_cookies_owned(
-        &self,
-        cookies: impl Iterator<Item = (String, String)>,
-    ) {
+    async fn merge_response_cookies_owned(&self, cookies: impl Iterator<Item = (String, String)>) {
         let mut guard = self.inner.cookies.lock().await;
         guard.merge_response_cookie_pairs(cookies);
     }
@@ -2703,12 +2730,7 @@ impl GeminiClient {
                                 "Google rejected batchexecute with WIZ error frames",
                             ))
                         } else {
-                            Ok(ResponseWithBody {
-                                status,
-                                headers,
-                                cookies,
-                                body,
-                            })
+                            Ok(ResponseWithBody { status, headers, cookies, body })
                         }
                     }
                     Err(err) => Err(crate::Error::Request(err)),

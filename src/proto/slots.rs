@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::chat::{PreparedRequest, ThinkingLevel};
-use crate::tool::Tool;
 use crate::proto::indices::builder::*;
+use crate::tool::Tool;
 
 /// Number of slots in the `StreamGenerate` inner request list.
 pub const SLOT_COUNT: usize = 97;
@@ -75,10 +75,7 @@ pub fn build_inner_req_list(
         None => build_fallback_base(conversation_state),
     };
 
-    let system_instruction = request
-        .config
-        .as_ref()
-        .and_then(|c| c.system_instruction.as_deref());
+    let system_instruction = request.config.as_ref().and_then(|c| c.system_instruction.as_deref());
     inner[SLOT_PROMPT] = build_slot0(&request.prompt, attachments, system_instruction);
     inner[SLOT_LANGUAGE] = json!([language]);
     inner[SLOT_WAA_TOKEN] = waa_token.map_or_else(|| Value::Null, |t| json!(t));
@@ -96,8 +93,7 @@ pub fn build_inner_req_list(
     inner[66] = Value::Null;
     inner[68] = json!(2);
     inner[79] = json!(3);
-    inner[SLOT_THINKING_LEVEL] =
-        json!(ThinkingLevel::Standard.as_enum_value().unwrap_or(1));
+    inner[SLOT_THINKING_LEVEL] = json!(ThinkingLevel::Standard.as_enum_value().unwrap_or(1));
     inner[91] = json!(0);
     // Slot 96 is 1 for a fresh conversation and 0 when continuing an existing one.
     inner[SLOT_CONVERSATION_TYPE] = json!(if conversation_state.is_some() { 0 } else { 1 });
@@ -159,7 +155,11 @@ fn build_fallback_base(conversation_state: Option<&ConversationState>) -> Vec<Va
     slots
 }
 
-fn build_slot0(prompt: &str, attachments: &[WebAttachment], system_instruction: Option<&str>) -> Value {
+fn build_slot0(
+    prompt: &str,
+    attachments: &[WebAttachment],
+    system_instruction: Option<&str>,
+) -> Value {
     let prompt = match system_instruction {
         Some(instruction) => format!("{instruction}\n{prompt}"),
         None => prompt.to_string(),

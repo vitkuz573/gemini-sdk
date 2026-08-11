@@ -24,9 +24,7 @@ async fn main() -> gemini_sdk::Result<()> {
     let base_url = std::env::var("GEMINI_BASE_URL")
         .unwrap_or_else(|_| "https://gemini.google.com".to_string());
 
-    let client = GeminiClient::from_cookie_header(&cookies)?
-        .with_base_url(&base_url)
-        .await;
+    let client = GeminiClient::from_cookie_header(&cookies)?.with_base_url(&base_url).await;
 
     // User profile (Phase 8)
     match client.get_user_info().await {
@@ -41,10 +39,7 @@ async fn main() -> gemini_sdk::Result<()> {
     // Last selected mode preference (Phase 8)
     match client.get_last_selected_mode().await {
         Ok(mode) => {
-            println!(
-                "last selected mode: {}",
-                mode.mode_id().unwrap_or("<none>")
-            );
+            println!("last selected mode: {}", mode.mode_id().unwrap_or("<none>"));
         }
         Err(e) => eprintln!("get_last_selected_mode failed: {e}"),
     }

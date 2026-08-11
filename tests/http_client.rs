@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use gemini_sdk::{Cookies, GeminiClient};
 
-const COOKIE_HEADER: &str = "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s";
+const COOKIE_HEADER: &str =
+    "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s";
 
 /// A custom resolver that records how many times it is asked to resolve a name.
 #[derive(Clone, Default)]
@@ -41,10 +42,7 @@ async fn injected_client_is_stored() {
     // The SDK should use the injected client, so even a network failure
     // proves the resolver (and therefore the client) was reached.
     let _ = client.verify_signed_in().await;
-    assert!(
-        resolver.calls() > 0,
-        "injected client was not used for the request"
-    );
+    assert!(resolver.calls() > 0, "injected client was not used for the request");
 }
 
 #[test]
