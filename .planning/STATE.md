@@ -2,34 +2,39 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Usage Stats Reliability
+current_phase: 17
+current_phase_name: defining requirements
+current_plan: P01 — complete
 status: planning
-last_updated: "2026-08-11T13:37:17.581Z"
+stopped_at: Completed phase 17 plan P01
+last_updated: "2026-08-11T13:42:17.060Z"
 last_activity: 2026-08-11
+last_activity_desc: Milestone v0.5 started
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
+  total_phases: 20
+  completed_phases: 17
+  total_plans: 3
   completed_plans: 0
-  percent: 0
+  percent: 85
 ---
 
 # Project State
 
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
-**Current milestone:** v0.4 — StreamGenerate Slot Hardening
-**Current phase:** 17
-**Current Plan:** P01 — complete
-**Total Plans in Phase:** 1/1
+**Current milestone:** v0.5 — Usage Stats Reliability
+**Current phase:** 18
+**Current Plan:** Not started
+**Total Plans in Phase:** 0/TBD
 
-milestone: v0.4
+milestone: v0.5
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (updated 2026-08-11)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** Close the magic-number gap in the 97-slot StreamGenerate builder. Every slot index must be a named, HAR-backed constant with a regression gate preventing reintroduction.
+**Current focus:** Fix `GeminiClient::get_usage_stats` auth/payload mismatch so it returns real usage statistics.
 
 ## Phase Status
 
@@ -52,9 +57,9 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 15 — Infrastructure Constants | ✓ Complete | 1/1 | 100% |
 | 16 — Test & Example Cleanup + Regression Guard | ✓ Complete | 1/1 | 100% |
 | 17 — StreamGenerate Slot Hardening | ✓ Complete | 1/1 | 100% |
-| 18 — API Audit & Deprecation Cleanup | ⏳ Not started | 0/TBD | 0% |
-| 19 — MSRV Policy & Documentation Polish | ⏳ Not started | 0/TBD | 0% |
-| 20 — crates.io Publication | ⏳ Not started | 0/TBD | 0% |
+| 18 — Auth Header Parity for Usage Stats | ⏳ Not started | 0/TBD | 0% |
+| 19 — Payload & Parser Alignment | ⏳ Not started | 0/TBD | 0% |
+| 20 — Live Verification & CLI Contract | ⏳ Not started | 0/TBD | 0% |
 
 ## Active Decisions
 
@@ -81,7 +86,7 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 v0.4 slot naming derived from spike references/protocol.md and live HAR at `/home/vitaly/mitm.har`.
 
 ---
-*Last updated: 2026-08-11 — started v0.4 StreamGenerate Slot Hardening*
+*Last updated: 2026-08-11 — started v0.5 Usage Stats Reliability*
 
 ## Performance Metrics
 
@@ -95,6 +100,7 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 
 ## Decisions
 
+- [v0.5 start]: Insert v0.5 Usage Stats Reliability before v1.0 Stable Release because `get_usage_stats` returns `{}` against a live signed-in account.
 - [v0.4 start]: Insert v0.4 StreamGenerate Slot Hardening before v1.0 Stable Release because raw slot indices survived v0.3.
 - [v0.3 planning]: Introduce a dedicated `src/constants.rs` (or module family) for cross-cutting strings and keep RPC-specific constants co-located in their feature modules.
 - [v0.3 planning]: Avoid public API changes; constants remain `pub(crate)` unless they were already public.
@@ -108,18 +114,18 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 
 ## Session
 
-**Last session:** 2026-08-11T11:55:26.503Z
-**Stopped at:** Completed phase 17 plan P01
+**Last session:** 2026-08-11T13:42:17.060Z
+**Stopped at:** Completed milestone v0.5 planning
 **Resume file:** None
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-08-11 — Milestone v0.5 started
+Phase: 18 — Auth Header Parity for Usage Stats
+Plan: Not started
+Status: Planning complete; ready to execute
+Last activity: 2026-08-11 — Milestone v0.5 planned
 
 ## Operator Next Steps
 
-- Run `/gsd-verify-work 17` to verify the phase.
-- Or run `/gsd-complete-milestone` to close v0.4 if no more phases are planned.
+- Run `/gsd-discuss-phase 18` to gather context and clarify approach.
+- Or run `/gsd-plan-phase 18` to skip discussion and plan directly.

@@ -1,100 +1,91 @@
-# Roadmap: Gemini SDK
+# Roadmap: v0.5 Usage Stats Reliability
 
-**Project:** Gemini SDK
-**Created:** 2026-08-08
-**Goal:** Stable, documented, semver-respecting Rust SDK for the Gemini web frontend, published on crates.io.
+**Milestone:** v0.5 Usage Stats Reliability  
+**Goal:** Fix `GeminiClient::get_usage_stats` so it returns real usage statistics instead of an empty object, matching the live Gemini frontend request shape and auth requirements.
 
-## Milestones
+## Phase Overview
 
-- ✅ **v0.1 Core** — Phases 1-6 (shipped 2026-08-10) — see [archive](milestones/v0.1-ROADMAP.md)
-- ✅ **v0.2 API Expansion** — Phases 7-12 (shipped 2026-08-11) — see [archive](milestones/v0.2-ROADMAP.md)
-- ✅ **v0.3 Magic String Elimination** — Phases 13-16 (shipped 2026-08-11) — see [archive](milestones/v0.3-ROADMAP.md)
-- 🚧 **v0.4 StreamGenerate Slot Hardening** — Phase 17 (in progress)
-- 📋 **v1.0 Stable Release** — Phases 18+ (planned)
+| # | Phase | Goal | Requirements | Success Criteria |
+|---|-------|------|--------------|------------------|
+| 18 | Auth Header Parity for Usage Stats | Send SAPISIDHASH + `x-goog-authuser: 0` on the `jSf9Qc` RPC only. | AUTH-01, AUTH-02, AUTH-03, REQ-02, TEST-03, TEST-04 | 4 |
+| 19 | Payload & Parser Alignment | Update `jSf9Qc` request payload and parser to handle the array-shaped response and expose typed accessors. | REQ-01, PARSER-01, PARSER-02, PARSER-03, API-01, API-02, TEST-01, TEST-04 | 4 |
+| 20 | Live Verification & CLI Contract | Confirm real cookies return real counts and the companion CLI surfaces them. | TEST-02, CLI-01, CLI-02, TEST-04 | 3 |
 
-## Phases
+**Total phases:** 3  
+**Total requirements mapped:** 16  
+**Coverage:** 100%
 
-<details>
-<summary>✅ v0.1 Core (Phases 1-6) — SHIPPED 2026-08-10</summary>
+## Phase Details
 
-- [x] Phase 1: Stabilize v0.1 Core (4/4 plans) — completed 2026-08-09
-- [x] Phase 2: Reliability & Protocol Hardening (3/3 plans) — completed 2026-08-10
-- [x] Phase 3: Observability & Configurability (5/5 plans) — completed 2026-08-10
-- [x] Phase 4: Advanced Media & Sessions (2/2 plans) — completed 2026-08-10
-- [x] Phase 5: Tools & Auto-Refresh (3/3 plans) — completed 2026-08-10
-- [x] Phase 6: v1.0 Release (2/2 plans) — completed 2026-08-10
+### Phase 18: Auth Header Parity for Usage Stats
 
-</details>
+**Goal:** Compute and send the browser-matching `Authorization: SAPISIDHASH`
+header and `x-goog-authuser: 0` on the `jSf9Qc` request, without affecting
+other batchexecute RPCs.
 
-<details>
-<summary>✅ v0.2 API Expansion (Phases 7-12) — SHIPPED 2026-08-11</summary>
+**Requirements:** AUTH-01, AUTH-02, AUTH-03, REQ-02, TEST-03, TEST-04
 
-- [x] Phase 7: Conversation Actions (1/1 plan) — completed 2026-08-10
-- [x] Phase 8: User Profile & Preferences (1/1 plan) — completed 2026-08-10
-- [x] Phase 9: Locale & Model Config (1/1 plan) — completed 2026-08-10
-- [x] Phase 10: Settings Pages (1/1 plan) — completed 2026-08-10
-- [x] Phase 11: Protocol Drift & Integration (1/1 plan) — completed 2026-08-10
-- [x] Phase 12: Live Testing & Backend Resilience (1/1 plan) — completed 2026-08-11
+**Success criteria:**
+1. `get_usage_stats` includes a non-empty `Authorization: SAPISIDHASH ...` header.
+2. `get_usage_stats` includes `x-goog-authuser: 0`.
+3. Other batchexecute RPCs (e.g., `get_user_info`, `list_models`) are unchanged.
+4. HAR redaction removes or masks the `Authorization` header value.
+5. `cargo test --all-targets`, `cargo clippy`, and `cargo doc` pass.
 
-</details>
+### Phase 19: Payload & Parser Alignment
 
-<details>
-<summary>✅ v0.3 Magic String Elimination (Phases 13-16) — SHIPPED 2026-08-11</summary>
+**Goal:** Align the `jSf9Qc` request payload with the captured browser shape
+and update the parser to unwrap the array-shaped response, while preserving
+empty-data semantics and exposing a typed-but-drift-tolerant API.
 
-- [x] Phase 13: Core Protocol Constants (1/1 plan) — completed 2026-08-11
-- [x] Phase 14: Model, Chat & Upload Constants (1/1 plan) — completed 2026-08-11
-- [x] Phase 15: Infrastructure Constants (1/1 plan) — completed 2026-08-11
-- [x] Phase 16: Test & Example Cleanup + Regression Guard (1/1 plan) — completed 2026-08-11
+**Requirements:** REQ-01, PARSER-01, PARSER-02, PARSER-03, API-01, API-02, TEST-01, TEST-04
 
-</details>
+**Success criteria:**
+1. The inner `f.req` payload for `jSf9Qc` matches the HAR-captured shape.
+2. A fixture test with the HAR-observed response `[2,[[999999,0,5,...]],false]` passes.
+3. Null payloads still return an empty JSON object.
+4. `UsageStats` exposes accessors for daily and total request counts.
+5. `UsageStats::value()` still returns the raw `serde_json::Value`.
+6. All quality gates pass.
 
-### 🚧 v0.4 StreamGenerate Slot Hardening (In Progress)
+### Phase 20: Live Verification & CLI Contract
 
-- [x] Phase 17: StreamGenerate Slot Hardening (completed 2026-08-11)
-  - Goal: Replace all raw numeric slot indices in `src/proto/slots.rs` with HAR-backed named constants and add a regression gate.
-  - Requirements: SLOT-01 — SLOT-04, QUAL-01 — QUAL-06
-  - **Plans:** 1 plan
-  - Plans:
-    - [x] `17-01-PLAN.md` — Rename legacy slot constants, add missing named constants, refactor builder to use constants only, and add regression gate.
-  - Success criteria:
-    1. No raw `inner[\d+]` assignments remain in production builder code.
-    2. All new constants have HAR-cited doc comments.
-    3. `cargo test --all-targets` passes.
-    4. `cargo clippy --all-targets -- -D warnings` passes.
-    5. `cargo doc --no-deps` passes.
-    6. Regression gate fails if raw numeric slot assignments are reintroduced.
+**Goal:** Verify the fix against a live signed-in account and confirm the
+companion `gemini-cli usage` subcommand prints real counts.
 
-### 📋 v1.0 Stable Release (Planned)
+**Requirements:** TEST-02, CLI-01, CLI-02, TEST-04
 
-- [ ] Phase 18: API Audit & Deprecation Cleanup
-- [ ] Phase 19: MSRV Policy & Documentation Polish
-- [ ] Phase 20: crates.io Publication
+**Success criteria:**
+1. The `get_usage_stats_works` live-cookie integration test returns a non-empty value.
+2. `examples/live_probe.rs` reports the parsed usage counts.
+3. `gemini-cli usage` outputs real counts for a valid cookie set.
+4. The CLI shows a clear message when the account has no usage data.
+5. All quality gates pass.
 
-## Progress
+## Traceability
 
-| Phase | Milestone | Plans Complete | Status | Completed |
-| ----- | --------- | -------------- | ------ | --------- |
-| 1. Stabilize v0.1 Core | v0.1 | 4/4 | Complete | 2026-08-09 |
-| 2. Reliability & Protocol Hardening | v0.1 | 3/3 | Complete | 2026-08-10 |
-| 3. Observability & Configurability | v0.1 | 5/5 | Complete | 2026-08-10 |
-| 4. Advanced Media & Sessions | v0.1 | 2/2 | Complete | 2026-08-10 |
-| 5. Tools & Auto-Refresh | v0.1 | 3/3 | Complete | 2026-08-10 |
-| 6. v1.0 Release | v0.1 | 2/2 | Complete | 2026-08-10 |
-| 7. Conversation Actions | v0.2 | 1/1 | Complete | 2026-08-10 |
-| 8. User Profile & Preferences | v0.2 | 1/1 | Complete | 2026-08-10 |
-| 9. Locale & Model Config | v0.2 | 1/1 | Complete | 2026-08-10 |
-| 10. Settings Pages | v0.2 | 1/1 | Complete | 2026-08-10 |
-| 11. Protocol Drift & Integration | v0.2 | 1/1 | Complete | 2026-08-10 |
-| 12. Live Testing & Backend Resilience | v0.2 | 1/1 | Complete | 2026-08-11 |
-| 13. Core Protocol Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
-| 14. Model, Chat & Upload Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
-| 15. Infrastructure Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
-| 16. Test & Example Cleanup + Regression Guard | v0.3 | 1/1 | Complete | 2026-08-11 |
-| 17. StreamGenerate Slot Hardening | v0.4 | 1/1 | Complete   | 2026-08-11 |
-| 18. API Audit & Deprecation Cleanup | v1.0 | 0/TBD | Not started | - |
-| 19. MSRV Policy & Documentation Polish | v1.0 | 0/TBD | Not started | - |
-| 20. crates.io Publication | v1.0 | 0/TBD | Not started | - |
+| Requirement | Phase |
+|-------------|-------|
+| AUTH-01 | 18 |
+| AUTH-02 | 18 |
+| AUTH-03 | 18 |
+| REQ-01 | 19 |
+| REQ-02 | 18 |
+| PARSER-01 | 19 |
+| PARSER-02 | 19 |
+| PARSER-03 | 19 |
+| API-01 | 19 |
+| API-02 | 19 |
+| TEST-01 | 19 |
+| TEST-02 | 20 |
+| TEST-03 | 18 |
+| TEST-04 | 18, 19, 20 |
+| CLI-01 | 20 |
+| CLI-02 | 20 |
 
----
+## Open Questions / Research Flags
 
-*Last updated: 2026-08-11 — inserted v0.4 StreamGenerate Slot Hardening before v1.0 Stable Release*
+- Phase 19 requires inspection of `/home/vitaly/mitm.har` to extract the exact
+  browser request payload and confirm the response field semantics.
+- Phase 20 requires access to a live signed-in cookie set and the companion
+  CLI repository at `/home/vitaly/projects/gemini-cli`.
