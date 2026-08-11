@@ -562,6 +562,52 @@ async fn get_user_info_tolerates_missing_and_null_fields() {
 }
 
 #[tokio::test]
+async fn get_user_info_does_not_send_auth_headers() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let mock_server = MockServer::start().await;
+    let mock_uri = mock_server.uri();
+
+    Mock::given(method("POST"))
+        .and(path(BATCHEXECUTE_PATH))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(include_str!("fixtures/o30O0e_user_info.txt")),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let client = GeminiClient::from_cookie_header(MOCK_COOKIE_HEADER)
+        .unwrap()
+        .with_base_url(&mock_uri)
+        .await
+        .with_max_retries(0)
+        .await;
+
+    {
+        let mut session = client.inner_session_for_tests().lock().await;
+        session.build_label = Some("boq_assistant-bard-web-server_20260810.00_p0".to_string());
+        session.session_id = Some("1234567890".to_string());
+        session.access_token = Some("token".to_string());
+    }
+
+    let info = client.get_user_info().await;
+    assert!(info.is_ok(), "get_user_info failed: {:?}", info);
+
+    let requests = mock_server.received_requests().await.unwrap();
+    let headers = &requests[0].headers;
+    assert!(
+        headers.get("Authorization").is_none(),
+        "get_user_info must not send Authorization"
+    );
+    assert!(
+        headers.get("x-goog-authuser").is_none(),
+        "get_user_info must not send x-goog-authuser"
+    );
+}
+
+#[tokio::test]
 async fn get_last_selected_mode_returns_mode_id() {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
