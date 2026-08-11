@@ -1,48 +1,68 @@
-# Requirements: v0.4 StreamGenerate Slot Hardening
+# Milestone v0.5 Requirements
 
-## Goal
+## Authentication & Headers
 
-Eliminate every raw numeric index in the 97-slot `StreamGenerate` request builder by introducing semantically named, HAR-backed constants. Close the magic-number gap that v0.3 left in `src/proto/slots.rs`.
+- [ ] **AUTH-01**: `get_usage_stats` sends `Authorization: SAPISIDHASH <ts>_<sha1>` computed from the active credentials.
+- [ ] **AUTH-02**: `get_usage_stats` sends `x-goog-authuser: 0` to match the browser request.
+- [ ] **AUTH-03**: SAPISIDHASH and authuser headers are scoped only to the `jSf9Qc` RPC path; other batchexecute RPCs remain unchanged.
 
-## Functional Requirements
+## Request Shape
 
-### SLOT — Slot Constants
+- [ ] **REQ-01**: The inner `f.req` payload for `jSf9Qc` matches the captured browser shape in `/home/vitaly/mitm.har`.
+- [ ] **REQ-02**: All new protocol literals (header names, payload values) are added to `src/constants.rs` as named `pub(crate)` constants with HAR citations where applicable.
 
-- **[SLOT-01]**: Every non-null slot observed in the live HAR capture (`/home/vitaly/mitm.har`) must have a named constant in `src/proto/indices.rs`.
-- **[SLOT-02]**: Misleading legacy constant names must be renamed to match HAR-observed semantics:
-  - `SLOT_CONTINUATION_FLAG` (slot 6) → `SLOT_NEW_DIALOG_FLAG`
-  - `SLOT_CATEGORY` (slot 7) → `SLOT_REQUEST_MODE`
-  - `SLOT_REQUEST_UUID` (slot 10) → `SLOT_PROTOCOL_VERSION`
-  - `SLOT_FRESH_FLAG` (slot 11) → `SLOT_PROTOCOL_SUBVERSION`
-  - `SLOT_THINKING_FLAG` (slot 41) → `SLOT_MODE_PICKER`
-  - `SLOT_CONVERSATION_TYPE` (slot 96) → `SLOT_FRESH_CONVERSATION_FLAG`
-- **[SLOT-03]**: New constants must be added for previously raw indices:
-  - `SLOT_TURN_COUNTER` (17)
-  - `SLOT_TURN_COUNTER_MODE` (18)
-  - `SLOT_STREAMING_FLAG` (27)
-  - `SLOT_TOOL_EXECUTION_MODE` (53)
-  - `SLOT_REQUEST_UUID` (59)
-  - `SLOT_EMPTY_CONTEXT_LIST` (61)
-  - `SLOT_UNUSED_PLACEHOLDER` (66)
-  - `SLOT_RESPONSE_VERSION` (68)
-  - `SLOT_CANDIDATE_COUNT` (79)
-  - `SLOT_SAFETY_FILTER_LEVEL` (91)
-- **[SLOT-04]**: Each new or renamed constant must include a doc comment citing the HAR-observed value and, where inferable, its semantic role.
+## Response Parsing & API
 
-## Non-Functional Requirements
+- [ ] **PARSER-01**: `get_usage_stats` returns a non-empty value when the live account has usage data.
+- [ ] **PARSER-02**: The parser preserves the existing null-payload → empty object behavior for accounts with no data.
+- [ ] **PARSER-03**: The parser handles the HAR-observed array response shape `[2,[[...]],false]`.
+- [ ] **API-01**: `UsageStats` exposes typed accessors for at least daily and total request counts.
+- [ ] **API-02**: `UsageStats` keeps a raw `serde_json::Value` accessor as a protocol-drift escape hatch.
 
-### QUAL — Quality & Regression
+## Testing & Verification
 
-- **[QUAL-01]**: `src/proto/slots.rs` must contain no raw `inner[\d+]` or `slots[\d+]` assignments in production code.
-- **[QUAL-02]**: A regression gate must fail the test suite if raw numeric slot assignments reappear in the production builder.
-- **[QUAL-03]**: `cargo test --all-targets` must pass.
-- **[QUAL-04]**: `cargo clippy --all-targets -- -D warnings` must pass.
-- **[QUAL-05]**: `cargo doc --no-deps` must pass without new warnings.
-- **[QUAL-06]**: Public API signatures and external behavior must remain unchanged; this is an internal refactor.
+- [ ] **TEST-01**: Wiremock fixture tests cover the array-shaped `jSf9Qc` response and the updated request payload.
+- [ ] **TEST-02**: Live-cookie integration test (`tests/real_cookies.rs`) verifies `get_usage_stats` returns non-empty stats.
+- [ ] **TEST-03**: HAR redaction unit test covers the new `Authorization` header.
+- [ ] **TEST-04**: All quality gates pass: `cargo test --all-targets`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps`.
+
+## Companion CLI
+
+- [ ] **CLI-01**: `gemini-cli usage` surfaces real usage counts after the SDK fix.
+- [ ] **CLI-02**: The CLI handles the empty-data case gracefully (no panic, clear message).
 
 ## Traceability
 
 | Requirement | Phase |
 |-------------|-------|
-| SLOT-01 — SLOT-04 | Phase 17: StreamGenerate Slot Hardening |
-| QUAL-01 — QUAL-06 | Phase 17: StreamGenerate Slot Hardening |
+| AUTH-01 | 1 |
+| AUTH-02 | 1 |
+| AUTH-03 | 1 |
+| REQ-01 | 2 |
+| REQ-02 | 1 |
+| PARSER-01 | 2 |
+| PARSER-02 | 2 |
+| PARSER-03 | 2 |
+| API-01 | 2 |
+| API-02 | 2 |
+| TEST-01 | 2 |
+| TEST-02 | 3 |
+| TEST-03 | 1 |
+| TEST-04 | 1, 2, 3 |
+| CLI-01 | 3 |
+| CLI-02 | 3 |
+
+## Future Requirements (deferred)
+
+- Apply SAPISIDHASH auth to other settings-page RPCs if live testing shows the
+  same empty-response problem (e.g., `get_scheduled_prompts`).
+- Add OAuth / refresh-token auth as an alternative to cookie strings
+  (post-v1.0).
+
+## Out of Scope
+
+- Official Google REST / Vertex AI SDK replacement.
+- Telemetry / heartbeat RPCs.
+- Full schema modeling of every slot in the undocumented `jSf9Qc` response
+  array.
+- Changes to the public API beyond the `UsageStats` accessors defined above.
