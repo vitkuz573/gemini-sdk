@@ -1,38 +1,32 @@
 # Milestones
 
-## v0.2 API Expansion (Shipped: 2026-08-10)
+## v0.2 API Expansion (Shipped: 2026-08-11)
 
-**Phases completed:** 11 phases, 24 plans, 22 tasks
+**Phases completed:** 6 phases (7-12), 6 plans, 18 tasks
+**Git range:** `704fc92..d1b734a`
+**Closeout type:** verified_closeout
 
 **Key accomplishments:**
 
-- Public API surface locked with #[non_exhaustive] types, deny-level doc lints, compile-time Error trait checks, and a documented semver policy.
-- Introduced a pluggable `CredentialsProvider` trait and fully redacted credential `Debug` output without adding runtime dependencies.
-- Fixture-driven tests for text chat, multi-turn state, model category slots, and inline image encoding, plus a multi-turn example binary
-- Locked retry/backoff behavior, fixed clippy/doc gates, and made the crate publishable with a reviewed manifest.
-- 02-reliability-protocol-hardening
-- 05-tools-auto-refresh
-- 05-tools-auto-refresh
-- 05-tools-auto-refresh
-- Typed conversation-action methods (`regenerate_turn`, `rate_turn`, `delete_turn`) on `GeminiClient` using `PCck7e`, backed by configurable `base_url` and wiremock fixture tests.
-- Typed public APIs for signed-in user identity (`o30O0e`) and last-selected mode preference (`L5adhe`) backed by wiremock fixtures.
-- Added `get_usage_stats` and `get_scheduled_prompts` as thin typed batchexecute RPC facades with Wiremock fixtures and opaque `serde_json::Value` wrappers.
+- Exposed conversation turn actions (`regenerate_turn`, `rate_turn`, `delete_turn`) on `GeminiClient` via RPC `PCck7e`, backed by Wiremock fixtures and a configurable `base_url`.
+- Added typed user profile (`o30O0e`) and last-selected mode preference (`L5adhe`) APIs with null-tolerant parsers and fixture tests.
+- Wrapped four undocumented locale/model configuration RPCs (`cYRIkd`, `whPPme`, `Te6DCf`, `ku4Jyf`) in thin `serde_json::Value` facades to tolerate protocol drift.
+- Added settings-page APIs for usage stats (`jSf9Qc`) and scheduled prompts (`XPSWpd`) using the same Value-wrapper pattern.
+- Updated the drifted `x-client-data` constant to `CNeOywE=` and shipped a runnable `examples/v0_2_api_tour.rs` plus full fixture coverage for all nine new RPCs.
+- Hardened live backend resilience with `Error::NotSignedIn` detection, conservative transient WIZ 400 retries, redacted HAR capture, a `live_probe` telemetry binary, and expanded real-cookie integration tests passing 14/14.
 
 ---
 
-## v0.1 v0.1 Core (Shipped: 2026-08-10)
+## v0.1 Core (Shipped: 2026-08-10)
 
-**Phases completed:** 6 phases, 19 plans, 12 tasks
+**Phases completed:** 6 phases (1-6), 19 plans, 12 tasks
 
 **Key accomplishments:**
 
-- Public API surface locked with #[non_exhaustive] types, deny-level doc lints, compile-time Error trait checks, and a documented semver policy.
+- Locked the public API surface with `#[non_exhaustive]` types, deny-level doc lints, compile-time `Error` trait checks, and a documented semver policy.
 - Introduced a pluggable `CredentialsProvider` trait and fully redacted credential `Debug` output without adding runtime dependencies.
-- Fixture-driven tests for text chat, multi-turn state, model category slots, and inline image encoding, plus a multi-turn example binary
+- Shipped fixture-driven tests for text chat, multi-turn state, model category slots, and inline image encoding, plus a multi-turn example binary.
 - Locked retry/backoff behavior, fixed clippy/doc gates, and made the crate publishable with a reviewed manifest.
-- 02-reliability-protocol-hardening
-- 05-tools-auto-refresh
-- 05-tools-auto-refresh
-- 05-tools-auto-refresh
+- Added tools/function calling round-trip, auto cookie refresh, session persistence, audio/video upload support, request/response hooks, `tracing` integration, and metrics facade.
 
 ---

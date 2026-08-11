@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.2
-milestone_name: API Expansion
-current_phase: 12 — Live Testing & Backend Resilience
-current_plan: 01
-status: Complete
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-08-10T12:00:00.000Z"
-last_activity: 2026-08-10
-last_activity_desc: Phase 12 complete — live probe, HAR capture, transient retry, real-cookie tests
+milestone: v1.0
+milestone_name: Stable Release
+current_phase: 13 — API Audit & Deprecation Cleanup
+current_plan: —
+status: Awaiting next milestone
+stopped_at: Milestone v0.2 archived; ready for v1.0 planning
+last_updated: "2026-08-11T08:05:00.000Z"
+last_activity: 2026-08-11
+last_activity_desc: Milestone v0.2 archived; PROJECT.md and ROADMAP.md updated for v1.0
 progress:
   total_phases: 12
   completed_phases: 12
@@ -21,19 +21,19 @@ progress:
 
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
-**Current milestone:** v0.2 — API Expansion
-**Current phase:** 12 — Live Testing & Backend Resilience
-**Current Plan:** 01
-**Total Plans in Phase:** 1/1
+**Current milestone:** v1.0 — Stable Release
+**Current phase:** 13 — API Audit & Deprecation Cleanup
+**Current Plan:** —
+**Total Plans in Phase:** 0/TBD
 
-milestone: v0.2
+milestone: v1.0
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-10)
+See: `.planning/PROJECT.md` (updated 2026-08-11)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** Phase 12 complete. Milestone v0.2 API Expansion is finished.
+**Current focus:** Milestone v0.2 archived. Planning v1.0 Stable Release: API audit, MSRV verification, crates.io publication.
 
 ## Phase Status
 
@@ -51,6 +51,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-10)
 | 9 — Locale & Model Config | ✓ Complete | 1/1 | 100% |
 | 10 — Settings Pages | ✓ Complete | 1/1 | 100% |
 | 11 — Protocol Drift & Integration | ✓ Complete | 1/1 | 100% |
+| 12 — Live Testing & Backend Resilience | ✓ Complete | 1/1 | 100% |
 
 ## Active Decisions
 
@@ -81,7 +82,7 @@ Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SK
 v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 
 ---
-*Last updated: 2026-08-10 after v0.2 roadmap creation*
+*Last updated: 2026-08-11 after v0.2 milestone archived*
 
 ## Performance Metrics
 
@@ -122,7 +123,7 @@ v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 Phase: Milestone v0.2 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-10 — Milestone v0.2 completed and archived
+Last activity: 2026-08-11 — Milestone v0.2 completed and archived
 
 ## Operator Next Steps
 

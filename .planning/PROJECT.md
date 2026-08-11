@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A production-ready Rust SDK for the Google Gemini / Bard web frontend (`gemini.google.com`). It exposes an ergonomic async API for text and image chat, streaming responses, multi-turn conversations, model listing, and file uploads, with optional browser attestation for advanced use cases.
+A production-ready Rust SDK for the Google Gemini / Bard web frontend (`gemini.google.com`). It exposes an ergonomic async API for text and image chat, streaming responses, multi-turn conversations, model listing, file uploads, function calling, user profile and preference access, locale/model configuration, settings-page data, and optional browser attestation for advanced use cases.
 
 The SDK targets Rust developers who want a typed, tested, crate-published client for the undocumented Gemini web protocol without managing cookie headers and WIZ slot payloads by hand.
 
@@ -23,32 +23,37 @@ Developers can reliably integrate Gemini into Rust applications using a stable, 
 
 ### Validated
 
-- ✓ Cookie-based authentication using `__Secure-1PSID` and `__Secure-1PSIDCC` — existing
-- ✓ Text-only chat completions — existing
-- ✓ Inline image data uploads — existing
-- ✓ Streaming and non-streaming response handling — existing
-- ✓ Multi-turn `Conversation` state — existing
-- ✓ Model listing via `batchexecute` (`GetUserStatus` / `Fd0Qje`) — existing
-- ✓ Retry logic with exponential backoff and rate-limit handling — existing
-- ✓ Strongly-typed error enum with transient detection — existing
-- ✓ Optional browser attestation via headless Chrome CDP — existing
+- ✓ Cookie-based authentication using `__Secure-1PSID` and `__Secure-1PSIDCC` — v0.1
+- ✓ Text-only chat completions — v0.1
+- ✓ Inline image data uploads — v0.1
+- ✓ Streaming and non-streaming response handling — v0.1
+- ✓ Multi-turn `Conversation` state — v0.1
+- ✓ Model listing via `batchexecute` (`GetUserStatus` / `Fd0Qje`) — v0.1
+- ✓ Retry logic with exponential backoff and rate-limit handling — v0.1
+- ✓ Strongly-typed error enum with transient detection — v0.1
+- ✓ Optional browser attestation via headless Chrome CDP — v0.1
+- ✓ `CredentialsProvider` trait for pluggable auth sources — v0.1
+- ✓ Request/response hooks and `tracing` integration — v0.1
+- ✓ Tools / function calling round-trip — v0.1
+- ✓ Audio and video upload support — v0.1
+- ✓ Session persistence helpers — v0.1
+- ✓ Conversation actions (`regenerate_turn`, `rate_turn`, `delete_turn`) — v0.2
+- ✓ User profile retrieval (`get_user_info`) — v0.2
+- ✓ Last-selected mode preferences (`get_last_selected_mode`, `set_last_selected_mode`) — v0.2
+- ✓ Locale and model configuration RPCs — v0.2
+- ✓ Usage stats and scheduled prompts — v0.2
+- ✓ Transient WIZ 400 retry and `Error::NotSignedIn` detection — v0.2
+- ✓ Opt-in redacted HAR capture — v0.2
+- ✓ Live probe and real-cookie integration tests — v0.2
 
 ### Active
 
-- [ ] Stabilize public API surface for v0.1 (client, builder, chat types, errors)
-- [ ] Refactor internal client responsibilities into testable components
-- [ ] Fix known fragile areas: cookie merge, blocking locks, WAA fallback surfacing
-- [ ] Improve auth ergonomics with a `CredentialsProvider` trait
-- [ ] Add system instructions and generation config support
-- [ ] Add upload progress callbacks
-- [ ] Add session persistence helpers
-- [ ] Improve protocol resilience against WIZ slot / HTML shape changes
-- [ ] Add request/response hooks for observability
-- [ ] Add tools / function calling support
-- [ ] Support audio and video uploads
-- [ ] Add metrics and structured tracing integration
-- [ ] Auto cookie refresh / consent acquisition
-- [ ] Publish v0.1, v0.2, and v1.0 milestones to crates.io
+- [ ] Final API audit and deprecation cleanup for v1.0
+- [ ] Document and verify MSRV policy
+- [ ] crates.io publication with changelog and release notes
+- [ ] Migration guide from v0.x to v1.0
+- [ ] OAuth / refresh-token flow as an alternative to cookie strings (post-v1.0)
+- [ ] Resumable upload with explicit chunk size control (post-v1.0)
 
 ### Out of Scope
 
@@ -56,14 +61,15 @@ Developers can reliably integrate Gemini into Rust applications using a stable, 
 - Real-time voice / video calls — requires a different transport model; defer unless explicitly requested.
 - Mobile platforms (iOS/Android bindings) — out of scope for a Rust crate; bindings could be a separate project.
 - Paid API abstraction or quota management — Google owns billing; SDK only wraps web frontend access.
+- Telemetry / heartbeat RPCs — library SDK should not emit analytics traffic to Google.
 
 ## Context
 
-The project started as a reverse-engineering exercise and now has working implementations for chat, upload, auth, session management, and browser attestation. The codebase is organized as a typical Rust crate with `src/`, `tests/`, `examples/`, `benches/`, and `docs/`. Spikes in `.planning/spikes/` document the protocol discovery process.
+The project started as a reverse-engineering exercise and now has working implementations for chat, upload, auth, session management, browser attestation, conversation actions, user profile/preferences, locale/model config, settings-page data, and live backend resilience. The codebase is organized as a typical Rust crate with `src/`, `tests/`, `examples/`, `benches/`, and `docs/`. Spikes in `.planning/spikes/` document the protocol discovery process.
 
-Key external dependencies: `reqwest`, `tokio`, `serde`, `thiserror`, `tracing`, `tokio-tungstenite` (optional attestation).
+Key external dependencies: `reqwest`, `tokio`, `serde`, `thiserror`, `tracing`, `tokio-tungstenite` (optional attestation), `humantime`, `tempfile`.
 
-Google can change the web frontend protocol without notice, so the SDK must fail loudly and recover gracefully when response shapes drift.
+Google can change the web frontend protocol without notice, so the SDK must fail loudly and recover gracefully when response shapes drift. v0.2 introduced `serde_json::Value` wrappers for undocumented RPC surfaces, conservative transient-400 detection, and redacted HAR capture to aid debugging without leaking secrets.
 
 ## Constraints
 
@@ -77,10 +83,14 @@ Google can change the web frontend protocol without notice, so the SDK must fail
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Target web frontend protocol instead of official API | Provides access to features not yet exposed in official SDKs | — Pending validation |
-| Use feature-gated browser attestation | Keeps core SDK lightweight; Chrome CDP is a heavy optional dependency | — Pending |
-| semver progression 0.1 → 0.2 → 1.0 | Stabilize core API first, add advanced features without breaking changes | — Pending |
-| Cookie-based auth as default | Matches current reverse-engineered flow | — Pending |
+| Target web frontend protocol instead of official API | Provides access to features not yet exposed in official SDKs | ✓ Validated — v0.2 ships 9 additional undocumented RPCs |
+| Use feature-gated browser attestation | Keeps core SDK lightweight; Chrome CDP is a heavy optional dependency | ✓ Good — optional path remains stable |
+| semver progression 0.1 → 0.2 → 1.0 | Stabilize core API first, add advanced features without breaking changes | ✓ Good — v0.1 and v0.2 both backward-compatible additions |
+| Cookie-based auth as default | Matches current reverse-engineered flow | ✓ Good — `CredentialsProvider` trait added for extensibility |
+| Expose undocumented RPCs as thin typed facades over `batchexecute_rpc` | Avoids new transport code; tolerates protocol drift | ✓ Good — v0.2 RPCs shipped with minimal surface |
+| Return `serde_json::Value` wrappers for undocumented config RPCs | Prevents brittle structs when Google changes shapes | ✓ Good — no parser breakages across v0.2 |
+| Conservative transient WIZ 400 detection (`er` + `di` + `af.httprm`) | Avoids retrying genuine client errors | ✓ Good — live probe passes 14/14 |
+| Opt-in HAR capture with cookie/auth redaction | Aids debugging without leaking credentials | ✓ Good — redaction verified in unit tests |
 
 ## Evolution
 
@@ -99,22 +109,20 @@ This document evolves at phase transitions and milestone boundaries.
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
-## Current Milestone: v0.2 API Expansion
+## Current Milestone: v1.0 Stable Release
 
-**Goal:** Expose the remaining undocumented Gemini web-frontend `batchexecute` RPCs documented in spike 009 as typed, tested public APIs, so the SDK covers the complete user-facing surface beyond core chat.
+**Goal:** Polish documentation, verify semver, and publish v1.0 to crates.io.
 
 **Target features:**
-- Conversation actions (regenerate, rate, delete turn) via `PCck7e`
-- User profile retrieval via `o30O0e`
-- Last-selected mode / user preferences via `L5adhe`
-- Locale and model configuration RPCs: `cYRIkd`, `whPPme`, `Te6DCf`, `ku4Jyf`
-- Settings-page data: usage stats (`jSf9Qc`) and scheduled prompts (`XPSWpd`)
-- Fix known protocol drift: update `x-client-data` constant to match latest HAR
+- Final API audit and deprecation cleanup
+- MSRV policy documented and verified
+- crates.io publication with changelog and release notes
+- Migration guide from v0.x to v1.0
 
 **Key constraints:**
-- Telemetry/reporting RPCs and `signaler-pa`/`myactivity.google.com` remain out of scope.
-- Each RPC is a thin typed facade over the existing `batchexecute_rpc` generic helper.
-- Backward-compatible additions only; public API changes must not break v0.1 consumers.
+- No breaking API changes beyond pre-v1.0 deprecation cleanup.
+- All quality gates (`cargo test`, `cargo clippy`, `cargo doc`) must remain green.
+- Documentation and examples must reflect the complete v0.2 surface.
 
 ---
-*Last updated: 2026-08-10 — milestone v0.2 initialized*
+*Last updated: 2026-08-11 after v0.2 milestone archived*
