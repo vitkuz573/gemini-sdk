@@ -1393,6 +1393,7 @@ impl GeminiClient {
         let base_url = self.inner.config.read().await.base_url.clone();
         let url = format!("{base_url}{BATCHEXECUTE_PATH}");
         let cookies = self.cookies().await;
+        let auth = credentials_to_sapisid_hash(&cookies, &base_url);
         let (params, body, cookie_header) = {
             let session = self.inner.session.lock().await;
             let reqid = SessionState::generate_reqid(None);
@@ -1419,7 +1420,13 @@ impl GeminiClient {
             (params, body, cookie_header)
         };
         let headers = self
-            .build_headers(None, None, None, None, Some(transport::BATCHEXECUTE_ENDPOINT))
+            .build_headers(
+                None,
+                None,
+                auth.as_deref(),
+                Some(crate::constants::headers::X_GOOG_AUTHUSER_VALUE),
+                Some(transport::BATCHEXECUTE_ENDPOINT),
+            )
             .await;
 
         let response = self
