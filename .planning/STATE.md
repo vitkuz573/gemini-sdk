@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.5
 milestone_name: Usage Stats Reliability
-current_phase: 18
-current_phase_name: Auth Header Parity for Usage Stats
-current_plan: Completed
-status: executing
-stopped_at: Completed phase 18
-last_updated: "2026-08-11T15:35:00.000Z"
+current_phase: 19
+current_phase_name: Payload & Parser Alignment
+current_plan: P01 — not started
+status: planning
+stopped_at: Planning phase 19
+last_updated: "2026-08-11T15:40:00.000Z"
 last_activity: 2026-08-11
-last_activity_desc: Completed phase 18 auth header parity
+last_activity_desc: Planned phase 19 payload parser alignment
 progress:
   total_phases: 20
   completed_phases: 18
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 1
+  completed_plans: 0
   percent: 90
 ---
 
@@ -58,7 +58,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 16 — Test & Example Cleanup + Regression Guard | ✓ Complete | 1/1 | 100% |
 | 17 — StreamGenerate Slot Hardening | ✓ Complete | 1/1 | 100% |
 | 18 — Auth Header Parity for Usage Stats | ✓ Complete | 3/3 | 100% |
-| 19 — Payload & Parser Alignment | ⏳ Not started | 0/TBD | 0% |
+| 19 — Payload & Parser Alignment | 🔄 In progress | 0/1 | 0% |
 | 20 — Live Verification & CLI Contract | ⏳ Not started | 0/TBD | 0% |
 
 ## Active Decisions
@@ -121,10 +121,10 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 ## Current Position
 
 Phase: 19 — Payload & Parser Alignment
-Plan: Not started
+Plan: P01 — not started
 Status: Planning complete; ready to execute
-Last activity: 2026-08-11 — Completed phase 18 auth header parity
+Last activity: 2026-08-11 — Planned phase 19 payload parser alignment
 
 ## Operator Next Steps
 
-- Execute phase 19 plans (Payload & Parser Alignment).
+- Execute plan 19-01 (TDD: align parser and expose typed accessors).
