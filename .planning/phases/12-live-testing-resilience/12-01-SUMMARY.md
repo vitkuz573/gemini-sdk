@@ -68,11 +68,10 @@ Added transient WIZ 400 detection, bounded batchexecute retries, opt-in redacted
 | Gate | Result | Notes |
 |------|--------|-------|
 | `cargo test --all-targets` | pass | 156 lib tests + integration tests + doc-tests |
-| `cargo test --test real_cookies` | pass | 14/14 with live cookies |
 | `cargo clippy --all-targets -- -D warnings` | pass | clean |
 | `cargo doc --no-deps` | pass | no warnings under `#![deny(missing_docs)]` |
 | `cargo build --example live_probe` | pass | builds successfully |
-| `live_probe` | skipped | `GEMINI_COOKIES` not present in environment |
+| `live_probe` with user's cookies | pass | 14/14 |
 
 ## Deviations from Plan
 
@@ -160,6 +159,40 @@ environment remain invalid for Gemini signed-in detection. The cookie-jar
 refresh is production-ready behavior, but it cannot compensate for stale or
 insufficient credentials.
 
+## Final Hotfixes
+
+Two additional fixes were applied after the protocol-drift hotfix to reach a
+passing 14/14 live probe with the user's fresh cookies:
+
+- **`cb9cc02` — `fix(client): tolerate warm-up RPC failures and avoid nested session lock`**
+  - `src/client.rs` — The initial `/app` warm-up request made before streaming
+    chat can now fail without aborting the whole chat call. Instead, the warm-up
+    error is logged and the chat continues using the existing session state.
+  - `src/session.rs` — `diagnose_signed_in_html` no longer takes a `&mut self`
+    lock internally, preventing a nested-lock deadlock when the diagnostic is
+    called from a context that already holds the session lock.
+  - This resolves live-probe failures where the first `/app` request returned a
+    transient error but the underlying stream call would have succeeded.
+
+- **`5d18e62` — `fix: populate ChatResponse::conversation_id from StreamGenerate responses`**
+  - `src/chat.rs` — `ChatResponse` now extracts `conversation_id` from the
+    `StreamGenerate` response payload, so callers can retrieve the active
+    conversation identifier after a streaming turn.
+  - `src/client.rs` — The streaming chat path now propagates the parsed
+    `conversation_id` into the returned `ChatResponse`.
+  - This fixes live-probe assertions that expected a non-empty
+    `conversation_id` after chat completion.
+
+### Verification after final hotfixes
+
+| Gate | Result |
+|------|--------|
+| `cargo test --all-targets` | pass |
+| `cargo clippy --all-targets -- -D warnings` | pass |
+| `cargo doc --no-deps` | pass |
+| `cargo build --example live_probe` | pass |
+| `live_probe` with user's cookies | pass (14/14) |
+
 ## Threat Flags
 
 No new security-relevant surface beyond the plan's threat model.
@@ -167,5 +200,5 @@ No new security-relevant surface beyond the plan's threat model.
 ## Self-Check
 
 - [x] Created files exist on disk.
-- [x] Commits `d0c7c8e`, `2187f0a`, `78a2271`, and `39fee36` exist in history.
+- [x] Commits `d0c7c8e`, `2187f0a`, `78a2271`, `39fee36`, `908270e`, `cb9cc02`, and `5d18e62` exist in history.
 - [x] All quality gates pass.
