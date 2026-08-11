@@ -51,6 +51,9 @@ pub mod query_keys {
 }
 
 /// Transport-level markers and keys used by WIZ/batchexecute.
+///
+/// `ANTI_XSSI_PREFIX` and `RPC_FRAME_MARKER` are public because they are
+/// re-exported by the `proto` module for use by response parsing helpers.
 pub mod transport {
     /// WIZ anti-XSSI prefix used by `batchexecute` and `StreamGenerate` responses.
     pub const ANTI_XSSI_PREFIX: &str = ")] } ' \n\n";
@@ -83,7 +86,7 @@ pub mod rpc_ids {
     /// `GetUserStatus` / model list RPC id.
     pub(crate) const OTAQ7B_RPC_ID: &str = "otAQ7b";
     /// `GetUserInfo` / signed-in diagnostics RPC id.
-    pub(crate) const GET_USER_STATUS_RPC_ID: &str = "Fd0Qje";
+    pub(crate) const FD0QJE_RPC_ID: &str = "Fd0Qje";
     /// `K4WWud` locale/tools RPC id.
     pub(crate) const K4WWUD_RPC_ID: &str = "K4WWud";
 }

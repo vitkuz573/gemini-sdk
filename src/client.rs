@@ -2277,7 +2277,7 @@ impl GeminiClient {
                 build_label.as_deref(),
                 session_id.as_deref(),
                 &cookie_header,
-                Some("/"),
+                Some(crate::constants::urls::DEFAULT_SOURCE_PATH),
             )
             .await
         {
@@ -2343,7 +2343,7 @@ impl GeminiClient {
         let reqid = SessionState::generate_reqid(None);
         let mut params: Vec<(&str, String)> = vec![
             (RPCIDS, rpcids.to_string()),
-            (SOURCE_PATH, source_path_override.unwrap_or("/app").to_string()),
+            (SOURCE_PATH, source_path_override.unwrap_or(crate::constants::urls::APP_PATH).to_string()),
             (HL, language.to_string()),
             (REQID, reqid),
             (RT, RT_VALUE.to_string()),

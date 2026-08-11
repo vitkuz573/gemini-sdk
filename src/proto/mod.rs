@@ -61,7 +61,7 @@ pub fn build_batchexecute_body(at: Option<&str>) -> String {
 /// Builds a batchexecute body for an arbitrary RPC id and inner payload.
 pub fn build_batchexecute_body_for_rpc(rpcid: &str, inner: &str, at: Option<&str>) -> String {
     // The batchexecute transport expects a triple-wrapped array:
-    // [[[rpcid, inner, null, "generic"]].
+    // [[[rpcid, inner, null, "generic"]]].
     let payload = json!([[[rpcid, inner, null, "generic"]]]);
     let payload_str = serde_json::to_string(&payload).unwrap_or_default();
     let mut form = vec![format!(
