@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::chat::{PreparedRequest, ThinkingLevel};
+use crate::constants::mime;
 use crate::proto::indices::builder::*;
 use crate::tool::Tool;
 
@@ -187,23 +188,26 @@ fn build_slot0(
     }
 }
 
+/// Default file extension used when a MIME type has no recognized mapping.
+const DEFAULT_EXTENSION: &str = "bin";
+
 /// Derives a file name for an uploaded attachment from its MIME type.
 pub fn derive_attachment_filename(mime_type: &str, index: usize) -> String {
     let ext = match mime_type {
-        "image/png" => "png",
-        "image/jpeg" => "jpg",
-        "image/webp" => "webp",
-        "image/gif" => "gif",
-        "application/pdf" => "pdf",
-        "audio/mp3" | "audio/mpeg" => "mp3",
-        "audio/wav" => "wav",
-        "audio/ogg" => "ogg",
-        "video/mp4" => "mp4",
-        "video/webm" => "webm",
-        "video/quicktime" => "mov",
+        mime::PNG => "png",
+        mime::JPEG => "jpg",
+        mime::WEBP => "webp",
+        mime::GIF => "gif",
+        mime::PDF => "pdf",
+        mime::MP3 | mime::MPEG_AUDIO => "mp3",
+        mime::WAV => "wav",
+        mime::OGG_AUDIO => "ogg",
+        mime::MP4_VIDEO => "mp4",
+        mime::WEBM_VIDEO => "webm",
+        mime::QUICKTIME => "mov",
         _ => {
             let clean = mime_type.split(';').next().unwrap_or(mime_type);
-            clean.split('/').nth(1).unwrap_or("bin")
+            clean.split('/').nth(1).unwrap_or(DEFAULT_EXTENSION)
         }
     };
     if index == 0 {
@@ -331,7 +335,7 @@ mod tests {
         let req = minimal_prepared();
         let attachments = vec![WebAttachment {
             reference: "/contrib_service/ttl_1d/abc".to_string(),
-            mime_type: "image/png".to_string(),
+            mime_type: crate::constants::mime::PNG.to_string().to_string(),
             filename: "test.png".to_string(),
         }];
         let inner =
@@ -342,21 +346,21 @@ mod tests {
 
     #[test]
     fn derive_attachment_filename_defaults() {
-        assert_eq!(derive_attachment_filename("image/png", 0), "attachment.png");
-        assert_eq!(derive_attachment_filename("image/jpeg", 0), "attachment.jpg");
-        assert_eq!(derive_attachment_filename("application/pdf", 1), "attachment_1.pdf");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::PNG, 0), "attachment.png");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::JPEG, 0), "attachment.jpg");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::PDF, 1), "attachment_1.pdf");
         assert_eq!(derive_attachment_filename("text/plain", 0), "attachment.plain");
     }
 
     #[test]
     fn derive_attachment_filename_audio_video() {
-        assert_eq!(derive_attachment_filename("audio/mp3", 0), "attachment.mp3");
-        assert_eq!(derive_attachment_filename("audio/mpeg", 0), "attachment.mp3");
-        assert_eq!(derive_attachment_filename("audio/wav", 0), "attachment.wav");
-        assert_eq!(derive_attachment_filename("audio/ogg", 0), "attachment.ogg");
-        assert_eq!(derive_attachment_filename("video/mp4", 1), "attachment_1.mp4");
-        assert_eq!(derive_attachment_filename("video/webm", 2), "attachment_2.webm");
-        assert_eq!(derive_attachment_filename("video/quicktime", 0), "attachment.mov");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::MP3, 0), "attachment.mp3");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::MPEG_AUDIO, 0), "attachment.mp3");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::WAV, 0), "attachment.wav");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::OGG_AUDIO, 0), "attachment.ogg");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::MP4_VIDEO, 1), "attachment_1.mp4");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::WEBM_VIDEO, 2), "attachment_2.webm");
+        assert_eq!(derive_attachment_filename(crate::constants::mime::QUICKTIME, 0), "attachment.mov");
     }
 
     #[tokio::test]

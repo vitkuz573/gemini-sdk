@@ -8,11 +8,13 @@ use std::pin::Pin;
 use futures::Stream;
 
 use crate::auth::Cookies;
+use crate::constants::mime;
+use crate::constants::upload as upload_constants;
+use crate::constants::urls::PUSH_UPLOAD_BASE_URL;
 use crate::errors::{Error, Result};
 use crate::proto::slots::WebAttachment;
 use crate::session::SessionState;
 
-const PUSH_UPLOAD_URL: &str = "https://push.clients6.google.com/upload/";
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36";
 
@@ -64,13 +66,14 @@ pub(crate) async fn start_upload(
     let push_id = session.effective_push_id();
     let push_id_str = push_id;
 
+    let upload_endpoint = format!("{PUSH_UPLOAD_BASE_URL}{}", upload_constants::UPLOAD_PATH);
     let start_response = client
-        .post(PUSH_UPLOAD_URL)
-        .header("x-goog-upload-command", "start")
-        .header("x-goog-upload-header-content-length", total_bytes.to_string())
-        .header("x-goog-upload-protocol", "resumable")
-        .header("x-tenant-id", "bard-storage")
-        .header("push-id", &push_id_str)
+        .post(upload_endpoint)
+        .header(upload_constants::X_GOOG_UPLOAD_COMMAND, upload_constants::UPLOAD_COMMAND_START)
+        .header(upload_constants::X_GOOG_UPLOAD_HEADER_CONTENT_LENGTH, total_bytes.to_string())
+        .header(upload_constants::X_GOOG_UPLOAD_PROTOCOL, upload_constants::RESUMABLE_PROTOCOL)
+        .header(upload_constants::X_TENANT_ID, upload_constants::BARD_STORAGE_TENANT)
+        .header(upload_constants::PUSH_ID_HEADER, &push_id_str)
         .header("Cookie", &cookie_header)
         .header("Origin", base_url)
         .header("Referer", format!("{base_url}/"))
@@ -97,7 +100,7 @@ pub(crate) async fn start_upload(
 
     let upload_url = start_response
         .headers()
-        .get("x-goog-upload-url")
+        .get(upload_constants::X_GOOG_UPLOAD_URL)
         .and_then(|v| v.to_str().ok())
         .ok_or_else(|| Error::parse("file upload start response missing X-Goog-Upload-URL"))?
         .to_string();
@@ -125,10 +128,10 @@ pub(crate) async fn finalize_upload(
 ) -> Result<String> {
     let finalize_response = client
         .post(upload_url)
-        .header("x-goog-upload-command", "upload, finalize")
+        .header(upload_constants::X_GOOG_UPLOAD_COMMAND, upload_constants::UPLOAD_COMMAND_FINALIZE)
         .header("x-goog-upload-offset", "0")
-        .header("x-tenant-id", "bard-storage")
-        .header("push-id", push_id)
+        .header(upload_constants::X_TENANT_ID, upload_constants::BARD_STORAGE_TENANT)
+        .header(upload_constants::PUSH_ID_HEADER, push_id)
         .header("Cookie", cookie_header)
         .header("Origin", base_url)
         .header("Referer", format!("{base_url}/"))
@@ -219,13 +222,13 @@ fn is_allowed_media_type(mime_type: &str) -> bool {
     }
     matches!(
         clean,
-        "audio/mp3"
-            | "audio/mpeg"
-            | "audio/wav"
-            | "audio/ogg"
-            | "video/mp4"
-            | "video/webm"
-            | "video/quicktime"
+        mime::MP3
+            | mime::MPEG_AUDIO
+            | mime::WAV
+            | mime::OGG_AUDIO
+            | mime::MP4_VIDEO
+            | mime::WEBM_VIDEO
+            | mime::QUICKTIME
     )
 }
 
@@ -276,22 +279,22 @@ mod tests {
 
     #[test]
     fn is_allowed_media_type_accepts_images_audio_video() {
-        assert!(is_allowed_media_type("image/png"));
-        assert!(is_allowed_media_type("image/jpeg"));
-        assert!(is_allowed_media_type("audio/mp3"));
-        assert!(is_allowed_media_type("audio/mpeg"));
-        assert!(is_allowed_media_type("audio/wav"));
-        assert!(is_allowed_media_type("audio/ogg"));
-        assert!(is_allowed_media_type("video/mp4"));
-        assert!(is_allowed_media_type("video/webm"));
-        assert!(is_allowed_media_type("video/quicktime"));
+        assert!(is_allowed_media_type(mime::PNG));
+        assert!(is_allowed_media_type(mime::JPEG));
+        assert!(is_allowed_media_type(mime::MP3));
+        assert!(is_allowed_media_type(mime::MPEG_AUDIO));
+        assert!(is_allowed_media_type(mime::WAV));
+        assert!(is_allowed_media_type(mime::OGG_AUDIO));
+        assert!(is_allowed_media_type(mime::MP4_VIDEO));
+        assert!(is_allowed_media_type(mime::WEBM_VIDEO));
+        assert!(is_allowed_media_type(mime::QUICKTIME));
     }
 
     #[test]
     fn is_allowed_media_type_rejects_unknown() {
         assert!(!is_allowed_media_type("audio/flac"));
         assert!(!is_allowed_media_type("video/avi"));
-        assert!(!is_allowed_media_type("application/json"));
-        assert!(!is_allowed_media_type("text/plain"));
+        assert!(!is_allowed_media_type(mime::JSON));
+        assert!(!is_allowed_media_type(mime::PLAIN_TEXT));
     }
 }

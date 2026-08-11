@@ -5,6 +5,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::constants::model_keywords;
+
 /// A category reported by the Gemini model picker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -25,6 +27,8 @@ pub enum ModelCategory {
 
 impl ModelCategory {
     /// Returns the numeric enum value used in `StreamGenerate` slot 30.
+    ///
+    /// The numeric mapping is fixed by the Gemini frontend protocol.
     #[must_use]
     pub fn as_enum_value(self) -> u64 {
         match self {
@@ -161,13 +165,13 @@ impl ModelInfo {
 #[must_use]
 pub(crate) fn derive_category(id: &str, title: &str) -> ModelCategory {
     let combined = format!("{id} {title}").to_lowercase();
-    if combined.contains("lite") {
+    if combined.contains(model_keywords::LITE) {
         ModelCategory::FlashLite
-    } else if combined.contains("thinking") || combined.contains("deep") {
+    } else if combined.contains(model_keywords::THINKING) || combined.contains(model_keywords::DEEP) {
         ModelCategory::Thinking
-    } else if combined.contains("pro") {
+    } else if combined.contains(model_keywords::PRO) {
         ModelCategory::Pro
-    } else if combined.contains("auto") {
+    } else if combined.contains(model_keywords::AUTO) {
         ModelCategory::Auto
     } else {
         ModelCategory::Fast
@@ -196,7 +200,7 @@ mod tests {
     fn display_name_prefers_versioned_name() {
         let info = ModelInfo {
             id: "abc".to_string(),
-            title: "Flash".to_string(),
+            title: model_keywords::TITLE_FLASH.to_string(),
             description: String::new(),
             versioned_name: Some("Gemini 3.6 Flash".to_string()),
             category: ModelCategory::Fast,
@@ -209,13 +213,13 @@ mod tests {
     fn display_name_falls_back_to_title() {
         let info = ModelInfo {
             id: "abc".to_string(),
-            title: "Flash".to_string(),
+            title: model_keywords::TITLE_FLASH.to_string(),
             description: String::new(),
             versioned_name: None,
             category: ModelCategory::Fast,
             category_enum: 1,
         };
-        assert_eq!(info.display_name(), "Flash");
+        assert_eq!(info.display_name(), model_keywords::TITLE_FLASH);
     }
 
     #[test]

@@ -38,12 +38,12 @@ impl ChatMessage {
 
     /// Creates a user message with the given text.
     pub fn user(text: impl Into<String>) -> Self {
-        Self::text("user", text)
+        Self::text(crate::constants::roles::USER, text)
     }
 
     /// Creates a model message with the given text.
     pub fn model(text: impl Into<String>) -> Self {
-        Self::text("model", text)
+        Self::text(crate::constants::roles::MODEL, text)
     }
 
     /// Creates a user message containing an image.
