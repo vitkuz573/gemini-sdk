@@ -50,7 +50,7 @@
 
 ### 🚧 v0.4 StreamGenerate Slot Hardening (In Progress)
 
-- [ ] Phase 17: StreamGenerate Slot Hardening
+- [x] Phase 17: StreamGenerate Slot Hardening (completed 2026-08-11)
   - Goal: Replace all raw numeric slot indices in `src/proto/slots.rs` with HAR-backed named constants and add a regression gate.
   - Requirements: SLOT-01 — SLOT-04, QUAL-01 — QUAL-06
   - **Plans:** 1 plan
@@ -90,7 +90,7 @@
 | 14. Model, Chat & Upload Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
 | 15. Infrastructure Constants | v0.3 | 1/1 | Complete | 2026-08-11 |
 | 16. Test & Example Cleanup + Regression Guard | v0.3 | 1/1 | Complete | 2026-08-11 |
-| 17. StreamGenerate Slot Hardening | v0.4 | 0/TBD | In Progress | - |
+| 17. StreamGenerate Slot Hardening | v0.4 | 1/1 | Complete   | 2026-08-11 |
 | 18. API Audit & Deprecation Cleanup | v1.0 | 0/TBD | Not started | - |
 | 19. MSRV Policy & Documentation Polish | v1.0 | 0/TBD | Not started | - |
 | 20. crates.io Publication | v1.0 | 0/TBD | Not started | - |
