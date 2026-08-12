@@ -68,11 +68,6 @@ pub enum Error {
     #[error("credentials error: {0}")]
     Credentials(#[from] crate::auth::CredentialsError),
 
-    /// An attestation-related error (browser attestation feature).
-    #[cfg(feature = "browser-attestation")]
-    #[error("attestation error: {0}")]
-    Attestation(String),
-
     /// A generic internal error.
     #[error("internal error: {0}")]
     Internal(String),

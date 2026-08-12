@@ -44,13 +44,8 @@ backoff = { version = "0.4", features = ["tokio"] }
 regex = { version = "1.11", optional = true }
 humantime = "2.1"
 
-# Optional browser attestation dependencies
-tokio-tungstenite = { version = "0.24", optional = true }
-serde_urlencoded = { version = "0.7", optional = true }
 rand = "0.8"
 sha1 = "0.10"
-sha2 = "0.10"
-hex = "0.4"
 opentelemetry = { version = "0.32", optional = true }
 
 const_format = "0.2"
@@ -72,8 +67,6 @@ tempfile = "3.14"
 
 [features]
 default = []
-browser-attestation = ["dep:tokio-tungstenite", "dep:serde_urlencoded", "dep:tracing-subscriber"]
-capture-fixtures = ["dep:regex"]
 metrics = ["dep:opentelemetry"]
 
 [[example]]
@@ -91,16 +84,6 @@ path = "examples/stream_chat.rs"
 [[example]]
 name = "multi_turn_chat"
 path = "examples/multi_turn_chat.rs"
-
-[[example]]
-name = "capture_fixtures"
-path = "examples/capture_fixtures.rs"
-required-features = ["capture-fixtures"]
-
-[[example]]
-name = "test_attestation"
-path = "examples/test_attestation.rs"
-required-features = ["browser-attestation"]
 
 [[example]]
 name = "v0_2_api_tour"

@@ -7,13 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### Removed
 
-- New `waa` module for browserless WAA slot-3 token generation, with
-  `WaaGenerator`, `Signature`, and `WrapperFragment` types.
-- Bundled default wrapper cache at `src/waa/data/default_wrappers.json`.
-- Documentation at `docs/WAA.md` covering layout, API, cache format, and
-  operational limitations.
+- Extracted WAA/BotGuard reverse-engineering code and documentation into the
+  private `google-waa-engine` repository. The `waa` module, browser attestation
+  feature, and related examples have been removed from this crate.
 
 ## [0.1.0] - 2026-08-10
 
@@ -29,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Function-calling API: `Tool` trait, `ToolCall`, `ToolResult`, `ToolError`, and `generate_with_tools` (Phase 05-01, 05-02).
 - Automatic credential refresh and retry-on-auth-error via `with_provider` and `with_refresh_on_auth_error` (Phase 05-03).
 - Feature-gated metrics facade (`MetricsRecorder`, `NoOpMetricsRecorder`, `OpenTelemetryRecorder` behind the `metrics` feature) (Phase 05-03).
-- Optional browser attestation module behind the `browser-attestation` feature.
 
 ### Changed
 

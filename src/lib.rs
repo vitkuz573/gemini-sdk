@@ -12,9 +12,6 @@
 //! - Multi-turn conversation state.
 //! - Model listing via `batchexecute` (`GetUserStatus` / `Fd0Qje`).
 //! - File upload to `push.clients6.google.com`.
-//! - Optional browser attestation using headless Chrome CDP (`browser-attestation`
-//!   feature).
-//! - Browserless WAA token generation for `StreamGenerate` slot 3 (`waa` module).
 //! - Consent / `SOCS` cookie auto-acquisition.
 //! - Proper error types, retry logic, and rate-limit handling.
 //!
@@ -40,8 +37,7 @@
 //!
 //! ## Features
 //!
-//! - `browser-attestation` — enables the headless-Chrome CDP attestation module
-//!   required for image uploads and true multi-turn state.
+//! - `metrics` — OpenTelemetry-compatible metrics recording.
 
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
@@ -80,10 +76,6 @@ pub mod settings;
 pub mod tool;
 pub mod upload;
 pub mod user_profile;
-pub mod waa;
-
-#[cfg(feature = "browser-attestation")]
-pub mod attestation;
 
 // Internal helpers kept private.
 mod retry;
@@ -115,4 +107,3 @@ pub use proto::{
 };
 pub use tool::{tool_declaration, Tool, ToolCall, ToolError, ToolResult};
 pub use upload::UploadEvent;
-pub use waa::{Signature, WaaGenerator, WrapperFragment};

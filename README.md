@@ -18,9 +18,6 @@ Google Gemini / Bard web frontend (`gemini.google.com`).
 - Model listing via `batchexecute` (`GetUserStatus` / `Fd0Qje`).
 - File upload to `push.clients6.google.com` with progress events
   (`UploadEvent`).
-- Optional browser attestation using headless Chrome CDP (`browser-attestation`
-  feature).
-- Browserless WAA token generation for `StreamGenerate` slot 3 (`waa` module).
 - Consent / `SOCS` cookie auto-acquisition.
 - Request/response `HttpHook` for custom observability.
 - `tracing` spans on public operations (secrets are never logged).
@@ -50,13 +47,6 @@ Add to `Cargo.toml`:
 ```toml
 [dependencies]
 gemini-sdk = "0.1"
-```
-
-Enable browser attestation if you need image uploads or true multi-turn state:
-
-```toml
-[dependencies]
-gemini-sdk = { version = "0.1", features = ["browser-attestation"] }
 ```
 
 ## Quick start
@@ -109,7 +99,7 @@ WIZ slot layout, response frames, and attestation flow, see
 - `proto` — WIZ protocol helpers: slot builder and response parser.
 - `upload` — Resumable upload to `push.clients6.google.com`.
 - `errors` — Strongly-typed error enum with transient detection.
-- `attestation` *(feature)* — Headless Chrome CDP payload capture.
+- `metrics` *(feature)* — OpenTelemetry-compatible metrics recording.
 
 ## Semver policy
 
