@@ -316,6 +316,14 @@ async fn get_usage_stats_works() {
         .await;
     let result = client.get_usage_stats().await.expect("get_usage_stats should succeed");
     assert!(!result.value().is_null());
+    // Live signed-in accounts with usage history should expose at least one of
+    // the typed counts; the empty-object case is reserved for accounts with no
+    // data, which is not the expected state for this integration test.
+    assert!(
+        result.requests_today().is_some() || result.requests_total().is_some(),
+        "expected non-empty usage stats; got {}",
+        serde_json::to_string_pretty(result.value()).unwrap()
+    );
 }
 
 #[tokio::test]

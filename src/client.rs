@@ -2211,6 +2211,16 @@ impl GeminiClient {
         })
     }
 
+    /// Returns the async token (`SNlM0e`) extracted during session init, if any.
+    ///
+    /// This is useful for CLI diagnostics: an authenticated session can still
+    /// miss the async token required for some batchexecute RPCs when the cookie
+    /// set is incomplete.
+    #[must_use]
+    pub async fn access_token(&self) -> Option<String> {
+        self.inner.session.lock().await.access_token.clone()
+    }
+
     async fn init_session(&self) -> Result<()> {
         let body = self.fetch_app_page().await?;
 
@@ -2248,6 +2258,33 @@ impl GeminiClient {
             session.build_label = extracted.build_label.or_else(|| session.build_label.clone());
             session.session_id = extracted.session_id.or_else(|| session.session_id.clone());
             session.push_id = extracted.push_id.or_else(|| session.push_id.clone());
+        }
+
+        // The async token (`SNlM0e`) required for `at=` query parameters is
+        // sometimes present only on the root `/` page, not on `/app`. Fall back
+        // to fetching `/` and merging any missing session fields.
+        let needs_root_fallback = self.inner.session.lock().await.access_token.is_none();
+        if needs_root_fallback {
+            debug!("access token missing from /app; fetching root page as fallback");
+            match self.fetch_root_page().await {
+                Ok(root_body) => {
+                    let root_extracted = extract_from_app_html(&root_body);
+                    let mut session = self.inner.session.lock().await;
+                    session.access_token = root_extracted
+                        .access_token
+                        .or_else(|| session.access_token.clone());
+                    session.build_label = root_extracted
+                        .build_label
+                        .or_else(|| session.build_label.clone());
+                    session.session_id = root_extracted
+                        .session_id
+                        .or_else(|| session.session_id.clone());
+                    session.push_id = root_extracted.push_id.or_else(|| session.push_id.clone());
+                }
+                Err(e) => {
+                    debug!(error = %e, "root page fallback failed; continuing without async token");
+                }
+            }
         }
 
         // Run the WAA / warm-up chain. WAA Create failures are surfaced as
@@ -2599,6 +2636,62 @@ impl GeminiClient {
             message.push_str(MISSING_LEGACY_COOKIES_ADVICE);
         }
         Error::not_signed_in(message)
+    }
+
+    /// Fetches the Gemini root page (`/?hl={language}`) to extract session
+    /// metadata such as the `SNlM0e` async token that is only present on the
+    /// root page in some live sessions.
+    async fn fetch_root_page(&self) -> Result<String> {
+        let (language, cookie_header, base_url) = {
+            let session = self.inner.session.lock().await;
+            let config = self.inner.config.read().await;
+            let cookie_header = self.cookies().await.to_header_value();
+            (session.language.clone(), cookie_header, config.base_url.clone())
+        };
+
+        let url = format!(
+            "{base_url}{}",
+            crate::constants::urls::ROOT_LANGUAGE_PATH_TEMPLATE.replace("{}", &language)
+        );
+        let started = std::time::Instant::now();
+        let response = self
+            .inner
+            .http
+            .get(&url)
+            .header(header_constants::COOKIE, &cookie_header)
+            .header(header_constants::USER_AGENT, BROWSER_LIKE)
+            .header(header_constants::ACCEPT, "text/html")
+            .send()
+            .await
+            .map_err(|e| Error::Transient(format!("failed to fetch Gemini root page: {e}")))?;
+
+        let status = response.status();
+        let response_headers = response.headers().clone();
+        let cookies: Vec<(String, String)> = response
+            .cookies()
+            .map(|c| (c.name().to_string(), c.value().to_string()))
+            .collect();
+        let text = response.text().await.map_err(Error::Request)?;
+
+        self.merge_response_cookies_owned(cookies.into_iter()).await;
+
+        self.maybe_record_har(
+            GET,
+            &url,
+            &HeaderMap::new(),
+            &[],
+            status.as_u16(),
+            &response_headers,
+            text.as_bytes(),
+            started.elapsed(),
+        )
+        .await?;
+
+        if !status.is_success() {
+            return Err(Error::api(status, text));
+        }
+
+        Ok(text)
     }
 
     fn build_request_header_map(headers: &[(String, String)]) -> HeaderMap {

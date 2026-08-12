@@ -302,7 +302,14 @@ async fn main() {
 
     run_named_call(&client, &state, "get_usage_stats", || async {
         match client.get_usage_stats().await {
-            Ok(_) => ProbeResult::ok(),
+            Ok(stats) => {
+                println!(
+                    "get_usage_stats: requests_today={:?}, requests_total={:?}",
+                    stats.requests_today(),
+                    stats.requests_total()
+                );
+                ProbeResult::ok()
+            }
             Err(e) => ProbeResult::err(e),
         }
     })

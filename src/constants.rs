@@ -28,6 +28,10 @@ pub mod urls {
     pub(crate) const SCHEDULED_SOURCE_PATH: &str = "/scheduled";
     /// Default source path for batchexecute RPCs without a specific page.
     pub(crate) const DEFAULT_SOURCE_PATH: &str = "/";
+    /// Templated root path including the `hl` language parameter.
+    /// The root page is the canonical location of the `SNlM0e` async token in
+    /// captured live traffic.
+    pub(crate) const ROOT_LANGUAGE_PATH_TEMPLATE: &str = "/?hl={}";
 }
 
 /// Query keys used in batchexecute and app requests.

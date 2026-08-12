@@ -678,6 +678,23 @@ mod tests {
     }
 
     #[test]
+    fn extract_from_root_page_fills_async_token() {
+        // Root-page WIZ_global_data contains SNlM0e in a different key ordering
+        // than the /app fixture (spike 019).
+        let body = r#"window.WIZ_global_data = {"S06Grb":"111628289675248526498","oPEP7c":"user@example.com","cfb2h":"boq_assistant-bard-web-server_20260807.01_p1","FdrFJe":"5670978011641272859","SNlM0e":"ADR5zao4nnNluMqUb8uAXzXL8Lne:1786209604864"};"#;
+        let state = extract_from_app_html(body);
+        assert_eq!(
+            state.access_token,
+            Some("ADR5zao4nnNluMqUb8uAXzXL8Lne:1786209604864".to_string())
+        );
+        assert_eq!(
+            state.build_label,
+            Some("boq_assistant-bard-web-server_20260807.01_p1".to_string())
+        );
+        assert_eq!(state.session_id, Some("5670978011641272859".to_string()));
+    }
+
+    #[test]
     fn extract_consent_url_from_data_payload() {
         let body = include_str!("../tests/fixtures/bard_initial_data_payload.txt");
         assert_eq!(
