@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-08-12T03:57:03.530Z"
 last_activity: 2026-08-12
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -26,7 +26,7 @@ milestone: v0.5
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-08-11)
+See: `.planning/PROJECT.md` (updated 2026-08-12)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
 **Current focus:** Reverse-engineer and implement a browserless WAA token generator for StreamGenerate slot 3.
@@ -55,9 +55,15 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 18 — Auth Header Parity for Usage Stats | ✓ Complete | 3/3 | 100% |
 | 19 — Payload & Parser Alignment | ✓ Complete | 1/1 | 100% |
 | 20 — Live Verification & CLI Contract | ✓ Complete | 1/1 | 100% |
+| 21 — Spike Closure & Transform Validation | Not started | 0/0 | 0% |
+| 22 — Generator Implementation | Not started | 0/0 | 0% |
+| 23 — SDK Integration | Not started | 0/0 | 0% |
+| 24 — Testing & Hardening | Not started | 0/0 | 0% |
+| 25 — Documentation & Release Readiness | Not started | 0/0 | 0% |
 
 ## Active Decisions
 
+- v0.5: Browserless WAA reverse engineering is high-risk; if infeasible, the milestone will close with documented findings and retain CDP attestation.
 - v0.4: All StreamGenerate slot indices used by the SDK must be named constants in `src/proto/indices.rs`, with HAR-cited doc comments.
 - v0.4: Legacy misleading names (`SLOT_REQUEST_UUID` for slot 10, `SLOT_CATEGORY` for slot 7, etc.) are renamed to match observed semantics.
 - v0.3: Magic strings must be centralized as named constants without changing public API behavior or names. Existing `pub(crate) const` RPC IDs are a pattern to extend, not replace.
@@ -71,8 +77,8 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 - Google may change the undocumented WIZ protocol without notice.
 - Browser attestation depends on Chrome CDP and live frontend selectors.
 - Live-cookie integration tests cannot run in CI.
-- Renaming constants is safe internally, but any future backports must use new names.
 - Browserless WAA reverse engineering is high-risk; the BotGuard VM may be non-deterministic or require browser-only signals.
+- If Phase 21 proves browserless WAA infeasible, the milestone will pivot to a documented spike closure rather than shipping a generator.
 
 ## Context
 
@@ -83,7 +89,7 @@ v0.4 slot naming derived from spike references/protocol.md and live HAR at `/hom
 Spike 004 (waa-token) contains the BotGuard VM and the only known `(Waa/Create challenge, StreamGenerate slot-3)` pair.
 
 ---
-*Last updated: 2026-08-11 — started v0.5 Usage Stats Reliability*
+*Last updated: 2026-08-12 — v0.5 Browserless WAA Reverse roadmap created*
 
 ## Performance Metrics
 
@@ -112,18 +118,17 @@ Spike 004 (waa-token) contains the BotGuard VM and the only known `(Waa/Create c
 
 ## Session
 
-**Last session:** 2026-08-11T13:44:32.929Z
-**Stopped at:** Completed milestone v0.5 planning
+**Last session:** 2026-08-12
+**Stopped at:** Roadmap created for v0.5 Browserless WAA Reverse
 **Resume file:** None
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-08-12 — Milestone v0.5 started
+Status: Roadmap created
+Last activity: 2026-08-12 — Created ROADMAP.md and STATE.md for v0.5 Browserless WAA Reverse
 
 ## Operator Next Steps
 
-- Define requirements for milestone v0.5 Browserless WAA Reverse.
-- Create roadmap and start Phase 21.
+- Start Phase 21: Spike Closure & Transform Validation with `/gsd-plan-phase 21`.

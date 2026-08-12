@@ -85,7 +85,7 @@ Google can change the web frontend protocol without notice, so the SDK must fail
 
 ## Constraints
 
-- **Tech stack**: Rust 1.80+, Tokio, reqwest — fixed by project foundation.
+- **Tech stack**: Rust 1.80+, Tokio, reqwest — fixed by project foundation. Browserless WAA may add heavy dependencies (V8, Chromium, or QuickJS) behind optional features when required for correctness.
 - **Protocol**: Undocumented WIZ web frontend — breakage risk is external and unavoidable.
 - **Compatibility**: semver must be respected after v0.1; breaking changes acceptable only in 0.x pre-releases.
 - **Security**: Cookies are secrets; SDK must redact them in logs and avoid leaking them in errors.
@@ -129,20 +129,17 @@ This document evolves at phase transitions and milestone boundaries.
 **Phases completed:** 20 of 20 (100%)
 **Current focus:** Reverse-engineer and implement a browserless WAA token generator so image uploads and multi-turn state work without launching headless Chrome.
 
-Spike 004 established that the WAA token in `StreamGenerate` slot 3 is produced by Google's BotGuard VM. The VM takes the WAA `Create` challenge token as input and produces a short `!`-prefixed base64url attestation token. The current SDK optionally obtains this via headless Chrome CDP, which is heavy and brittle. The captured HAR at `/home/vitaly/mitm.har` and spike artifacts (`pairs.json`, `botguard.js`, slot dumps) contain at least one `(challenge, slot-3)` pair and the BotGuard VM source. v0.5 will determine whether the transform is deterministic and reproducible in a lightweight harness, port the algorithm to Rust, and integrate it as a non-CDP attestation path.
-
-If the reverse proves infeasible within the milestone, the fallback outcome is a well-documented spike closure that captures exactly what data is still missing and why a browser remains required.
+Spike 004 established that the WAA token in `StreamGenerate` slot 3 is produced by Google's BotGuard VM. The VM takes the WAA `Create` challenge token as input and produces a short `!`-prefixed base64url attestation token. The current SDK optionally obtains this via headless Chrome CDP, which is operationally brittle. The captured HAR at `/home/vitaly/mitm.har` and spike artifacts (`pairs.json`, `botguard.js`, slot dumps) contain at least one `(challenge, slot-3)` pair and the BotGuard VM source. v0.5 will determine how to generate valid slot-3 tokens without requiring the SDK user to manage a Chrome instance. The chosen approach prioritizes correctness and maintainability over keeping the dependency surface minimal: BotGuard is a real browser VM, and pretending otherwise produces fragile partial emulations.
 
 ## Current Milestone: v0.5 Browserless WAA Reverse
 
-**Goal:** Reverse-engineer and implement a browserless WAA (Web Application Authentication / BotGuard) token generator for `StreamGenerate` slot 3, so the SDK can obtain valid attestation context without launching headless Chrome.
+**Goal:** Reverse-engineer and implement a browserless WAA (Web Application Authentication / BotGuard) token generator for `StreamGenerate` slot 3, so the SDK can obtain valid attestation context without requiring the user to launch headless Chrome.
 
 **Target features:**
 - Re-analyze `/home/vitaly/mitm.har` and existing spike 004 artifacts (`pairs.json`, `botguard.js`, slot dumps) for deterministic WAA challenge → slot-3 relationships.
 - Capture or synthesize additional `(Waa/Create challenge, slot-3 token)` pairs to constrain the BotGuard VM behavior.
-- Build a minimal deterministic harness (Node.js/QuickJS/V8 with DOM mocks, or direct bytecode analysis) that reproduces the observed slot-3 token from a WAA challenge.
-- Port the discovered token-generation algorithm to Rust behind a new optional feature or module.
-- Integrate the browserless WAA path into `GeminiClient` session warm-up so it can replace or bypass the CDP-based attestation when enabled.
+- Build a robust VM harness that reproduces the observed slot-3 token from a WAA challenge. Prefer a real browser engine (headless Chromium via CDP/Playwright/Puppeteer, or V8/QuickJS with faithful DOM mocks) over brittle pure-Rust approximations.
+- Integrate the browserless WAA path into `GeminiClient` session warm-up so it can replace or bypass the manual CDP-based attestation capture when enabled.
 - Add fixture tests, unit tests, and a live-cookie integration test that verify image upload works without the `browser-attestation` feature.
 - Keep all quality gates green (`cargo test`, `cargo clippy`, `cargo doc`).
 
