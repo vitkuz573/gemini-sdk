@@ -47,6 +47,21 @@
 - Added `no_raw_slot_indices_in_production_code` regression gate in the `src/proto/slots.rs` test module.
 - Kept all quality gates green: `cargo test --all-targets` (279 passed, 2 ignored), `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`.
 
+## v0.5 Usage Stats Reliability (Shipped: 2026-08-12)
+
+**Phases completed:** 3 phases (18-20), 5 plans
+**Git range:** `2c4da41..ef373af`
+**Closeout type:** verified_closeout
+**Requirements:** 16/16 requirements validated (see [archive](milestones/v0.5-usage-stats-reliability/REQUIREMENTS.md))
+
+**Key accomplishments:**
+
+- Added SAPISIDHASH computation and `x-goog-authuser: 0` plumbing for the `jSf9Qc` settings-page RPC, isolated from other batchexecute RPCs.
+- Aligned the `jSf9Qc` inner payload with the captured HAR shape and added an array-shaped response parser with typed `UsageStats` accessors.
+- Implemented root-page `SNlM0e` token fallback so `get_usage_stats` can recover when the async token is missing.
+- Added fixture and live-cookie integration tests covering auth headers, parser correctness, and HAR redaction.
+- Kept all quality gates green: `cargo test --all-targets` (279 passed, 2 ignored), `cargo clippy --all-targets -- -D warnings`, and `cargo doc --no-deps`.
+
 ---
 
 ## v0.1 Core (Shipped: 2026-08-10)

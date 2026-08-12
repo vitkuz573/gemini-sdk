@@ -48,18 +48,14 @@ Developers can reliably integrate Gemini into Rust applications using a stable, 
 - ✓ Centralized protocol, transport, model, MIME, header, HAR, tracing, attestation, and tool-schema constants — v0.3
 - ✓ Regression gate preventing reintroduction of eliminated magic strings in `src/` — v0.3
 - ✓ Cleaned-up tests and examples reusing centralized constants — v0.3
+
+### Validated
+
 - ✓ Eliminate raw numeric slot indices in `src/proto/slots.rs` and centralize HAR-backed constants — v0.4
 - ✓ Add regression gate preventing raw `inner[\d+]` assignments in StreamGenerate builder — v0.4
-- ✓ SAPISIDHASH + `x-goog-authuser: 0` auth plumbing for settings-page RPCs — v0.5
-- ✓ Typed `UsageStats` parser with array-shaped response support — v0.5
-- ✓ Root-page `SNlM0e` async token fallback — v0.5
-- ✓ Fixture and live-cookie tests for usage stats auth and parsing — v0.5
 
 ### Active
 
-- [ ] Reverse-engineer the BotGuard WAA challenge → slot-3 token transform for browserless attestation (v0.5)
-- [ ] Implement a Rust WAA token generator behind an optional feature/module (v0.5)
-- [ ] Integrate browserless WAA into session warm-up so image uploads work without headless Chrome (v0.5)
 - [ ] Final API audit and deprecation cleanup for v1.0
 - [ ] Document and verify MSRV policy
 - [ ] crates.io publication with changelog and release notes
@@ -125,28 +121,15 @@ This document evolves at phase transitions and milestone boundaries.
 
 ## Current State
 
-**Shipped:** v0.5 Usage Stats Reliability (2026-08-12)
-**Phases completed:** 20 of 20 (100%)
-**Current focus:** Reverse-engineer and implement a browserless WAA token generator so image uploads and multi-turn state work without launching headless Chrome.
+**Shipped:** v0.4 StreamGenerate Slot Hardening (2026-08-11)
+**Phases completed:** 17 of 17 (100%)
+**Current focus:** Fix `GeminiClient::get_usage_stats` auth/payload mismatch so it returns real usage statistics.
 
-Spike 004 established that the WAA token in `StreamGenerate` slot 3 is produced by Google's BotGuard VM. The VM takes the WAA `Create` challenge token as input and produces a short `!`-prefixed base64url attestation token. The current SDK optionally obtains this via headless Chrome CDP, which is heavy and brittle. The captured HAR at `/home/vitaly/mitm.har` and spike artifacts (`pairs.json`, `botguard.js`, slot dumps) contain at least one `(challenge, slot-3)` pair and the BotGuard VM source. v0.5 will determine whether the transform is deterministic and reproducible in a lightweight harness, port the algorithm to Rust, and integrate it as a non-CDP attestation path.
+Live testing shows `get_usage_stats` currently returns `{}` even though the captured HAR `/home/vitaly/mitm.har` shows RPC `jSf9Qc` returns a non-empty payload `[2,[[999999,0,5,...]],false]`. Preliminary investigation points to two SDK deviations from the browser: (1) the SDK does not send `Authorization: SAPISIDHASH ...` plus `x-goog-authuser: 0`, which the live frontend uses for the ogads/GetAsyncData path, and (2) the inner request payload may be incomplete. The minimal modern cookie set is `__Secure-1PSID`, `__Secure-1PSIDCC`, `__Secure-1PSIDTS`, `__Secure-1PAPISID`, `__Secure-3PAPISID`.
 
-If the reverse proves infeasible within the milestone, the fallback outcome is a well-documented spike closure that captures exactly what data is still missing and why a browser remains required.
+v0.5 will harden a single settings-page RPC (`jSf9Qc`) whose implementation in v0.2 returned an opaque but empty `serde_json::Value`. Companion CLI testing and live HAR analysis reveal the SDK request is missing frontend-matching auth headers and possibly an incomplete inner payload, causing the server to return an empty payload. The milestone will update `src/auth.rs`/`src/client.rs` to send `Authorization: SAPISIDHASH` and `x-goog-authuser: 0` where required, reconcile the `jSf9Qc` request shape against `/home/vitaly/mitm.har`, and return a typed `UsageStats` value with documented accessors while keeping a raw `Value` fallback for protocol drift. Live-cookie integration tests and the `gemini-cli usage` subcommand will be used as acceptance gates.
 
-## Current Milestone: v0.5 Browserless WAA Reverse
-
-**Goal:** Reverse-engineer and implement a browserless WAA (Web Application Authentication / BotGuard) token generator for `StreamGenerate` slot 3, so the SDK can obtain valid attestation context without launching headless Chrome.
-
-**Target features:**
-- Re-analyze `/home/vitaly/mitm.har` and existing spike 004 artifacts (`pairs.json`, `botguard.js`, slot dumps) for deterministic WAA challenge → slot-3 relationships.
-- Capture or synthesize additional `(Waa/Create challenge, slot-3 token)` pairs to constrain the BotGuard VM behavior.
-- Build a minimal deterministic harness (Node.js/QuickJS/V8 with DOM mocks, or direct bytecode analysis) that reproduces the observed slot-3 token from a WAA challenge.
-- Port the discovered token-generation algorithm to Rust behind a new optional feature or module.
-- Integrate the browserless WAA path into `GeminiClient` session warm-up so it can replace or bypass the CDP-based attestation when enabled.
-- Add fixture tests, unit tests, and a live-cookie integration test that verify image upload works without the `browser-attestation` feature.
-- Keep all quality gates green (`cargo test`, `cargo clippy`, `cargo doc`).
-
-## Previous Milestone: v0.5 Usage Stats Reliability
+## Current Milestone: v0.5 Usage Stats Reliability
 
 **Goal:** Fix `GeminiClient::get_usage_stats` so it returns real usage statistics instead of an empty object, matching the live Gemini frontend request shape and auth requirements.
 
@@ -157,6 +140,17 @@ If the reverse proves infeasible within the milestone, the fallback outcome is a
 - Add fixture and live-cookie tests that verify non-empty stats parsing and auth header correctness.
 - Update the companion CLI (`gemini-cli`) contract so its `usage` subcommand surfaces real counts.
 - Keep all quality gates green (`cargo test`, `cargo clippy`, `cargo doc`).
+
+## Previous Milestone: v0.4 StreamGenerate Slot Hardening
+
+**Goal:** Eliminate every raw numeric index in the 97-slot `StreamGenerate` request builder by introducing HAR-backed named constants for all actively used slots, closing the magic-number gap left after v0.3.
+
+**Target features:**
+- Rename misleading slot constants (e.g., `SLOT_REQUEST_UUID` for slot 10) to names that match HAR-observed values.
+- Add named constants for all remaining raw indices in `src/proto/slots.rs` (slots 17, 18, 27, 53, 59, 61, 66, 68, 79, 91).
+- Refactor `build_inner_req_list` and `build_fallback_base` to use only named constants.
+- Add a regression gate that forbids raw `inner[\d+]` assignments in production request-building code.
+- Keep all quality gates green: tests, clippy, docs.
 
 ## Next Milestone: v1.0 Stable Release
 
@@ -171,4 +165,4 @@ If the reverse proves infeasible within the milestone, the fallback outcome is a
 - Resumable upload with explicit chunk size control (post-v1.0)
 
 ---
-*Last updated: 2026-08-12 — started v0.5 Browserless WAA Reverse after v0.5 Usage Stats Reliability*
+*Last updated: 2026-08-11 — started v0.5 Usage Stats Reliability before v1.0 Stable Release*

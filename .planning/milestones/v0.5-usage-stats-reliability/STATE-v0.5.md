@@ -1,26 +1,31 @@
 ---
 gsd_state_version: 1.0
 milestone: v0.5
-milestone_name: Browserless WAA Reverse
+milestone_name: Usage Stats Reliability
+current_phase: 20
+current_phase_name: Live Verification & CLI Contract
+current_plan: Not started
 status: planning
-last_updated: "2026-08-12T03:57:03.530Z"
-last_activity: 2026-08-12
+stopped_at: Planning phase 20
+last_updated: "2026-08-11T15:55:00.000Z"
+last_activity: 2026-08-11
+last_activity_desc: Completed phase 19 parser alignment
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_phases: 20
+  completed_phases: 19
+  total_plans: 1
+  completed_plans: 1
+  percent: 95
 ---
 
 # Project State
 
 **Project:** Gemini SDK
 **Initialized:** 2026-08-08
-**Current milestone:** v0.5 — Browserless WAA Reverse
-**Current phase:** Not started
-**Current Plan:** —
-**Total Plans in Phase:** —
+**Current milestone:** v0.5 — Usage Stats Reliability
+**Current phase:** 18
+**Current Plan:** P01 — not started
+**Total Plans in Phase:** 3
 
 milestone: v0.5
 
@@ -29,7 +34,7 @@ milestone: v0.5
 See: `.planning/PROJECT.md` (updated 2026-08-11)
 
 **Core value:** Developers can reliably integrate Gemini into Rust applications using a stable, documented, semver-respecting SDK that handles auth, protocol quirks, retries, and common content types out of the box.
-**Current focus:** Reverse-engineer and implement a browserless WAA token generator for StreamGenerate slot 3.
+**Current focus:** Fix `GeminiClient::get_usage_stats` auth/payload mismatch so it returns real usage statistics.
 
 ## Phase Status
 
@@ -54,7 +59,7 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 | 17 — StreamGenerate Slot Hardening | ✓ Complete | 1/1 | 100% |
 | 18 — Auth Header Parity for Usage Stats | ✓ Complete | 3/3 | 100% |
 | 19 — Payload & Parser Alignment | ✓ Complete | 1/1 | 100% |
-| 20 — Live Verification & CLI Contract | ✓ Complete | 1/1 | 100% |
+| 20 — Live Verification & CLI Contract | ⏳ Not started | 0/TBD | 0% |
 
 ## Active Decisions
 
@@ -72,7 +77,6 @@ See: `.planning/PROJECT.md` (updated 2026-08-11)
 - Browser attestation depends on Chrome CDP and live frontend selectors.
 - Live-cookie integration tests cannot run in CI.
 - Renaming constants is safe internally, but any future backports must use new names.
-- Browserless WAA reverse engineering is high-risk; the BotGuard VM may be non-deterministic or require browser-only signals.
 
 ## Context
 
@@ -80,7 +84,6 @@ Codebase map available in `.planning/codebase/`.
 Spike findings skill available at `.opencode/skills/spike-findings-gemini-sdk/SKILL.md`.
 v0.2 RPC coverage derived from spike 001 (HAR API coverage).
 v0.4 slot naming derived from spike references/protocol.md and live HAR at `/home/vitaly/mitm.har`.
-Spike 004 (waa-token) contains the BotGuard VM and the only known `(Waa/Create challenge, StreamGenerate slot-3)` pair.
 
 ---
 *Last updated: 2026-08-11 — started v0.5 Usage Stats Reliability*
@@ -97,8 +100,7 @@ Spike 004 (waa-token) contains the BotGuard VM and the only known `(Waa/Create c
 
 ## Decisions
 
-- [v0.5 start]: Replace v0.5 Usage Stats Reliability with Browserless WAA Reverse after usage stats shipped successfully.
-- [v0.5 start]: Browserless WAA reverse is high-risk; if infeasible, milestone will close with documented findings and retain CDP attestation.
+- [v0.5 start]: Insert v0.5 Usage Stats Reliability before v1.0 Stable Release because `get_usage_stats` returns `{}` against a live signed-in account.
 - [v0.4 start]: Insert v0.4 StreamGenerate Slot Hardening before v1.0 Stable Release because raw slot indices survived v0.3.
 - [v0.3 planning]: Introduce a dedicated `src/constants.rs` (or module family) for cross-cutting strings and keep RPC-specific constants co-located in their feature modules.
 - [v0.3 planning]: Avoid public API changes; constants remain `pub(crate)` unless they were already public.
@@ -118,12 +120,11 @@ Spike 004 (waa-token) contains the BotGuard VM and the only known `(Waa/Create c
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-08-12 — Milestone v0.5 started
+Phase: 20 — Live Verification & CLI Contract
+Plan: Not started
+Status: Planning in progress
+Last activity: 2026-08-11 — Completed phase 19 parser alignment
 
 ## Operator Next Steps
 
-- Define requirements for milestone v0.5 Browserless WAA Reverse.
-- Create roadmap and start Phase 21.
+- Plan phase 20 (Live Verification & CLI Contract).
