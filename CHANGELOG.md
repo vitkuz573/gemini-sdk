@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Placeholder for upcoming v1.0.0 work.
+- New `waa` module for browserless WAA slot-3 token generation, with
+  `WaaGenerator`, `Signature`, and `WrapperFragment` types.
+- Bundled default wrapper cache at `src/waa/data/default_wrappers.json`.
+- Documentation at `docs/WAA.md` covering layout, API, cache format, and
+  operational limitations.
 
 ## [0.1.0] - 2026-08-10
 

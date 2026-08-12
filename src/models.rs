@@ -167,7 +167,8 @@ pub(crate) fn derive_category(id: &str, title: &str) -> ModelCategory {
     let combined = format!("{id} {title}").to_lowercase();
     if combined.contains(model_keywords::LITE) {
         ModelCategory::FlashLite
-    } else if combined.contains(model_keywords::THINKING) || combined.contains(model_keywords::DEEP) {
+    } else if combined.contains(model_keywords::THINKING) || combined.contains(model_keywords::DEEP)
+    {
         ModelCategory::Thinking
     } else if combined.contains(model_keywords::PRO) {
         ModelCategory::Pro

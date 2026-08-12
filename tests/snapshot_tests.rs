@@ -2,7 +2,7 @@ use gemini_sdk::{Conversation, GeminiClient, ModelCategory};
 use serde_json::Value;
 
 mod common;
-use common::{MODEL_ROLE, MOCK_COOKIE_HEADER, USER_ROLE};
+use common::{MOCK_COOKIE_HEADER, MODEL_ROLE, USER_ROLE};
 
 #[test]
 fn conversation_save_restore_roundtrip() {

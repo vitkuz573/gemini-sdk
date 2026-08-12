@@ -14,6 +14,7 @@
 //! - File upload to `push.clients6.google.com`.
 //! - Optional browser attestation using headless Chrome CDP (`browser-attestation`
 //!   feature).
+//! - Browserless WAA token generation for `StreamGenerate` slot 3 (`waa` module).
 //! - Consent / `SOCS` cookie auto-acquisition.
 //! - Proper error types, retry logic, and rate-limit handling.
 //!
@@ -79,6 +80,7 @@ pub mod settings;
 pub mod tool;
 pub mod upload;
 pub mod user_profile;
+pub mod waa;
 
 #[cfg(feature = "browser-attestation")]
 pub mod attestation;
@@ -113,3 +115,4 @@ pub use proto::{
 };
 pub use tool::{tool_declaration, Tool, ToolCall, ToolError, ToolResult};
 pub use upload::UploadEvent;
+pub use waa::{Signature, WaaGenerator, WrapperFragment};

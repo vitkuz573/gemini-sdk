@@ -355,12 +355,27 @@ mod tests {
     #[test]
     fn derive_attachment_filename_audio_video() {
         assert_eq!(derive_attachment_filename(crate::constants::mime::MP3, 0), "attachment.mp3");
-        assert_eq!(derive_attachment_filename(crate::constants::mime::MPEG_AUDIO, 0), "attachment.mp3");
+        assert_eq!(
+            derive_attachment_filename(crate::constants::mime::MPEG_AUDIO, 0),
+            "attachment.mp3"
+        );
         assert_eq!(derive_attachment_filename(crate::constants::mime::WAV, 0), "attachment.wav");
-        assert_eq!(derive_attachment_filename(crate::constants::mime::OGG_AUDIO, 0), "attachment.ogg");
-        assert_eq!(derive_attachment_filename(crate::constants::mime::MP4_VIDEO, 1), "attachment_1.mp4");
-        assert_eq!(derive_attachment_filename(crate::constants::mime::WEBM_VIDEO, 2), "attachment_2.webm");
-        assert_eq!(derive_attachment_filename(crate::constants::mime::QUICKTIME, 0), "attachment.mov");
+        assert_eq!(
+            derive_attachment_filename(crate::constants::mime::OGG_AUDIO, 0),
+            "attachment.ogg"
+        );
+        assert_eq!(
+            derive_attachment_filename(crate::constants::mime::MP4_VIDEO, 1),
+            "attachment_1.mp4"
+        );
+        assert_eq!(
+            derive_attachment_filename(crate::constants::mime::WEBM_VIDEO, 2),
+            "attachment_2.webm"
+        );
+        assert_eq!(
+            derive_attachment_filename(crate::constants::mime::QUICKTIME, 0),
+            "attachment.mov"
+        );
     }
 
     #[tokio::test]

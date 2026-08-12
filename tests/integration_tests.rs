@@ -11,8 +11,8 @@ use gemini_sdk::{
 
 mod common;
 use common::{
-    default_test_timeout, BATCHEXECUTE_PATH, MIME_PNG, MINIMAL_COOKIE_HEADER, MODEL_ROLE,
-    MOCK_COOKIE_HEADER, TEST_LANGUAGE, TEST_MOCK_LANGUAGE, TEST_PROMPT, USER_ROLE, WRB_FR,
+    default_test_timeout, BATCHEXECUTE_PATH, MIME_PNG, MINIMAL_COOKIE_HEADER, MOCK_COOKIE_HEADER,
+    MODEL_ROLE, TEST_LANGUAGE, TEST_MOCK_LANGUAGE, TEST_PROMPT, USER_ROLE, WRB_FR,
 };
 
 #[test]
@@ -159,7 +159,8 @@ async fn client_default_system_instruction_reaches_request() {
         tools: None,
         refresh_on_auth_error: false,
     };
-    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", TEST_LANGUAGE, None, "nonce");
+    let inner =
+        build_inner_req_list(&prepared, None, None, &[], "UUID", TEST_LANGUAGE, None, "nonce");
     // Without going through the builder, the client default is not reflected
     // in a standalone PreparedRequest. The real assertion happens via the
     // builder path in the next test.
@@ -187,7 +188,8 @@ async fn system_instruction_override_wins() {
         tools: None,
         refresh_on_auth_error: false,
     };
-    let inner = build_inner_req_list(&prepared, None, None, &[], "UUID", TEST_LANGUAGE, None, "nonce");
+    let inner =
+        build_inner_req_list(&prepared, None, None, &[], "UUID", TEST_LANGUAGE, None, "nonce");
     let prompt = inner[0][0].as_str().expect("slot 0 prompt is a string");
     assert!(prompt.starts_with("You are a Python expert"));
 }
@@ -214,7 +216,8 @@ async fn consent_cookie_merge_persists_socs_cookie() {
     // Simulate what `accept_consent_and_refresh` does after the consent save:
     // obtain a mutable lock on the shared cookies and merge the response
     // cookies directly into it.
-    let cookies = Cookies::from_header(&format!("{PSID}=psid-value; {PSIDCC}=psidcc-value; {SOCS}=old"));
+    let cookies =
+        Cookies::from_header(&format!("{PSID}=psid-value; {PSIDCC}=psidcc-value; {SOCS}=old"));
 
     let response = reqwest::Client::new().post(&save_url).send().await.unwrap();
 
@@ -459,9 +462,8 @@ async fn delete_turn_reports_failure_on_error_payload() {
 fn parse_conversation_action_response_handles_wrapped_array() {
     use gemini_sdk::{ConversationAction, ConversationActionResult};
 
-    let body = format!(
-        " )] }} ' \n\n[[[\"{WRB_FR}\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]]"
-    );
+    let body =
+        format!(" )] }} ' \n\n[[[\"{WRB_FR}\",\"PCck7e\",\"[1]\",null,null,null,\"generic\"]]]");
     let result = ConversationActionResult::parse_response(
         &body,
         ConversationAction::Regenerate,
@@ -917,26 +919,16 @@ async fn get_usage_stats_sends_auth_headers() {
     let request = &requests[0];
     let headers = &request.headers;
 
-    let auth = headers
-        .get("Authorization")
-        .expect("missing Authorization header");
+    let auth = headers.get("Authorization").expect("missing Authorization header");
     let auth = auth.to_str().expect("Authorization header not ASCII");
     assert!(
         auth.starts_with("SAPISIDHASH "),
         "Authorization does not start with SAPISIDHASH: {auth}"
     );
-    assert!(
-        auth.contains('_'),
-        "Authorization missing timestamp/hash separator: {auth}"
-    );
+    assert!(auth.contains('_'), "Authorization missing timestamp/hash separator: {auth}");
 
-    let auth_user = headers
-        .get("x-goog-authuser")
-        .expect("missing x-goog-authuser header");
-    assert_eq!(
-        auth_user.to_str().expect("x-goog-authuser not ASCII"),
-        "0"
-    );
+    let auth_user = headers.get("x-goog-authuser").expect("missing x-goog-authuser header");
+    assert_eq!(auth_user.to_str().expect("x-goog-authuser not ASCII"), "0");
 }
 
 #[tokio::test]

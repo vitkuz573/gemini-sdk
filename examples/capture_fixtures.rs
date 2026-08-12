@@ -259,7 +259,9 @@ async fn trigger_1096(cookies: &str) -> Result<String, Box<dyn std::error::Error
         serde_json::to_string(&[serde_json::Value::Null, serde_json::Value::Array(inner)]).unwrap();
     let body = format!("f.req={}", urlencoding::encode(&f_req));
 
-    let url = format!("{GEMINI_BASE_URL}{BATCHEXECUTE_PATH}/assistant.lamda.BardFrontendService/StreamGenerate");
+    let url = format!(
+        "{GEMINI_BASE_URL}{BATCHEXECUTE_PATH}/assistant.lamda.BardFrontendService/StreamGenerate"
+    );
     let resp = http
         .post(&url)
         .query(&[

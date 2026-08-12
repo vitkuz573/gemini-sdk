@@ -20,6 +20,7 @@ Google Gemini / Bard web frontend (`gemini.google.com`).
   (`UploadEvent`).
 - Optional browser attestation using headless Chrome CDP (`browser-attestation`
   feature).
+- Browserless WAA token generation for `StreamGenerate` slot 3 (`waa` module).
 - Consent / `SOCS` cookie auto-acquisition.
 - Request/response `HttpHook` for custom observability.
 - `tracing` spans on public operations (secrets are never logged).

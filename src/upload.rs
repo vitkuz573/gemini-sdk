@@ -124,7 +124,10 @@ pub(crate) async fn finalize_upload(
 ) -> Result<String> {
     let finalize_response = client
         .post(upload_url)
-        .header(upload_constants::X_GOOG_UPLOAD_COMMAND, upload_constants::UPLOAD_COMMAND_FINALIZE)
+        .header(
+            upload_constants::X_GOOG_UPLOAD_COMMAND,
+            upload_constants::UPLOAD_COMMAND_FINALIZE,
+        )
         .header("x-goog-upload-offset", "0")
         .header(upload_constants::X_TENANT_ID, upload_constants::BARD_STORAGE_TENANT)
         .header(upload_constants::PUSH_ID_HEADER, push_id)

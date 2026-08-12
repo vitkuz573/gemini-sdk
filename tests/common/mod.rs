@@ -44,7 +44,8 @@ pub const MIME_PNG: &str = "image/png";
 
 /// Cookie header value used by most mocked integration tests.
 #[allow(dead_code)]
-pub const MOCK_COOKIE_HEADER: &str = "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s";
+pub const MOCK_COOKIE_HEADER: &str =
+    "__Secure-1PSID=abc; __Secure-1PSIDCC=def; __Secure-1PAPISID=papi; SID=s; HSID=h; SSID=s";
 
 /// Minimal cookie header used by tests that only need PSID/PSIDCC.
 #[allow(dead_code)]

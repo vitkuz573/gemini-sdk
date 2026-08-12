@@ -8,6 +8,7 @@
 //! for image uploads and true multi-turn conversation state.
 
 use std::process::Stdio;
+use std::time::Duration;
 
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -21,8 +22,13 @@ use crate::auth::{Cookies, Credentials};
 use crate::constants::attestation as attestation_constants;
 use crate::errors::{Error, Result};
 
-const NAVIGATE_TIMEOUT: std::time::Duration = attestation_constants::navigate_timeout();
-const CAPTURE_TIMEOUT: std::time::Duration = attestation_constants::capture_timeout();
+fn navigate_timeout() -> Duration {
+    attestation_constants::navigate_timeout()
+}
+
+fn capture_timeout() -> Duration {
+    attestation_constants::capture_timeout()
+}
 
 /// A handle to a headless Chrome process used for attestation.
 pub struct BrowserAttestationClient {
@@ -95,19 +101,13 @@ impl BrowserAttestationClient {
         }
 
         // Navigate to Gemini /app.
-        let navigate_url = format!(
-            attestation_constants::NAVIGATE_URL_TEMPLATE,
-            attestation_constants::LANGUAGE_FOR_ATTESTATION
-        );
-        send_cdp(
-            &mut write,
-            attestation_constants::PAGE_NAVIGATE,
-            json!({ "url": navigate_url }),
-        )
-        .await?;
+        let navigate_url = attestation_constants::NAVIGATE_URL_TEMPLATE
+            .replace("{}", attestation_constants::LANGUAGE_FOR_ATTESTATION);
+        send_cdp(&mut write, attestation_constants::PAGE_NAVIGATE, json!({ "url": navigate_url }))
+            .await?;
 
         // Wait for navigation to complete.
-        wait_for_event(&mut read, "Page.loadEventFired", NAVIGATE_TIMEOUT).await?;
+        wait_for_event(&mut read, "Page.loadEventFired", navigate_timeout()).await?;
 
         // Inject the prompt and submit via JS.
         let escaped = prompt.replace('\\', "\\\\").replace('"', "\\\"");
@@ -124,15 +124,11 @@ impl BrowserAttestationClient {
             if (btn) btn.click();
             "#
         );
-        send_cdp(
-            &mut write,
-            attestation_constants::RUNTIME_EVALUATE,
-            json!({ "expression": js }),
-        )
-        .await?;
+        send_cdp(&mut write, attestation_constants::RUNTIME_EVALUATE, json!({ "expression": js }))
+            .await?;
 
         // Wait for the StreamGenerate request.
-        let post_data = wait_for_stream_generate_post_data(&mut read, CAPTURE_TIMEOUT).await?;
+        let post_data = wait_for_stream_generate_post_data(&mut read, capture_timeout()).await?;
 
         // Extract f.req and parse the 97-slot array.
         let f_req = extract_f_req(&post_data)?;

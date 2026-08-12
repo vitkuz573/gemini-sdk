@@ -2027,7 +2027,13 @@ impl GeminiClient {
             &request_uuid,
         );
         let headers = self
-            .build_headers(Some(&request_uuid), Some(&waa_header), None, None, Some("stream_generate"))
+            .build_headers(
+                Some(&request_uuid),
+                Some(&waa_header),
+                None,
+                None,
+                Some("stream_generate"),
+            )
             .await;
 
         let response = self
@@ -2038,16 +2044,15 @@ impl GeminiClient {
                 let form_body = form_body.clone();
                 let headers = headers.clone();
                 let cookie_header = cookie_header.clone();
-                    async move {
-                        let mut req = client.post(&url).query(&params).body(form_body);
-                        for (key, value) in &headers {
-                            req = req.header(key, value);
-                        }
-                        req = req.header(header_constants::COOKIE, cookie_header);
-                        req.send().await
+                async move {
+                    let mut req = client.post(&url).query(&params).body(form_body);
+                    for (key, value) in &headers {
+                        req = req.header(key, value);
                     }
-                })
-
+                    req = req.header(header_constants::COOKIE, cookie_header);
+                    req.send().await
+                }
+            })
             .await?;
 
         let status = response.status();
@@ -2128,7 +2133,13 @@ impl GeminiClient {
             &request_uuid,
         );
         let headers = self
-            .build_headers(Some(&request_uuid), Some(&waa_header), None, None, Some("stream_generate"))
+            .build_headers(
+                Some(&request_uuid),
+                Some(&waa_header),
+                None,
+                None,
+                Some("stream_generate"),
+            )
             .await;
         let cookie_header = cookies.to_header_value();
 
@@ -2270,15 +2281,12 @@ impl GeminiClient {
                 Ok(root_body) => {
                     let root_extracted = extract_from_app_html(&root_body);
                     let mut session = self.inner.session.lock().await;
-                    session.access_token = root_extracted
-                        .access_token
-                        .or_else(|| session.access_token.clone());
-                    session.build_label = root_extracted
-                        .build_label
-                        .or_else(|| session.build_label.clone());
-                    session.session_id = root_extracted
-                        .session_id
-                        .or_else(|| session.session_id.clone());
+                    session.access_token =
+                        root_extracted.access_token.or_else(|| session.access_token.clone());
+                    session.build_label =
+                        root_extracted.build_label.or_else(|| session.build_label.clone());
+                    session.session_id =
+                        root_extracted.session_id.or_else(|| session.session_id.clone());
                     session.push_id = root_extracted.push_id.or_else(|| session.push_id.clone());
                 }
                 Err(e) => {
@@ -2411,7 +2419,10 @@ impl GeminiClient {
         let reqid = SessionState::generate_reqid(None);
         let mut params: Vec<(&str, String)> = vec![
             (RPCIDS, rpcids.to_string()),
-            (SOURCE_PATH, source_path_override.unwrap_or(crate::constants::urls::APP_PATH).to_string()),
+            (
+                SOURCE_PATH,
+                source_path_override.unwrap_or(crate::constants::urls::APP_PATH).to_string(),
+            ),
             (HL, language.to_string()),
             (REQID, reqid),
             (RT, RT_VALUE.to_string()),
@@ -2527,7 +2538,10 @@ impl GeminiClient {
             .header(header_constants::USER_AGENT, BROWSER_LIKE)
             .header(header_constants::REFERER, format!("{base_url}/"))
             .header(header_constants::ORIGIN, base_url.clone())
-            .header(header_constants::X_CLIENT_DATA, crate::constants::headers::X_CLIENT_DATA_VALUE);
+            .header(
+                header_constants::X_CLIENT_DATA,
+                crate::constants::headers::X_CLIENT_DATA_VALUE,
+            );
         if let Some(auth) = auth.clone() {
             req = req.header(header_constants::AUTHORIZATION, auth);
         }
@@ -2567,7 +2581,10 @@ impl GeminiClient {
             (session.language.clone(), cookie_header, config.base_url.clone())
         };
 
-        let url = format!("{base_url}{}", crate::constants::urls::APP_LANGUAGE_PATH_TEMPLATE.replace("{}", &language));
+        let url = format!(
+            "{base_url}{}",
+            crate::constants::urls::APP_LANGUAGE_PATH_TEMPLATE.replace("{}", &language)
+        );
         let started = std::time::Instant::now();
         let response = self
             .inner
@@ -2719,7 +2736,13 @@ impl GeminiClient {
             .post(save_url)
             .header(header_constants::COOKIE, &cookie_header)
             .header(header_constants::USER_AGENT, BROWSER_LIKE)
-            .header(header_constants::REFERER, format!("{base_url}{}", crate::constants::urls::APP_LANGUAGE_PATH_TEMPLATE.replace("{}", &language)))
+            .header(
+                header_constants::REFERER,
+                format!(
+                    "{base_url}{}",
+                    crate::constants::urls::APP_LANGUAGE_PATH_TEMPLATE.replace("{}", &language)
+                ),
+            )
             .header(header_constants::ORIGIN, base_url)
             .header(header_constants::CONTENT_LENGTH, "0")
             .body("")
@@ -2771,26 +2794,14 @@ impl GeminiClient {
                 header_constants::X_CLIENT_DATA.to_string(),
                 crate::constants::headers::X_CLIENT_DATA_VALUE.to_string(),
             ),
-            (
-                "sec-ch-ua".to_string(),
-                header_constants::SEC_CH_UA.to_string(),
-            ),
-            (
-                "sec-ch-ua-mobile".to_string(),
-                header_constants::SEC_CH_UA_MOBILE.to_string(),
-            ),
+            ("sec-ch-ua".to_string(), header_constants::SEC_CH_UA.to_string()),
+            ("sec-ch-ua-mobile".to_string(), header_constants::SEC_CH_UA_MOBILE.to_string()),
             (
                 "sec-ch-ua-platform".to_string(),
                 header_constants::SEC_CH_UA_PLATFORM.to_string(),
             ),
-            (
-                "sec-fetch-dest".to_string(),
-                header_constants::SEC_FETCH_DEST.to_string(),
-            ),
-            (
-                "sec-fetch-mode".to_string(),
-                header_constants::SEC_FETCH_MODE.to_string(),
-            ),
+            ("sec-fetch-dest".to_string(), header_constants::SEC_FETCH_DEST.to_string()),
+            ("sec-fetch-mode".to_string(), header_constants::SEC_FETCH_MODE.to_string()),
             (
                 header_constants::SEC_FETCH_SITE.to_string(),
                 header_constants::SEC_FETCH_SITE_SAME_ORIGIN.to_string(),
@@ -2895,10 +2906,7 @@ impl GeminiClient {
 
         if transient_body.load(std::sync::atomic::Ordering::SeqCst) {
             if let Some(recorder) = self.inner.config.read().await.metrics_recorder.clone() {
-                recorder.increment_counter(
-                    METRIC_RETRIES,
-                    &[(OPERATION, "batchexecute")],
-                );
+                recorder.increment_counter(METRIC_RETRIES, &[(OPERATION, "batchexecute")]);
             }
         }
 

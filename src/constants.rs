@@ -183,7 +183,8 @@ pub mod upload {
     /// Header name for the upload command directive.
     pub(crate) const X_GOOG_UPLOAD_COMMAND: &str = "x-goog-upload-command";
     /// Header name for the total content length hint.
-    pub(crate) const X_GOOG_UPLOAD_HEADER_CONTENT_LENGTH: &str = "x-goog-upload-header-content-length";
+    pub(crate) const X_GOOG_UPLOAD_HEADER_CONTENT_LENGTH: &str =
+        "x-goog-upload-header-content-length";
     /// Header name for the upload protocol selection.
     pub(crate) const X_GOOG_UPLOAD_PROTOCOL: &str = "x-goog-upload-protocol";
     /// Header name returned with the resumable upload URL.
@@ -536,9 +537,8 @@ mod regression_tests {
         visit_dir(&src_dir, &constants_path, &mut failures);
 
         if !failures.is_empty() {
-            let mut message = String::from(
-                "regression gate failed: eliminated magic strings found in src/:\n",
-            );
+            let mut message =
+                String::from("regression gate failed: eliminated magic strings found in src/:\n");
             for (file, literal) in &failures {
                 message.push_str(&format!("  {file:?}: {literal}\n"));
             }
@@ -552,9 +552,7 @@ mod regression_tests {
             let path = entry.path();
             if path.is_dir() {
                 visit_dir(&path, skip, failures);
-            } else if path.extension().and_then(|s| s.to_str()) == Some("rs")
-                && path != skip
-            {
+            } else if path.extension().and_then(|s| s.to_str()) == Some("rs") && path != skip {
                 let contents = fs::read_to_string(&path).expect("source file should be readable");
                 for literal in DENY_LIST {
                     if contents.contains(literal) {
